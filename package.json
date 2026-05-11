@@ -1,0 +1,15 @@
+{
+  "name": "ezone-managers",
+  "version": "1.0.0",
+  "description": "E-Zone managers dashboard - read-only mobile-first view of house occupancy and monthly bonuses",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

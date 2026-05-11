@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2D0A14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="מנהלים" />
+  <title>איזון — מנהלים</title>
+
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Frank+Ruhl+Libre:wght@500;700;900&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top-bar">
+    <div class="brand">
+      <span class="brand-mark">איזון</span>
+      <span class="brand-sub">מנהלים</span>
+    </div>
+    <div class="month-tag" id="monthTag">—</div>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="ניווט">
+    <button class="tab is-active" data-tab="overview" role="tab" aria-selected="true">דשבורד</button>
+    <button class="tab" data-tab="raanana" role="tab">רעננה אשר</button>
+    <button class="tab" data-tab="ramot" role="tab">רמות השבים</button>
+    <button class="tab" data-tab="efroni" role="tab">קיסריה עפרוני</button>
+    <button class="tab" data-tab="rehab" role="tab">קיסריה ריהאב</button>
+  </nav>
+
+  <main class="screen" id="screen">
+
+    <!-- TAB 1: OVERVIEW -->
+    <section class="panel is-active" id="panel-overview" role="tabpanel">
+      <div class="kpis" id="networkKpis">
+        <div class="kpi"><div class="kpi-label">בתים מעל BEP</div><div class="kpi-value" id="kpiHousesAbove">—</div></div>
+        <div class="kpi"><div class="kpi-label">מטופלים פעילים</div><div class="kpi-value" id="kpiActive">—</div></div>
+        <div class="kpi"><div class="kpi-label">סך בונוסים החודש</div><div class="kpi-value gold" id="kpiBonus">—</div></div>
+        <div class="kpi"><div class="kpi-label">ימים שנותרו לחודש</div><div class="kpi-value" id="kpiDaysLeft">—</div></div>
+      </div>
+
+      <h2 class="section-title">בתים</h2>
+      <div class="house-grid" id="houseGrid">
+        <div class="loading">טוען נתונים…</div>
+      </div>
+    </section>
+
+    <!-- TABS 2-5: HOUSE DETAIL (shared template, populated by JS) -->
+    <section class="panel" id="panel-raanana" role="tabpanel" data-house-key="raanana"></section>
+    <section class="panel" id="panel-ramot" role="tabpanel" data-house-key="ramot"></section>
+    <section class="panel" id="panel-efroni" role="tabpanel" data-house-key="efroni"></section>
+    <section class="panel" id="panel-rehab" role="tabpanel" data-house-key="rehab"></section>
+
+  </main>
+
+  <footer class="foot">
+    <span id="footStatus">נטען…</span>
+  </footer>
+
+  <!-- House detail template -->
+  <template id="houseDetailTpl">
+    <div class="house-detail">
+      <div class="status-banner" data-status-banner></div>
+
+      <div class="kpis">
+        <div class="kpi"><div class="kpi-label">כניסות החודש</div><div class="kpi-value" data-stat="entries">—</div></div>
+        <div class="kpi"><div class="kpi-label">יציאות החודש</div><div class="kpi-value" data-stat="exits">—</div></div>
+        <div class="kpi"><div class="kpi-label">ימי טיפול</div><div class="kpi-value" data-stat="treatmentDays">—</div></div>
+        <div class="kpi"><div class="kpi-label">בונוס נוכחי</div><div class="kpi-value gold" data-stat="bonus">—</div></div>
+      </div>
+
+      <div class="card chart-card">
+        <div class="card-title">ימי טיפול מצטברים</div>
+        <div class="bep-bar" data-bep-bar>
+          <div class="bep-fill" data-bep-fill></div>
+          <div class="bep-marker" data-bep-marker><span>★</span><em data-bep-marker-label></em></div>
+        </div>
+        <div class="bep-legend">
+          <span>נצברו: <b data-stat="daysSoFar">—</b></span>
+          <span>יעד (BEP): <b data-stat="daysTarget">—</b></span>
+          <span>תחזית לסוף חודש: <b data-stat="daysProjection">—</b></span>
+        </div>
+      </div>
+
+      <div class="card breakdown-card">
+        <div class="card-title">פירוט חישוב הבונוס</div>
+        <ul class="breakdown" data-breakdown></ul>
+        <div class="breakdown-total">
+          <span>סה״כ</span>
+          <strong class="gold" data-stat="bonusTotal">—</strong>
+        </div>
+      </div>
+
+      <div class="logs">
+        <div class="card log-card">
+          <div class="card-title">כניסות החודש</div>
+          <ul class="log-list" data-log="entries"></ul>
+        </div>
+        <div class="card log-card">
+          <div class="card-title">יציאות החודש</div>
+          <ul class="log-list" data-log="exits"></ul>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <script src="/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+    }
+  </script>
+</body>
+</html>
