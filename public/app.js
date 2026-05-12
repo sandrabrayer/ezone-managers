@@ -16,6 +16,15 @@ const HOUSE_LABELS = {
 
 const HEBREW_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
+const DEFAULT_TIER_CFG = {
+  base: 2000,
+  tier2Threshold: 120,
+  tier2Amount: 2500,
+  tier3Threshold: 180,
+  tier3Amount: 3000,
+  quarterly: 5000
+};
+
 const state = {
   overview: null,
   housesById: {},
@@ -58,9 +67,6 @@ function daysInMonthFromLabel(yearMonth, fallback = new Date()) {
 function daysInCurrentMonth(d = new Date()) {
   return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 }
-function daysRemainingThisMonth(d = new Date()) {
-  return Math.max(0, daysInCurrentMonth(d) - d.getDate());
-}
 function currentMonthLabel(d = new Date()) {
   return `${HEBREW_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
@@ -78,6 +84,51 @@ async function fetchJson(url) {
 function setStatus(text) {
   const el = document.getElementById('footStatus');
   if (el) el.textContent = text;
+}
+
+/* ============================================================
+   Bonus model — tiered monthly + cumulative quarterly
+   ============================================================ */
+
+function tierConfigFor(h) {
+  const b = (h && h.bonus) || {};
+  return {
+    base: b.base ?? b.tier1Amount ?? DEFAULT_TIER_CFG.base,
+    tier2Threshold: b.tier2Threshold ?? DEFAULT_TIER_CFG.tier2Threshold,
+    tier2Amount:    b.tier2Amount    ?? DEFAULT_TIER_CFG.tier2Amount,
+    tier3Threshold: b.tier3Threshold ?? DEFAULT_TIER_CFG.tier3Threshold,
+    tier3Amount:    b.tier3Amount    ?? DEFAULT_TIER_CFG.tier3Amount,
+    quarterly:      b.quarterlyAmount ?? b.quarterlyTarget ?? DEFAULT_TIER_CFG.quarterly
+  };
+}
+
+function monthlyTargetOf(h) {
+  if (h && h.bonus && Number.isFinite(h.bonus.monthlyTarget)) return h.bonus.monthlyTarget;
+  const bep = h?.bep ?? 0;
+  return bep * 30;
+}
+
+function treatmentNightsOf(h) {
+  if (h?.bonus && Number.isFinite(h.bonus.treatmentNights)) return h.bonus.treatmentNights;
+  return h?.treatmentDays ?? 0;
+}
+
+/** Compute monthly bonus tier from treatment-nights vs target. */
+function computeMonthlyBonus(nights, target, cfg) {
+  if (nights < target) return { tier: 0, amount: 0 };
+  if (nights >= target + cfg.tier3Threshold) return { tier: 3, amount: cfg.tier3Amount };
+  if (nights >= target + cfg.tier2Threshold) return { tier: 2, amount: cfg.tier2Amount };
+  return { tier: 1, amount: cfg.base };
+}
+
+function continuityCounts(b) {
+  const c = (b && b.continuity) || {};
+  return {
+    maintenance: c.maintenance ?? 0,
+    day_2x:      c.day_2x ?? 0,
+    day_daily:   c.day_daily ?? 0,
+    total:       c.total ?? 0
+  };
 }
 
 /* ============================================================
@@ -139,9 +190,9 @@ function renderOverview(data) {
 
   document.getElementById('monthTag').textContent = fmtMonthLabel(data.month);
 
-  const housesAbove = houses.filter(isAboveBep).length;
+  const housesAbove = houses.filter(qualifiesMonthly).length;
   const totalActive = totals.activePatients ?? houses.reduce((s, h) => s + (h.patientsNow ?? 0), 0);
-  const totalBonus  = totals.totalBonus ?? houses.reduce((s, h) => s + (h.bonus?.total ?? 0), 0);
+  const totalBonus  = totals.totalBonus ?? houses.reduce((s, h) => s + monthlyBonusOf(h), 0);
   const daysInMonth = daysInMonthFromLabel(data.month);
   const daysLeft    = Math.max(0, daysInMonth - new Date().getDate());
 
@@ -150,7 +201,6 @@ function renderOverview(data) {
   setKpi('kpiBonus',       fmtCurrency(totalBonus));
   setKpi('kpiDaysLeft',    fmtInt(daysLeft));
 
-  // Mini-trend strip — one bar per house, colored by qualification
   renderNetworkSpark(houses);
 
   const grid = document.getElementById('houseGrid');
@@ -180,7 +230,7 @@ function renderNetworkSpark(houses) {
     const occ = h.patientsNow ?? 0;
     const bep = h.bep ?? 0;
     const cap = h.capacity ?? 0;
-    const above = isAboveBep(h);
+    const above = qualifiesMonthly(h);
     const occH = Math.round((occ / maxOcc) * 100);
     const bepH = Math.round((bep / maxOcc) * 100);
     const capH = Math.round((cap / maxOcc) * 100);
@@ -201,13 +251,25 @@ function renderNetworkSpark(houses) {
   });
 }
 
-function isAboveBep(h) {
+function qualifiesMonthly(h) {
   if (!h) return false;
+  if (typeof h.bonus?.qualifies === 'boolean') return h.bonus.qualifies;
   if (typeof h.qualifies === 'boolean') return h.qualifies;
-  if (typeof h.aboveBep === 'boolean') return h.aboveBep;
-  const occ = h.patientsNow ?? h.activePatients ?? h.occupancy ?? 0;
-  const bep = h.bep ?? h.netBalancePoint ?? 0;
-  return occ >= bep;
+  const nights = treatmentNightsOf(h);
+  const target = monthlyTargetOf(h);
+  return target > 0 && nights >= target;
+}
+
+function monthlyBonusOf(h) {
+  if (h?.bonus && Number.isFinite(h.bonus.monthly)) return h.bonus.monthly;
+  if (h?.bonus && Number.isFinite(h.bonus.total)) {
+    const cont = continuityCounts(h.bonus).total || 0;
+    const quart = h.bonus.quarterly || 0;
+    return Math.max(0, h.bonus.total - cont - quart);
+  }
+  const cfg = tierConfigFor(h);
+  const target = monthlyTargetOf(h);
+  return computeMonthlyBonus(treatmentNightsOf(h), target, cfg).amount;
 }
 
 function buildHouseCard(h) {
@@ -219,42 +281,66 @@ function buildHouseCard(h) {
   const occ = h.patientsNow ?? 0;
   const cap = h.capacity ?? 0;
   const bep = h.bep ?? 0;
-  const bonus = h.bonus?.total ?? 0;
-  const above = isAboveBep(h);
+
+  const cfg = tierConfigFor(h);
+  const target = monthlyTargetOf(h);
+  const nights = treatmentNightsOf(h);
+  const tier = computeMonthlyBonus(nights, target, cfg);
+  const above = tier.tier > 0;
+  const cont = continuityCounts(h.bonus || {});
+  const quartly = h.bonus?.quarterly ?? 0;
+  const totalBonus = (above ? tier.amount : 0) + (cont.total || 0) + (quartly || 0);
 
   const card = document.createElement('div');
   card.className = `house-card ${above ? 'above' : 'below'}`;
   card.setAttribute('role', 'button');
   card.setAttribute('tabindex', '0');
 
-  const bonusDisplay = above ? fmtCurrency(bonus) : '0 ₪';
-  const bonusClass = above ? '' : 'zero';
-
   const denominator = cap || Math.max(occ, bep) || 1;
   const fillPct = Math.min(100, (occ / denominator) * 100);
   const bepPct  = Math.min(100, (bep / denominator) * 100);
 
+  const nightsShort = target ? Math.max(0, target - nights) : 0;
+  const bonusDisplay = above ? fmtCurrency(totalBonus) : '0 ₪';
+  const bonusClass = above ? '' : 'zero';
+
+  const tierBadge = above
+    ? `<span class="tier-pill t${tier.tier}">מדרגה ${tier.tier}</span>`
+    : '';
+
   card.innerHTML = `
+    ${above ? '<div class="trophy" aria-label="זכאי לבונוס">🏆</div>' : ''}
+
     <div class="hc-head">
-      <div>
+      <div class="hc-head-text">
         <div class="hc-title">${name}</div>
         <div class="hc-manager">מנהל/ת: ${manager}</div>
         ${type ? `<div class="hc-type">${type}</div>` : ''}
       </div>
       ${above
-        ? '<div class="trophy" aria-label="מעל BEP">🏆</div>'
-        : '<div class="warn-badge">⚠ לא זכאי</div>'}
+        ? `<div class="qualify-badge">✓ זכאי לבונוס</div>`
+        : `<div class="warn-badge">⚠ לא זכאי</div>`}
     </div>
 
     <div class="hc-stats">
       <div class="hc-occ">${occ}<small> / ${cap || '—'}</small></div>
-      <div class="hc-bep">BEP: <b>${bep}</b></div>
+      <div class="hc-bep">נקודת איזון: <b>${bep}</b></div>
     </div>
 
     <div class="bep-bar">
       <div class="bep-fill" style="width:${fillPct}%"></div>
-      <div class="bep-marker" style="right:${bepPct}%"><span>★</span><em>BEP ${bep}</em></div>
+      <div class="bep-marker" style="right:${bepPct}%"><span>★</span><em>איזון ${bep}</em></div>
     </div>
+
+    <div class="hc-nights">
+      <span class="hc-nights-label">ימי לילה החודש</span>
+      <span class="hc-nights-value">${fmtInt(nights)} / ${fmtInt(target)}</span>
+      ${tierBadge}
+    </div>
+
+    ${above
+      ? ''
+      : `<div class="hc-shortfall">חסרים ${fmtInt(nightsShort)} ימי לילה ליעד</div>`}
 
     <div class="hc-bonus">
       <div class="hc-bonus-label">בונוס החודש</div>
@@ -318,71 +404,83 @@ function renderHouseDetail(key, data) {
   if (!panel) return;
 
   const o = state.housesById[key] || {};
+  const merged = { ...o, ...data, bonus: { ...(o.bonus || {}), ...(data.bonus || {}) } };
   const labels = HOUSE_LABELS[key] || {};
   const name = data.name || o.name || labels.name || key;
   const manager = data.manager || o.manager || labels.manager || '';
   const bep = data.bep ?? o.bep ?? 0;
   const occ = data.patientsNow ?? o.patientsNow ?? 0;
-  const above = typeof data.bonus?.qualifies === 'boolean'
-    ? data.bonus.qualifies
-    : (typeof data.qualifies === 'boolean' ? data.qualifies : isAboveBep(o));
+
+  const cfg = tierConfigFor(merged);
+  const target = monthlyTargetOf(merged);
+  const nights = treatmentNightsOf(merged);
+  const tier = computeMonthlyBonus(nights, target, cfg);
+  const above = tier.tier > 0;
 
   const activity = Array.isArray(data.activity) ? data.activity : [];
   const entries = activity.filter(a => a.kind === 'entry');
   const exits   = activity.filter(a => a.kind === 'exit');
-  const treatmentDays = data.treatmentDays ?? 0;
 
   const totalDaysMonth = daysInMonthFromLabel(data.month);
   const today = new Date();
   const elapsedDays = Math.max(1, Math.min(totalDaysMonth, today.getDate()));
-  const dailyAvg = treatmentDays / elapsedDays;
+  const dailyAvg = nights / elapsedDays;
   const projection = Math.round(dailyAvg * totalDaysMonth);
-  const bepDays = bep * totalDaysMonth;
 
-  // Banner
+  // Status banner
   const banner = panel.querySelector('[data-status-banner]');
   banner.className = 'status-banner ' + (above ? 'above' : 'below');
+  const nightsShort = Math.max(0, target - nights);
   banner.innerHTML = above
     ? `<div class="big-emoji">🏆</div>
        <div>
-         <div class="sb-title">${name} מעל ה-BEP!</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · מטופלים פעילים ${occ} · BEP ${bep}</div>
+         <div class="sb-title">${name} — זכאי לבונוס מדרגה ${tier.tier}</div>
+         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(nights)} ימי לילה / יעד ${fmtInt(target)} · ${fmtCurrency(tier.amount)}</div>
        </div>`
     : `<div class="big-emoji">⚠️</div>
        <div>
-         <div class="sb-title">${name} מתחת ל-BEP — לא זכאי לבונוס החודש</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · מטופלים פעילים ${occ} · נדרש ${bep}</div>
+         <div class="sb-title">${name} — לא זכאי לבונוס החודש</div>
+         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(nights)} ימי לילה · חסרים ${fmtInt(nightsShort)} ליעד ${fmtInt(target)}</div>
        </div>`;
 
   // KPI stats
   setStat(panel, 'entries', fmtInt(entries.length || data.entriesMonth || 0));
   setStat(panel, 'exits',   fmtInt(exits.length || data.exitsMonth || 0));
-  setStat(panel, 'treatmentDays', fmtInt(treatmentDays));
-  const totalBonus = above ? (data.bonus?.total ?? 0) : 0;
+  setStat(panel, 'treatmentDays', fmtInt(nights));
+
+  const cont = continuityCounts(merged.bonus || {});
+  const quartly = merged.bonus?.quarterly ?? 0;
+  const totalBonus = (above ? tier.amount : 0) + (cont.total || 0) + (quartly || 0);
+
   const bonusEl = panel.querySelector('[data-stat="bonus"]');
   bonusEl.classList.remove('is-skeleton');
-  bonusEl.textContent = above ? fmtCurrency(totalBonus) : '0 ₪';
-  bonusEl.classList.toggle('gold', above);
+  bonusEl.textContent = fmtCurrency(totalBonus);
+  bonusEl.classList.toggle('gold', totalBonus > 0);
 
-  // BEP bar (treatment days)
-  const denom = Math.max(treatmentDays, bepDays, projection, 1);
-  const fillPct = Math.min(100, (treatmentDays / denom) * 100);
-  const bepPct  = Math.min(100, (bepDays / denom) * 100);
+  // BEP bar (treatment-nights vs target)
+  const denom = Math.max(nights, target, projection, 1);
+  const fillPct = Math.min(100, (nights / denom) * 100);
+  const bepPct  = Math.min(100, (target / denom) * 100);
   const bar = panel.querySelector('[data-bep-bar]');
   bar.classList.toggle('above', above);
   panel.querySelector('[data-bep-fill]').style.width = fillPct + '%';
   const marker = panel.querySelector('[data-bep-marker]');
   marker.style.right = bepPct + '%';
-  panel.querySelector('[data-bep-marker-label]').textContent = `יעד ${fmtInt(bepDays)}`;
-  setStat(panel, 'daysSoFar',    fmtInt(treatmentDays));
-  setStat(panel, 'daysTarget',   fmtInt(bepDays));
+  panel.querySelector('[data-bep-marker-label]').textContent = `יעד ${fmtInt(target)}`;
+  setStat(panel, 'daysSoFar',    fmtInt(nights));
+  setStat(panel, 'daysTarget',   fmtInt(target));
   setStat(panel, 'daysProjection', fmtInt(projection));
 
-  // Sparkline of daily patient count
   renderDailySpark(panel, data.dailyChart || [], bep);
 
-  // Bonus breakdown
-  renderBreakdown(panel, data, { above, bep, treatmentDays, bepDays, totalBonus });
+  // Tier progress visualization
+  renderTierTrack(panel, { cfg, target, nights, tier });
+
+  // Quarterly progress
+  renderQuarterlyTrack(panel, merged, cfg, target);
+
+  // Bonus breakdown (educational)
+  renderBreakdown(panel, merged, { above, tier, cfg, target, nights, cont, quartly, totalBonus });
 
   // Logs
   renderEntries(panel.querySelector('[data-log="entries"]'), entries);
@@ -416,80 +514,177 @@ function renderDailySpark(panel, chart, bep) {
           <div class="ds-bar" style="height:${h}%"></div>
         </div>`;
       }).join('')}
-      <div class="ds-bep-line" style="bottom:${bepPct}%"><em>BEP ${bep}</em></div>
+      <div class="ds-bep-line" style="bottom:${bepPct}%"><em>איזון ${bep}</em></div>
     </div>
   `;
+}
+
+function renderTierTrack(panel, ctx) {
+  const track = panel.querySelector('[data-tier-track]');
+  if (!track) return;
+
+  const t1 = ctx.target;
+  const t2 = ctx.target + ctx.cfg.tier2Threshold;
+  const t3 = ctx.target + ctx.cfg.tier3Threshold;
+  const maxPos = t3 * 1.05;
+
+  const pct = v => Math.min(100, Math.max(0, (v / maxPos) * 100));
+
+  // Position stops along track (LTR within RTL doc)
+  const stops = track.querySelectorAll('[data-tier-stop]');
+  stops.forEach(stop => {
+    const idx = parseInt(stop.getAttribute('data-tier-stop'), 10);
+    const v = idx === 1 ? t1 : idx === 2 ? t2 : t3;
+    stop.style.left = pct(v) + '%';
+    stop.classList.toggle('reached', ctx.tier >= idx);
+    stop.classList.toggle('active',  ctx.tier === idx);
+  });
+
+  panel.querySelector('[data-ts-nights="1"]').textContent = `${fmtInt(t1)} לילות`;
+  panel.querySelector('[data-ts-nights="2"]').textContent = `${fmtInt(t2)} לילות`;
+  panel.querySelector('[data-ts-nights="3"]').textContent = `${fmtInt(t3)} לילות`;
+
+  panel.querySelector('[data-tier-fill]').style.width = pct(ctx.nights) + '%';
+
+  const cur = panel.querySelector('[data-tier-current]');
+  if (ctx.tier === 0) {
+    const need = Math.max(0, t1 - ctx.nights);
+    cur.className = 'tier-current zero';
+    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי לילה · חסרים ${fmtInt(need)} למדרגה הראשונה`;
+  } else if (ctx.tier === 3) {
+    cur.className = 'tier-current gold max';
+    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי לילה · מדרגה 3 המקסימלית הושגה!`;
+  } else {
+    const nextThr = ctx.tier === 1 ? t2 : t3;
+    const nextAmt = ctx.tier === 1 ? ctx.cfg.tier2Amount : ctx.cfg.tier3Amount;
+    const need = Math.max(0, nextThr - ctx.nights);
+    cur.className = 'tier-current gold';
+    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי לילה · חסרים ${fmtInt(need)} למדרגה ${ctx.tier + 1} (${fmtCurrency(nextAmt)})`;
+  }
+}
+
+function renderQuarterlyTrack(panel, data, cfg, monthlyTarget) {
+  const b = data.bonus || {};
+  const q = {
+    cumulativeNights: b.cumulativeNights ?? b.quarterlyNights ?? 0,
+    quarterlyTarget:  b.quarterlyTarget ?? monthlyTarget * 3,
+    eligible:         !!(b.quarterlyEligible ?? b.quarterly),
+    amount:           b.quarterly ?? 0,
+    monthsWindow:     b.quarterlyMonths || b.monthsWindow || ''
+  };
+  const pct = q.quarterlyTarget > 0
+    ? Math.min(100, (q.cumulativeNights / q.quarterlyTarget) * 100)
+    : 0;
+
+  const fill = panel.querySelector('[data-quarterly-fill]');
+  if (fill) {
+    fill.style.width = pct + '%';
+    fill.classList.toggle('full', pct >= 100);
+  }
+  const tgt = panel.querySelector('[data-quarterly-target]');
+  if (tgt) tgt.textContent = `${fmtInt(q.cumulativeNights)} / ${fmtInt(q.quarterlyTarget)} ימי לילה`;
+
+  const note = panel.querySelector('[data-quarterly-note]');
+  if (note) {
+    if (q.amount > 0) {
+      note.className = 'quarterly-note gold';
+      note.textContent = `זכאי לבונוס יציבות רבעוני · ${fmtCurrency(q.amount)}${q.monthsWindow ? ' · ' + q.monthsWindow : ''}`;
+    } else {
+      const need = Math.max(0, q.quarterlyTarget - q.cumulativeNights);
+      note.className = 'quarterly-note';
+      const windowTxt = q.monthsWindow ? ` (${q.monthsWindow})` : '';
+      note.textContent = need > 0
+        ? `חסרים ${fmtInt(need)} ימי לילה במצטבר ל-3 חודשים${windowTxt} עבור בונוס יציבות ${fmtCurrency(cfg.quarterly)}`
+        : `בונוס יציבות רבעוני יחושב בסוף החלון${windowTxt}`;
+    }
+  }
 }
 
 function renderBreakdown(panel, data, ctx) {
   const ul = panel.querySelector('[data-breakdown]');
   ul.innerHTML = '';
 
-  const b = data.bonus || {};
-  const base = b.base ?? 0;
-  const dailyRate = b.dailyRate ?? data.bonusPerDay ?? 30;
-  const aboveBepDays = b.aboveBepDays ?? 0;
-  const dailyBonus = b.daily ?? 0;
+  const t1 = ctx.target;
+  const t2 = ctx.target + ctx.cfg.tier2Threshold;
+  const t3 = ctx.target + ctx.cfg.tier3Threshold;
+  const nights = ctx.nights;
 
-  const cont = b.continuity || {};
-  const counts = {
-    maintenance: cont.maintenance ?? 0,
-    day_2x:      cont.day_2x ?? 0,
-    day_daily:   cont.day_daily ?? 0
-  };
-  const continuityTotal = cont.total ?? 0;
+  const tier1Status = ctx.tier >= 1
+    ? `${fmtCurrency(ctx.cfg.base)} ✓`
+    : `חסרים ${fmtInt(Math.max(0, t1 - nights))} ימי לילה ליעד ${fmtInt(t1)}`;
 
-  const quarterly = b.quarterly ?? 0;
-  const consecutive = b.consecutiveAboveBep ?? 0;
-  const quarterlyEligible = !!b.quarterlyEligible;
+  const tier2Status = ctx.tier >= 2
+    ? `${fmtCurrency(ctx.cfg.tier2Amount)} ✓`
+    : `חסרים ${fmtInt(Math.max(0, t2 - nights))} ימי לילה ל-${fmtInt(t2)}`;
+
+  const tier3Status = ctx.tier >= 3
+    ? `${fmtCurrency(ctx.cfg.tier3Amount)} ✓ (מקסימום)`
+    : `חסרים ${fmtInt(Math.max(0, t3 - nights))} ימי לילה ל-${fmtInt(t3)}`;
+
+  const continuityFormula = (() => {
+    const parts = [];
+    if (ctx.cont.maintenance) parts.push(`${ctx.cont.maintenance} תחזוקתי × 100`);
+    if (ctx.cont.day_2x)      parts.push(`${ctx.cont.day_2x} יום 2/שבוע × 500`);
+    if (ctx.cont.day_daily)   parts.push(`${ctx.cont.day_daily} יום יומי × 1,000`);
+    return parts.length ? parts.join(' · ') : 'אין הפניות פעילות החודש';
+  })();
+
+  const q = data.bonus || {};
+  const monthsWindow = q.quarterlyMonths || q.monthsWindow || 'מאי+יוני+יולי 2026';
 
   const items = [
     {
-      key: 'base',
-      label: 'בונוס בסיס',
-      formula: ctx.above
-        ? `הגעה ל-${ctx.bep} מטופלים`
-        : `דרוש ${ctx.bep} מטופלים — לא הושג`,
-      amount: ctx.above ? base : 0,
-      zero: !ctx.above,
-      gold: ctx.above
+      label: `בונוס מדרגה 1 (יעד ${fmtInt(t1)} ימי לילה)`,
+      formula: tier1Status,
+      amount: ctx.tier >= 1 ? ctx.cfg.base : 0,
+      zero: ctx.tier < 1,
+      gold: ctx.tier >= 1
     },
     {
-      key: 'daily',
-      label: 'בונוס יום נוסף',
-      formula: ctx.above
-        ? `${dailyRate} ₪ × ${fmtInt(aboveBepDays)} ימי טיפול מעל BEP`
-        : 'לא זכאי — מתחת ל-BEP',
-      amount: dailyBonus,
-      zero: !ctx.above || !dailyBonus,
-      gold: ctx.above && dailyBonus > 0
+      label: `בונוס מדרגה 2 (+${ctx.cfg.tier2Threshold} ימי לילה)`,
+      formula: tier2Status,
+      amount: ctx.tier >= 2 ? ctx.cfg.tier2Amount : 0,
+      zero: ctx.tier < 2,
+      gold: ctx.tier >= 2,
+      // tier 2 replaces tier 1, so dim tier 1 visually
+      replaces: ctx.tier >= 2
     },
     {
-      key: 'continuity',
-      label: 'בונוס רצף טיפולי',
-      formula: ctx.above
-        ? continuityFormula(counts)
-        : 'לא זכאי — מתחת ל-BEP',
-      amount: ctx.above ? continuityTotal : 0,
-      zero: !ctx.above || !continuityTotal,
-      gold: ctx.above && continuityTotal > 0
+      label: `בונוס מדרגה 3 (+${ctx.cfg.tier3Threshold} ימי לילה · מקס׳)`,
+      formula: tier3Status,
+      amount: ctx.tier >= 3 ? ctx.cfg.tier3Amount : 0,
+      zero: ctx.tier < 3,
+      gold: ctx.tier >= 3,
+      replaces: ctx.tier >= 3
     },
     {
-      key: 'quarterly',
       label: 'בונוס יציבות רבעוני',
-      formula: quarterlyEligible
-        ? `5,000 ₪ עבור 3 חודשים רצופים מעל BEP · רצף נוכחי: ${consecutive}`
-        : `5,000 ₪ עבור 3 חודשים רצופים מעל BEP (מתחיל מיוני 2026 · רצף נוכחי: ${consecutive})`,
-      amount: quarterly,
-      zero: !quarterly,
-      gold: quarterly > 0
+      formula: ctx.quartly > 0
+        ? `${fmtCurrency(ctx.cfg.quarterly)} עבור ${monthsWindow}`
+        : `${fmtCurrency(ctx.cfg.quarterly)} עבור 3 חודשים מצטבר (${monthsWindow})`,
+      amount: ctx.quartly,
+      zero: !ctx.quartly,
+      gold: ctx.quartly > 0
+    },
+    {
+      label: 'בונוס הפניות להמשך טיפול',
+      formula: continuityFormula,
+      amount: ctx.cont.total,
+      zero: !ctx.cont.total,
+      gold: ctx.cont.total > 0
     }
   ];
 
-  items.forEach(item => {
+  // The monthly bonus is the SINGLE-best tier — show all three but only the highest reached counts.
+  // For tier display: dim the lower tiers when a higher tier is reached so the sum visually matches.
+  items.forEach((item, idx) => {
     const li = document.createElement('li');
     if (item.zero) li.classList.add('zero');
     if (item.gold) li.classList.add('gold');
+    if (idx <= 2 && ctx.tier > 0 && ctx.tier !== (idx + 1)) {
+      // a different tier won — dim this one
+      li.classList.add('dim');
+    }
     li.innerHTML = `
       <div class="bk-left">
         <span class="bk-label">${item.label}</span>
@@ -501,14 +696,6 @@ function renderBreakdown(panel, data, ctx) {
   });
 
   panel.querySelector('[data-stat="bonusTotal"]').textContent = fmtCurrency(ctx.totalBonus);
-}
-
-function continuityFormula(counts) {
-  const parts = [];
-  if (counts.maintenance) parts.push(`${counts.maintenance} תחזוקתי × 100`);
-  if (counts.day_2x)      parts.push(`${counts.day_2x} יום 2/שבוע × 500`);
-  if (counts.day_daily)   parts.push(`${counts.day_daily} יום יומי × 1,000`);
-  return parts.length ? parts.join(' · ') : 'אין מטופלים ממשיכים מהבית הזה החודש';
 }
 
 function renderEntries(ul, list) {

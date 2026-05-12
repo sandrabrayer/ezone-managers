@@ -42,7 +42,7 @@
     <section class="panel is-active" id="panel-overview" role="tabpanel">
       <div class="kpis" id="networkKpis">
         <div class="kpi kpi-green">
-          <div class="kpi-label">בתים מעל BEP</div>
+          <div class="kpi-label">בתים מעל נקודת איזון</div>
           <div class="kpi-value is-skeleton" id="kpiHousesAbove">&nbsp;</div>
         </div>
         <div class="kpi kpi-pink">
@@ -62,8 +62,8 @@
       <div class="spark-card">
         <div class="spark-card-head">
           <div>
-            <div class="spark-title">תפוסה לעומת BEP</div>
-            <div class="spark-sub">קו זוהר = BEP · מילוי = מטופלים נוכחיים · רקע = קיבולת</div>
+            <div class="spark-title">תפוסה לעומת נקודת איזון</div>
+            <div class="spark-sub">קו זוהר = נקודת איזון · מילוי = מטופלים נוכחיים · רקע = קיבולת</div>
           </div>
         </div>
         <div class="network-spark" id="networkSpark"></div>
@@ -103,19 +103,37 @@
       </div>
 
       <div class="card chart-card">
-        <div class="card-title">ימי טיפול מצטברים</div>
+        <div class="card-title">ימי לילה מצטברים</div>
         <div class="bep-bar" data-bep-bar>
           <div class="bep-fill" data-bep-fill></div>
           <div class="bep-marker" data-bep-marker><span>★</span><em data-bep-marker-label></em></div>
         </div>
         <div class="bep-legend">
           <span>נצברו: <b data-stat="daysSoFar">—</b></span>
-          <span>יעד (BEP): <b data-stat="daysTarget">—</b></span>
+          <span>יעד (נקודת איזון): <b data-stat="daysTarget">—</b></span>
           <span>תחזית לסוף חודש: <b data-stat="daysProjection">—</b></span>
         </div>
 
         <div class="card-subtitle">תפוסה יומית</div>
         <div data-daily-spark></div>
+      </div>
+
+      <div class="card tier-card">
+        <div class="card-title">מדרגות בונוס חודשי</div>
+        <div class="tier-track" data-tier-track>
+          <div class="tier-fill" data-tier-fill></div>
+          <div class="tier-stop" data-tier-stop="1"><span class="ts-label">מדרגה 1</span><span class="ts-amount">2,000 ₪</span><span class="ts-nights" data-ts-nights="1">—</span></div>
+          <div class="tier-stop" data-tier-stop="2"><span class="ts-label">מדרגה 2</span><span class="ts-amount">2,500 ₪</span><span class="ts-nights" data-ts-nights="2">—</span></div>
+          <div class="tier-stop" data-tier-stop="3"><span class="ts-label">מדרגה 3</span><span class="ts-amount">3,000 ₪</span><span class="ts-nights" data-ts-nights="3">—</span></div>
+        </div>
+        <div class="tier-current" data-tier-current>—</div>
+
+        <div class="card-subtitle">בונוס יציבות רבעוני</div>
+        <div class="quarterly-track">
+          <div class="quarterly-fill" data-quarterly-fill></div>
+          <div class="quarterly-target" data-quarterly-target>—</div>
+        </div>
+        <div class="quarterly-note" data-quarterly-note>—</div>
       </div>
 
       <div class="card breakdown-card">
