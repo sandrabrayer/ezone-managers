@@ -10,7 +10,7 @@ It reads data via the existing E-Zone Apps Script endpoints — it never writes 
 - `GET /api/sheets?action=managersHouse&key=<houseKey>` — full detail for one house
 
 Both are proxied through `server.js` to:
-`https://script.google.com/macros/s/AKfycbyScn2vcaOb_YCiTIRw-l-NugkZ4Zbt0hY5LgrM5D-WroSy-iuNhb9ewxoGcyZW63fsBw/exec`
+`https://script.google.com/macros/s/AKfycbxkUs27ZOJdKSyxv0NFyAYgvaEG-xcJP6bcmeMiPPQzgc2bRpJcA5TZ2nmND_ykLVjlRg/exec`
 
 Override via the `APPS_SCRIPT_URL` env var if needed.
 
