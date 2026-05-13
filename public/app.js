@@ -106,12 +106,12 @@ function setStatus(text) {
 function tierConfigFor(h) {
   const b = (h && h.bonus) || {};
   return {
-    base: b.base ?? b.tier1Amount ?? DEFAULT_TIER_CFG.base,
+    base: b.base || b.tier1Amount || DEFAULT_TIER_CFG.base,
     tier2Threshold: b.tier2Threshold ?? DEFAULT_TIER_CFG.tier2Threshold,
-    tier2Amount:    b.tier2Amount    ?? DEFAULT_TIER_CFG.tier2Amount,
+    tier2Amount:    b.tier2Amount    || DEFAULT_TIER_CFG.tier2Amount,
     tier3Threshold: b.tier3Threshold ?? DEFAULT_TIER_CFG.tier3Threshold,
-    tier3Amount:    b.tier3Amount    ?? DEFAULT_TIER_CFG.tier3Amount,
-    quarterly:      b.quarterlyAmount ?? b.quarterlyTarget ?? DEFAULT_TIER_CFG.quarterly
+    tier3Amount:    b.tier3Amount    || DEFAULT_TIER_CFG.tier3Amount,
+    quarterly:      b.quarterlyAmount || b.quarterlyTarget || DEFAULT_TIER_CFG.quarterly
   };
 }
 
