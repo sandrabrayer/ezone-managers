@@ -34,7 +34,7 @@ const DEFAULT_TIER_CFG = {
   tier2Threshold: 120,
   tier2Amount: 2500,
   tier3Threshold: 180,
-  tier3Amount: 3000,
+  tier3Amount: 3500,
   quarterly: 5000
 };
 
@@ -488,14 +488,18 @@ function renderHouseDetail(key, data) {
 
   renderDailySpark(panel, data.dailyChart || [], bep);
 
+  // "Missing for next tier" card (right after status banner)
+  const daysLeftInMonth = Math.max(0, totalDaysMonth - today.getDate());
+  renderNextTierCard(panel, { cfg, target, nights, tier: tier.tier }, daysLeftInMonth);
+
   // Tier progress visualization
-  renderTierTrack(panel, { cfg, target, nights, tier });
+  renderTierTrack(panel, { cfg, target, nights, tier: tier.tier });
 
   // Quarterly progress
   renderQuarterlyTrack(panel, merged, cfg, target);
 
   // Bonus breakdown (educational)
-  renderBreakdown(panel, merged, { above, tier, cfg, target, nights, cont, quartly, totalBonus });
+  renderBreakdown(panel, merged, { above, tier: tier.tier, cfg, target, nights, cont, quartly, totalBonus });
 
   // Logs
   renderEntries(panel.querySelector('[data-log="entries"]'), entries);
@@ -529,9 +533,56 @@ function renderDailySpark(panel, chart, bep) {
           <div class="ds-bar" style="height:${h}%"></div>
         </div>`;
       }).join('')}
-      <div class="ds-bep-line" style="bottom:${bepPct}%"><em>איזון ${bep}</em></div>
+      <div class="ds-bep-line" style="bottom:${bepPct}%"><em>זכאות ${bep}</em></div>
     </div>
   `;
+}
+
+function renderNextTierCard(panel, ctx, daysLeftInMonth) {
+  const card = panel.querySelector('[data-next-tier-card]');
+  if (!card) return;
+  const header = panel.querySelector('[data-next-tier-header]');
+  const numbersBox = panel.querySelector('[data-next-tier-numbers]');
+  const jump = panel.querySelector('[data-next-tier-jump]');
+  const daysEl = panel.querySelector('[data-next-tier-missing-days]');
+  const patientsEl = panel.querySelector('[data-next-tier-missing-patients]');
+
+  const tierNum = ctx.tier;
+
+  if (tierNum >= 3) {
+    card.className = 'next-tier-card maxed';
+    header.textContent = '🏆 הגעת לבונוס המקסימלי!';
+    numbersBox.style.display = 'none';
+    jump.style.display = 'none';
+    return;
+  }
+
+  let nextThr, nextAmt, currentAmt;
+  if (tierNum === 0) {
+    nextThr = ctx.target;
+    nextAmt = ctx.cfg.base;
+    currentAmt = 0;
+  } else if (tierNum === 1) {
+    nextThr = ctx.target + ctx.cfg.tier2Threshold;
+    nextAmt = ctx.cfg.tier2Amount;
+    currentAmt = ctx.cfg.base;
+  } else {
+    nextThr = ctx.target + ctx.cfg.tier3Threshold;
+    nextAmt = ctx.cfg.tier3Amount;
+    currentAmt = ctx.cfg.tier2Amount;
+  }
+
+  const missingDays = Math.max(0, nextThr - ctx.nights);
+  const dlSafe = Math.max(1, daysLeftInMonth || 1);
+  const missingPatients = Math.ceil(missingDays / dlSafe);
+
+  card.className = 'next-tier-card ' + (tierNum === 0 ? 'first-tier' : 'gold');
+  numbersBox.style.display = '';
+  jump.style.display = '';
+  header.textContent = tierNum === 0 ? 'לבונוס הראשון חסרים:' : 'לבונוס הבא חסרים:';
+  daysEl.textContent = fmtInt(missingDays);
+  patientsEl.textContent = fmtInt(missingPatients);
+  jump.textContent = `הבונוס יקפוץ מ-${fmtCurrency(currentAmt)} ל-${fmtCurrency(nextAmt)}`;
 }
 
 function renderTierTrack(panel, ctx) {
@@ -558,6 +609,13 @@ function renderTierTrack(panel, ctx) {
   panel.querySelector('[data-ts-nights="1"]').textContent = `${fmtInt(t1)} ימי טיפול`;
   panel.querySelector('[data-ts-nights="2"]').textContent = `${fmtInt(t2)} ימי טיפול`;
   panel.querySelector('[data-ts-nights="3"]').textContent = `${fmtInt(t3)} ימי טיפול`;
+
+  const ta1 = panel.querySelector('[data-ts-amount="1"]');
+  const ta2 = panel.querySelector('[data-ts-amount="2"]');
+  const ta3 = panel.querySelector('[data-ts-amount="3"]');
+  if (ta1) ta1.textContent = fmtCurrency(ctx.cfg.base);
+  if (ta2) ta2.textContent = fmtCurrency(ctx.cfg.tier2Amount);
+  if (ta3) ta3.textContent = fmtCurrency(ctx.cfg.tier3Amount);
 
   panel.querySelector('[data-tier-fill]').style.width = pct(ctx.nights) + '%';
 

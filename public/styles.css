@@ -942,3 +942,82 @@ body::before {
   .hc-occ { font-size: 52px; }
   .hc-bonus-value { font-size: 32px; }
 }
+
+/* ===== Next-tier missing card ===== */
+.next-tier-card {
+  background: linear-gradient(135deg, rgba(252, 211, 77, 0.12), rgba(244, 114, 182, 0.08));
+  border: 1px solid rgba(252, 211, 77, 0.35);
+  border-radius: var(--r-lg);
+  padding: 24px 20px;
+  margin: 18px 0;
+  box-shadow: 0 0 0 1px rgba(252, 211, 77, 0.20), 0 18px 44px rgba(252, 211, 77, 0.10);
+  text-align: center;
+}
+.next-tier-card.first-tier {
+  background: linear-gradient(135deg, rgba(244, 114, 182, 0.12), rgba(252, 211, 77, 0.08));
+  border-color: rgba(244, 114, 182, 0.40);
+  box-shadow: 0 0 0 1px rgba(244, 114, 182, 0.20), 0 18px 44px rgba(244, 114, 182, 0.12);
+}
+.next-tier-card.maxed {
+  background: linear-gradient(135deg, rgba(252, 211, 77, 0.22), rgba(16, 185, 129, 0.14));
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold-glow), 0 18px 44px rgba(252, 211, 77, 0.22);
+  padding: 28px 20px;
+}
+.next-tier-header {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 14px;
+  letter-spacing: 0.01em;
+}
+.next-tier-card.maxed .next-tier-header {
+  font-size: 28px;
+  color: var(--gold);
+  text-shadow: 0 0 16px var(--gold-glow);
+  margin-bottom: 0;
+}
+.next-tier-numbers {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 56px;
+  margin: 8px 0 18px;
+}
+.next-tier-num { text-align: center; }
+.ntn-value {
+  font-family: 'Frank Ruhl Libre', 'Heebo', serif;
+  font-size: 72px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--gold);
+  text-shadow: 0 0 20px var(--gold-glow);
+}
+.next-tier-card.first-tier .ntn-value {
+  color: var(--green-2);
+  text-shadow: 0 0 20px rgba(52, 211, 153, 0.45);
+}
+.ntn-label {
+  font-size: 14px;
+  color: var(--text-mute);
+  margin-top: 8px;
+  font-weight: 600;
+}
+.next-tier-jump {
+  font-size: 17px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+@media (max-width: 480px) {
+  .ntn-value { font-size: 58px; }
+  .next-tier-numbers { gap: 32px; }
+  .next-tier-header { font-size: 16px; }
+  .next-tier-card.maxed .next-tier-header { font-size: 24px; }
+  .next-tier-jump { font-size: 15px; }
+}
+@media (min-width: 1100px) {
+  .ntn-value { font-size: 84px; }
+  .next-tier-numbers { gap: 72px; }
+  .next-tier-header { font-size: 20px; }
+  .next-tier-jump { font-size: 19px; }
+}
