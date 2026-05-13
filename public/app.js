@@ -31,9 +31,9 @@ const HEBREW_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי
 
 const DEFAULT_TIER_CFG = {
   base: 2000,
-  tier2Threshold: 120,
+  tier2Threshold: 30,
   tier2Amount: 2500,
-  tier3Threshold: 180,
+  tier3Threshold: 60,
   tier3Amount: 3500,
   quarterly: 5000
 };
@@ -531,10 +531,14 @@ function renderDailySpark(panel, chart, bep, capacity) {
     <div class="daily-spark">
       ${chart.map(p => {
         const c = Number(p.count) || 0;
-        const h = Math.min(100, (c / maxV) * 100);
         const isFuture = (p.date || '') > todayKey;
+        const h = isFuture ? 0 : Math.min(100, (c / maxV) * 100);
         const above = c >= bep;
+        const numEl = (isFuture || c <= 0)
+          ? ''
+          : `<span class="ds-num" style="bottom:calc(${h}% + 3px)">${c}</span>`;
         return `<div class="ds-col ${isFuture ? 'future' : ''} ${above ? 'above' : 'below'}" title="${p.date}: ${c} מטופלים">
+          ${numEl}
           <div class="ds-bar" style="height:${h}%"></div>
         </div>`;
       }).join('')}
@@ -602,16 +606,24 @@ function renderTierTrack(panel, ctx) {
   const t1 = ctx.target;
   const t2 = ctx.target + ctx.cfg.tier2Threshold;
   const t3 = ctx.target + ctx.cfg.tier3Threshold;
-  const maxPos = t3 * 1.05;
 
-  const pct = v => Math.min(100, Math.max(0, (v / maxPos) * 100));
+  // Fixed proportional positions so circles don't bunch when thresholds are small.
+  const STOP_POS = { 1: 20, 2: 50, 3: 80 };
+
+  // Piecewise-linear map from nights → track %.
+  const fillFor = n => {
+    if (n <= 0) return 0;
+    if (n <= t1) return (n / t1) * STOP_POS[1];
+    if (n <= t2) return STOP_POS[1] + ((n - t1) / Math.max(1, t2 - t1)) * (STOP_POS[2] - STOP_POS[1]);
+    if (n <= t3) return STOP_POS[2] + ((n - t2) / Math.max(1, t3 - t2)) * (STOP_POS[3] - STOP_POS[2]);
+    return Math.min(100, STOP_POS[3] + ((n - t3) / Math.max(1, t3 * 0.1)) * (100 - STOP_POS[3]));
+  };
 
   // Position stops along track (LTR within RTL doc)
   const stops = track.querySelectorAll('[data-tier-stop]');
   stops.forEach(stop => {
     const idx = parseInt(stop.getAttribute('data-tier-stop'), 10);
-    const v = idx === 1 ? t1 : idx === 2 ? t2 : t3;
-    stop.style.left = pct(v) + '%';
+    stop.style.left = STOP_POS[idx] + '%';
     stop.classList.toggle('reached', ctx.tier >= idx);
     stop.classList.toggle('active',  ctx.tier === idx);
   });
@@ -627,7 +639,7 @@ function renderTierTrack(panel, ctx) {
   if (ta2) ta2.textContent = fmtCurrency(ctx.cfg.tier2Amount);
   if (ta3) ta3.textContent = fmtCurrency(ctx.cfg.tier3Amount);
 
-  panel.querySelector('[data-tier-fill]').style.width = pct(ctx.nights) + '%';
+  panel.querySelector('[data-tier-fill]').style.width = fillFor(ctx.nights) + '%';
 
   const cur = panel.querySelector('[data-tier-current]');
   if (ctx.tier === 0) {
