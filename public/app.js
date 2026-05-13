@@ -348,14 +348,14 @@ function buildHouseCard(h) {
     </div>
 
     <div class="hc-nights">
-      <span class="hc-nights-label">ימי לילה החודש</span>
+      <span class="hc-nights-label">ימי טיפול החודש</span>
       <span class="hc-nights-value">${fmtInt(nights)} / ${fmtInt(target)}</span>
       ${tierBadge}
     </div>
 
     ${above
       ? ''
-      : `<div class="hc-shortfall">חסרים ${fmtInt(nightsShort)} ימי לילה ליעד</div>`}
+      : `<div class="hc-shortfall">חסרים ${fmtInt(nightsShort)} ימי טיפול ליעד</div>`}
 
     <div class="hc-bonus">
       <div class="hc-bonus-label">בונוס החודש</div>
@@ -450,12 +450,12 @@ function renderHouseDetail(key, data) {
     ? `<div class="big-emoji">🏆</div>
        <div>
          <div class="sb-title">${name} — זכאי לבונוס מדרגה ${tier.tier}</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(nights)} ימי לילה / יעד ${fmtInt(target)} · ${fmtCurrency(tier.amount)}</div>
+         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(nights)} ימי טיפול / יעד ${fmtInt(target)} · ${fmtCurrency(tier.amount)}</div>
        </div>`
     : `<div class="big-emoji">⚠️</div>
        <div>
          <div class="sb-title">${name} — לא זכאי לבונוס החודש</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(nights)} ימי לילה · חסרים ${fmtInt(nightsShort)} ליעד ${fmtInt(target)}</div>
+         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(nights)} ימי טיפול · חסרים ${fmtInt(nightsShort)} ליעד ${fmtInt(target)}</div>
        </div>`;
 
   // KPI stats
@@ -565,16 +565,16 @@ function renderTierTrack(panel, ctx) {
   if (ctx.tier === 0) {
     const need = Math.max(0, t1 - ctx.nights);
     cur.className = 'tier-current zero';
-    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי לילה · חסרים ${fmtInt(need)} למדרגה הראשונה`;
+    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי טיפול · חסרים ${fmtInt(need)} למדרגה הראשונה`;
   } else if (ctx.tier === 3) {
     cur.className = 'tier-current gold max';
-    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי לילה · מדרגה 3 המקסימלית הושגה!`;
+    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי טיפול · מדרגה 3 המקסימלית הושגה!`;
   } else {
     const nextThr = ctx.tier === 1 ? t2 : t3;
     const nextAmt = ctx.tier === 1 ? ctx.cfg.tier2Amount : ctx.cfg.tier3Amount;
     const need = Math.max(0, nextThr - ctx.nights);
     cur.className = 'tier-current gold';
-    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי לילה · חסרים ${fmtInt(need)} למדרגה ${ctx.tier + 1} (${fmtCurrency(nextAmt)})`;
+    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי טיפול · חסרים ${fmtInt(need)} למדרגה ${ctx.tier + 1} (${fmtCurrency(nextAmt)})`;
   }
 }
 
@@ -597,7 +597,7 @@ function renderQuarterlyTrack(panel, data, cfg, monthlyTarget) {
     fill.classList.toggle('full', pct >= 100);
   }
   const tgt = panel.querySelector('[data-quarterly-target]');
-  if (tgt) tgt.textContent = `${fmtInt(q.cumulativeNights)} / ${fmtInt(q.quarterlyTarget)} ימי לילה`;
+  if (tgt) tgt.textContent = `${fmtInt(q.cumulativeNights)} / ${fmtInt(q.quarterlyTarget)} ימי טיפול`;
 
   const note = panel.querySelector('[data-quarterly-note]');
   if (note) {
@@ -609,7 +609,7 @@ function renderQuarterlyTrack(panel, data, cfg, monthlyTarget) {
       note.className = 'quarterly-note';
       const windowTxt = q.monthsWindow ? ` (${q.monthsWindow})` : '';
       note.textContent = need > 0
-        ? `חסרים ${fmtInt(need)} ימי לילה במצטבר ל-3 חודשים${windowTxt} עבור בונוס יציבות ${fmtCurrency(cfg.quarterly)}`
+        ? `חסרים ${fmtInt(need)} ימי טיפול במצטבר ל-3 חודשים${windowTxt} עבור בונוס יציבות ${fmtCurrency(cfg.quarterly)}`
         : `בונוס יציבות רבעוני יחושב בסוף החלון${windowTxt}`;
     }
   }
@@ -626,15 +626,15 @@ function renderBreakdown(panel, data, ctx) {
 
   const tier1Status = ctx.tier >= 1
     ? `${fmtCurrency(ctx.cfg.base)} ✓`
-    : `חסרים ${fmtInt(Math.max(0, t1 - nights))} ימי לילה ליעד ${fmtInt(t1)}`;
+    : `חסרים ${fmtInt(Math.max(0, t1 - nights))} ימי טיפול ליעד ${fmtInt(t1)}`;
 
   const tier2Status = ctx.tier >= 2
     ? `${fmtCurrency(ctx.cfg.tier2Amount)} ✓`
-    : `חסרים ${fmtInt(Math.max(0, t2 - nights))} ימי לילה ל-${fmtInt(t2)}`;
+    : `חסרים ${fmtInt(Math.max(0, t2 - nights))} ימי טיפול ל-${fmtInt(t2)}`;
 
   const tier3Status = ctx.tier >= 3
     ? `${fmtCurrency(ctx.cfg.tier3Amount)} ✓ (מקסימום)`
-    : `חסרים ${fmtInt(Math.max(0, t3 - nights))} ימי לילה ל-${fmtInt(t3)}`;
+    : `חסרים ${fmtInt(Math.max(0, t3 - nights))} ימי טיפול ל-${fmtInt(t3)}`;
 
   const continuityFormula = (() => {
     const parts = [];
@@ -649,14 +649,14 @@ function renderBreakdown(panel, data, ctx) {
 
   const items = [
     {
-      label: `בונוס מדרגה 1 (יעד ${fmtInt(t1)} ימי לילה)`,
+      label: `בונוס מדרגה 1 (יעד ${fmtInt(t1)} ימי טיפול)`,
       formula: tier1Status,
       amount: ctx.tier >= 1 ? ctx.cfg.base : 0,
       zero: ctx.tier < 1,
       gold: ctx.tier >= 1
     },
     {
-      label: `בונוס מדרגה 2 (+${ctx.cfg.tier2Threshold} ימי לילה)`,
+      label: `בונוס מדרגה 2 (+${ctx.cfg.tier2Threshold} ימי טיפול)`,
       formula: tier2Status,
       amount: ctx.tier >= 2 ? ctx.cfg.tier2Amount : 0,
       zero: ctx.tier < 2,
@@ -665,7 +665,7 @@ function renderBreakdown(panel, data, ctx) {
       replaces: ctx.tier >= 2
     },
     {
-      label: `בונוס מדרגה 3 (+${ctx.cfg.tier3Threshold} ימי לילה · מקס׳)`,
+      label: `בונוס מדרגה 3 (+${ctx.cfg.tier3Threshold} ימי טיפול · מקס׳)`,
       formula: tier3Status,
       amount: ctx.tier >= 3 ? ctx.cfg.tier3Amount : 0,
       zero: ctx.tier < 3,
