@@ -344,7 +344,7 @@ function buildHouseCard(h) {
 
     <div class="bep-bar">
       <div class="bep-fill" style="width:${fillPct}%"></div>
-      <div class="bep-marker" style="right:${bepPct}%"><span>★</span><em>איזון ${bep}</em></div>
+      <div class="bep-marker" style="right:${bepPct}%"><span>★</span><em>זכאות ${bep}</em></div>
     </div>
 
     <div class="hc-nights">
