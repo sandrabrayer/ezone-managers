@@ -339,7 +339,7 @@ function buildHouseCard(h) {
 
     <div class="hc-stats">
       <div class="hc-occ">${occ}<small> / ${cap || '—'}</small></div>
-      <div class="hc-bep">נקודת איזון: <b>${bep || '—'}</b></div>
+      <div class="hc-bep">זכאות לבונוס: <b>${bep || '—'}</b></div>
     </div>
 
     <div class="bep-bar">
