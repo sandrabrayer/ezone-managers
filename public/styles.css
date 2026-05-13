@@ -1061,47 +1061,100 @@ body::before {
   text-shadow: 0 0 16px var(--gold-glow);
   margin-bottom: 0;
 }
-.next-tier-numbers {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 56px;
-  margin: 8px 0 18px;
+.next-tier-primary {
+  text-align: center;
+  margin: 6px 0 14px;
 }
-.next-tier-num { text-align: center; }
 .ntn-value {
   font-family: 'Frank Ruhl Libre', 'Heebo', serif;
-  font-size: 72px;
+  font-size: 84px;
   line-height: 1;
   font-weight: 800;
   color: var(--gold);
-  text-shadow: 0 0 20px var(--gold-glow);
+  text-shadow: 0 0 22px var(--gold-glow);
 }
 .next-tier-card.first-tier .ntn-value {
   color: var(--green-2);
   text-shadow: 0 0 20px rgba(52, 211, 153, 0.45);
 }
+.next-tier-card.behind .ntn-value {
+  color: var(--orange);
+  text-shadow: 0 0 20px var(--orange-glow);
+}
 .ntn-label {
   font-size: 14px;
   color: var(--text-mute);
-  margin-top: 8px;
+  margin-top: 10px;
   font-weight: 600;
+  line-height: 1.35;
+}
+.next-tier-cumulative {
+  font-size: 14px;
+  color: var(--text-dim);
+  text-align: center;
+  margin: 0 0 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.next-tier-status {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 7px 14px;
+  border-radius: 999px;
+  margin: 4px auto 12px;
+  letter-spacing: 0.01em;
+}
+.next-tier-card .next-tier-status {
+  background: rgba(252, 211, 77, 0.16);
+  color: var(--gold);
+  border: 1px solid rgba(252, 211, 77, 0.4);
+}
+.next-tier-card.on-track .next-tier-status {
+  background: rgba(52, 211, 153, 0.18);
+  color: var(--green-2);
+  border-color: rgba(52, 211, 153, 0.5);
+}
+.next-tier-card.behind .next-tier-status {
+  background: rgba(251, 146, 60, 0.18);
+  color: var(--orange);
+  border-color: rgba(251, 146, 60, 0.5);
+}
+.next-tier-card.achieved {
+  background: linear-gradient(135deg, rgba(252, 211, 77, 0.22), rgba(16, 185, 129, 0.14));
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold-glow), 0 18px 44px rgba(252, 211, 77, 0.22);
+}
+.next-tier-card.achieved .ntn-value {
+  color: var(--gold);
+  text-shadow: 0 0 24px var(--gold-glow);
+}
+.next-tier-card.behind {
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.14), rgba(244, 114, 182, 0.08));
+  border-color: rgba(251, 146, 60, 0.40);
+  box-shadow: 0 0 0 1px rgba(251, 146, 60, 0.20), 0 18px 44px rgba(251, 146, 60, 0.12);
 }
 .next-tier-jump {
   font-size: 17px;
   color: var(--text-dim);
   font-weight: 600;
+  text-align: center;
+  margin-top: 2px;
 }
+.next-tier-card { text-align: center; }
 @media (max-width: 480px) {
-  .ntn-value { font-size: 58px; }
-  .next-tier-numbers { gap: 32px; }
+  .ntn-value { font-size: 64px; }
   .next-tier-header { font-size: 16px; }
   .next-tier-card.maxed .next-tier-header { font-size: 24px; }
   .next-tier-jump { font-size: 15px; }
+  .next-tier-cumulative { font-size: 13px; }
+  .next-tier-status { font-size: 13px; padding: 6px 12px; }
+  .ntn-label { font-size: 13px; }
 }
 @media (min-width: 1100px) {
-  .ntn-value { font-size: 84px; }
-  .next-tier-numbers { gap: 72px; }
+  .ntn-value { font-size: 96px; }
   .next-tier-header { font-size: 20px; }
   .next-tier-jump { font-size: 19px; }
+  .next-tier-cumulative { font-size: 15px; }
+  .next-tier-status { font-size: 15px; }
 }

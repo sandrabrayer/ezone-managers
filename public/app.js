@@ -498,7 +498,7 @@ function renderHouseDetail(key, data) {
   const recentDailyAvg = pastCounts.length
     ? pastCounts.slice(-5).reduce((s, n) => s + n, 0) / Math.min(5, pastCounts.length)
     : (Number(merged.patientsNow) || 0);
-  renderNextTierCard(panel, { cfg, target, nights, tier: tier.tier }, daysLeftInMonth, recentDailyAvg);
+  renderNextTierCard(panel, { cfg, target, nights, tier: tier.tier }, daysLeftInMonth, recentDailyAvg, merged.patientsNow);
 
   // Tier progress visualization
   renderTierTrack(panel, { cfg, target, nights, tier: tier.tier });
@@ -560,21 +560,25 @@ function renderDailySpark(panel, chart, bep, capacity) {
   }
 }
 
-function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg) {
+function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patientsNow) {
   const card = panel.querySelector('[data-next-tier-card]');
   if (!card) return;
   const header = panel.querySelector('[data-next-tier-header]');
-  const numbersBox = panel.querySelector('[data-next-tier-numbers]');
+  const primary = panel.querySelector('[data-next-tier-primary]');
+  const dailyGapEl = panel.querySelector('[data-next-tier-daily-gap]');
+  const dailyLabelEl = panel.querySelector('[data-next-tier-daily-label]');
+  const cumulativeEl = panel.querySelector('[data-next-tier-cumulative]');
+  const statusEl = panel.querySelector('[data-next-tier-status]');
   const jump = panel.querySelector('[data-next-tier-jump]');
-  const daysEl = panel.querySelector('[data-next-tier-missing-days]');
-  const patientsEl = panel.querySelector('[data-next-tier-missing-patients]');
 
   const tierNum = ctx.tier;
 
   if (tierNum >= 3) {
     card.className = 'next-tier-card maxed';
     header.textContent = '🏆 הגעת לבונוס המקסימלי!';
-    numbersBox.style.display = 'none';
+    primary.style.display = 'none';
+    cumulativeEl.style.display = 'none';
+    statusEl.style.display = 'none';
     jump.style.display = 'none';
     return;
   }
@@ -594,26 +598,57 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg) {
     currentAmt = ctx.cfg.tier2Amount;
   }
 
-  const missingDays = Math.max(0, nextThr - ctx.nights);
-  const dlSafe = Math.max(1, daysLeftInMonth || 1);
-  const avgDailyNeeded = missingDays / dlSafe;
+  // DAILY threshold: average daily occupancy needed across the standard 30-day model.
+  const dailyThreshold = Math.round(nextThr / 30);
   const curAvg = Number(recentDailyAvg) || 0;
-  // ADDITIONAL patients needed beyond current daily occupancy.
-  // If current occupancy already meets/exceeds the per-day need, additional = 0 (on track).
-  const additional = Math.max(0, Math.ceil(avgDailyNeeded - curAvg));
-  const onTrack = additional === 0 && missingDays > 0;
+  const dailyNow = Number.isFinite(Number(patientsNow))
+    ? Number(patientsNow)
+    : Math.round(curAvg);
+  const dailyGap = Math.max(0, dailyThreshold - dailyNow);
 
-  card.className = 'next-tier-card ' + (tierNum === 0 ? 'first-tier' : 'gold') + (onTrack ? ' on-track' : '');
-  numbersBox.style.display = '';
+  // CUMULATIVE gap + on-track projection (separate dimension from daily).
+  const cumulativeGap = Math.max(0, nextThr - ctx.nights);
+  const projected = ctx.nights + curAvg * Math.max(0, daysLeftInMonth || 0);
+  const achieved = ctx.nights >= nextThr;
+  const onTrack  = !achieved && projected >= nextThr;
+  const behind   = !achieved && !onTrack;
+
+  // Card state class
+  let stateClass = tierNum === 0 ? 'first-tier' : 'gold';
+  if (achieved) stateClass = 'achieved';
+  else if (onTrack) stateClass += ' on-track';
+  else if (behind)  stateClass += ' behind';
+  card.className = 'next-tier-card ' + stateClass;
+
+  primary.style.display = '';
+  cumulativeEl.style.display = '';
+  statusEl.style.display = '';
   jump.style.display = '';
-  header.textContent = tierNum === 0 ? 'לבונוס הראשון חסרים:' : 'לבונוס הבא חסרים:';
-  daysEl.textContent = fmtInt(missingDays);
-  patientsEl.textContent = fmtInt(additional);
 
-  const jumpText = `הבונוס יקפוץ מ-${fmtCurrency(currentAmt)} ל-${fmtCurrency(nextAmt)}`;
-  jump.textContent = onTrack
-    ? `🎯 במסלול ליעד! בתפוסה הנוכחית (~${Math.round(curAvg)} מטופלים/יום) — ${jumpText}`
-    : jumpText;
+  header.textContent = tierNum === 0 ? 'לבונוס הראשון:' : 'לבונוס הבא:';
+
+  // Primary (huge): daily gap
+  dailyGapEl.textContent = fmtInt(dailyGap);
+  dailyLabelEl.textContent = dailyGap > 0
+    ? `מטופלים חסרים היום לסף הזכאות (${fmtInt(dailyThreshold)} · כעת ${fmtInt(dailyNow)})`
+    : `הסף היומי הושג! (${fmtInt(dailyNow)} ≥ ${fmtInt(dailyThreshold)})`;
+
+  // Secondary: cumulative info
+  cumulativeEl.textContent = achieved
+    ? `יעד חודשי הושג: ${fmtInt(ctx.nights)} / ${fmtInt(nextThr)} ימי טיפול`
+    : `במצטבר: עוד ${fmtInt(cumulativeGap)} ימי טיפול נדרשים החודש (נצברו ${fmtInt(ctx.nights)} מתוך ${fmtInt(nextThr)})`;
+
+  // Status pill
+  if (achieved) {
+    statusEl.textContent = '🏆 הבונוס החודשי הושג!';
+  } else if (onTrack) {
+    statusEl.textContent = `🎯 במסלול ליעד החודשי · תחזית ${fmtInt(Math.round(projected))} ≥ ${fmtInt(nextThr)}`;
+  } else {
+    statusEl.textContent = `⚠️ מאחור בקצב · תחזית ${fmtInt(Math.round(projected))} < ${fmtInt(nextThr)}`;
+  }
+
+  // Jump amount
+  jump.textContent = `הבונוס יקפוץ מ-${fmtCurrency(currentAmt)} ל-${fmtCurrency(nextAmt)}`;
 }
 
 function renderTierTrack(panel, ctx) {
