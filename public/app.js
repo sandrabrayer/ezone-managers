@@ -555,9 +555,9 @@ function renderTierTrack(panel, ctx) {
     stop.classList.toggle('active',  ctx.tier === idx);
   });
 
-  panel.querySelector('[data-ts-nights="1"]').textContent = `${fmtInt(t1)} לילות`;
-  panel.querySelector('[data-ts-nights="2"]').textContent = `${fmtInt(t2)} לילות`;
-  panel.querySelector('[data-ts-nights="3"]').textContent = `${fmtInt(t3)} לילות`;
+  panel.querySelector('[data-ts-nights="1"]').textContent = `${fmtInt(t1)} ימי טיפול`;
+  panel.querySelector('[data-ts-nights="2"]').textContent = `${fmtInt(t2)} ימי טיפול`;
+  panel.querySelector('[data-ts-nights="3"]').textContent = `${fmtInt(t3)} ימי טיפול`;
 
   panel.querySelector('[data-tier-fill]').style.width = pct(ctx.nights) + '%';
 
