@@ -1039,6 +1039,15 @@ body::before {
   box-shadow: 0 0 0 1px var(--gold-glow), 0 18px 44px rgba(252, 211, 77, 0.22);
   padding: 28px 20px;
 }
+.next-tier-card.on-track {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(52, 211, 153, 0.10));
+  border-color: rgba(52, 211, 153, 0.45);
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.25), 0 18px 44px rgba(16, 185, 129, 0.14);
+}
+.next-tier-card.on-track .ntn-value {
+  color: var(--green-2);
+  text-shadow: 0 0 20px rgba(52, 211, 153, 0.45);
+}
 .next-tier-header {
   font-size: 18px;
   font-weight: 700;
