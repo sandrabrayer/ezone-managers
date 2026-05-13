@@ -8,11 +8,24 @@
 const HOUSE_KEYS = ['raanana', 'ramot', 'efroni', 'rehab'];
 
 const HOUSE_LABELS = {
-  raanana: { name: 'רעננה אשר',     manager: 'עידו',  type: 'בית מאזן' },
-  ramot:   { name: 'רמות השבים',    manager: 'שחר',   type: 'בית מאזן' },
-  efroni:  { name: 'קיסריה עפרוני', manager: 'חנן',   type: 'תחלואה כפולה' },
-  rehab:   { name: 'קיסריה ריהאב',  manager: 'רנטה',  type: 'גמילה' }
+  raanana: { name: 'רעננה אשר',     manager: 'עידו',  type: 'בית מאזן',     bep: 8,  capacity: 14 },
+  ramot:   { name: 'רמות השבים',    manager: 'שחר',   type: 'בית מאזן',     bep: 11, capacity: 20 },
+  efroni:  { name: 'קיסריה עפרוני', manager: 'חנן',   type: 'תחלואה כפולה', bep: 8,  capacity: 12 },
+  rehab:   { name: 'קיסריה ריהאב',  manager: 'רנטה',  type: 'גמילה',        bep: 7,  capacity: 13 }
 };
+
+function resolveBep(h) {
+  if (!h) return 0;
+  if (h.bep) return h.bep;
+  if (h.bonus?.bep) return h.bonus.bep;
+  if (h.bonus?.monthlyTarget) return Math.round(h.bonus.monthlyTarget / 30);
+  return HOUSE_LABELS[h.key]?.bep || 0;
+}
+function resolveCapacity(h) {
+  if (!h) return 0;
+  if (h.capacity) return h.capacity;
+  return HOUSE_LABELS[h.key]?.capacity || 0;
+}
 
 const HEBREW_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
@@ -104,8 +117,7 @@ function tierConfigFor(h) {
 
 function monthlyTargetOf(h) {
   if (h && h.bonus && Number.isFinite(h.bonus.monthlyTarget)) return h.bonus.monthlyTarget;
-  const bep = h?.bep ?? 0;
-  return bep * 30;
+  return resolveBep(h) * 30;
 }
 
 function treatmentNightsOf(h) {
@@ -224,16 +236,19 @@ function renderNetworkSpark(houses) {
   if (!el) return;
   if (!houses.length) { el.innerHTML = ''; return; }
 
-  const maxOcc = Math.max(...houses.map(h => Math.max(h.patientsNow ?? 0, h.bep ?? 0, h.capacity ?? 0))) || 1;
+  const calcMax = Math.max(
+    ...houses.map(h => Math.max(h.patientsNow ?? 0, resolveBep(h), resolveCapacity(h)))
+  ) || 1;
 
   el.innerHTML = houses.map(h => {
     const occ = h.patientsNow ?? 0;
-    const bep = h.bep ?? 0;
-    const cap = h.capacity ?? 0;
+    const bep = resolveBep(h);
+    const cap = resolveCapacity(h);
     const above = qualifiesMonthly(h);
-    const occH = Math.round((occ / maxOcc) * 100);
-    const bepH = Math.round((bep / maxOcc) * 100);
-    const capH = Math.round((cap / maxOcc) * 100);
+    const occH = Math.round((occ / calcMax) * 100);
+    const bepH = Math.round((bep / calcMax) * 100);
+    const capH = Math.round((cap / calcMax) * 100);
+    const fullName = h.name || HOUSE_LABELS[h.key]?.name || h.key;
     return `
       <div class="spark-col ${above ? 'above' : 'below'}" data-house="${h.key}">
         <div class="spark-stack">
@@ -241,7 +256,7 @@ function renderNetworkSpark(houses) {
           <div class="spark-bar" style="height:${occH}%"></div>
           <div class="spark-bep" style="bottom:${bepH}%"></div>
         </div>
-        <div class="spark-label">${HOUSE_LABELS[h.key]?.name?.split(' ')[0] || h.key}</div>
+        <div class="spark-label">${fullName}</div>
         <div class="spark-num">${occ}/${cap || '—'}</div>
       </div>`;
   }).join('');
@@ -278,9 +293,9 @@ function buildHouseCard(h) {
   const name = h.name || labels.name || key;
   const manager = h.manager || labels.manager || '';
   const type = h.type || labels.type || '';
-  const occ = h.patientsNow ?? 0;
-  const cap = h.capacity ?? 0;
-  const bep = h.bep ?? 0;
+  const occ = Number.isFinite(h.patientsNow) ? h.patientsNow : 0;
+  const cap = resolveCapacity(h);
+  const bep = resolveBep(h);
 
   const cfg = tierConfigFor(h);
   const target = monthlyTargetOf(h);
@@ -324,7 +339,7 @@ function buildHouseCard(h) {
 
     <div class="hc-stats">
       <div class="hc-occ">${occ}<small> / ${cap || '—'}</small></div>
-      <div class="hc-bep">נקודת איזון: <b>${bep}</b></div>
+      <div class="hc-bep">נקודת איזון: <b>${bep || '—'}</b></div>
     </div>
 
     <div class="bep-bar">
@@ -404,12 +419,12 @@ function renderHouseDetail(key, data) {
   if (!panel) return;
 
   const o = state.housesById[key] || {};
-  const merged = { ...o, ...data, bonus: { ...(o.bonus || {}), ...(data.bonus || {}) } };
+  const merged = { ...o, ...data, key, bonus: { ...(o.bonus || {}), ...(data.bonus || {}) } };
   const labels = HOUSE_LABELS[key] || {};
   const name = data.name || o.name || labels.name || key;
   const manager = data.manager || o.manager || labels.manager || '';
-  const bep = data.bep ?? o.bep ?? 0;
-  const occ = data.patientsNow ?? o.patientsNow ?? 0;
+  const bep = resolveBep(merged);
+  const occ = Number.isFinite(merged.patientsNow) ? merged.patientsNow : 0;
 
   const cfg = tierConfigFor(merged);
   const target = monthlyTargetOf(merged);
