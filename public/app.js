@@ -486,7 +486,7 @@ function renderHouseDetail(key, data) {
   setStat(panel, 'daysTarget',   fmtInt(target));
   setStat(panel, 'daysProjection', fmtInt(projection));
 
-  renderDailySpark(panel, data.dailyChart || [], bep);
+  renderDailySpark(panel, data.dailyChart || [], bep, resolveCapacity(merged));
 
   // "Missing for next tier" card (right after status banner)
   const daysLeftInMonth = Math.max(0, totalDaysMonth - today.getDate());
@@ -513,29 +513,39 @@ function setStat(panel, name, value) {
   el.textContent = value;
 }
 
-function renderDailySpark(panel, chart, bep) {
+function renderDailySpark(panel, chart, bep, capacity) {
   const host = panel.querySelector('[data-daily-spark]');
   if (!host) return;
   if (!chart.length) { host.innerHTML = ''; return; }
 
-  const maxV = Math.max(bep || 0, ...chart.map(p => p.count || 0), 1);
+  // Y-axis max = capacity (so a bar reaching the top = house at full capacity).
+  // Fall back to max-of-data only if capacity is missing.
+  const maxV = capacity > 0
+    ? capacity
+    : Math.max(bep || 0, ...chart.map(p => p.count || 0), 1);
   const today = new Date();
   const todayKey = today.toISOString().slice(0, 10);
-  const bepPct = (bep / maxV) * 100;
+  const bepPct = Math.min(100, (bep / maxV) * 100);
 
   host.innerHTML = `
     <div class="daily-spark">
       ${chart.map(p => {
-        const h = ((p.count || 0) / maxV) * 100;
+        const c = Number(p.count) || 0;
+        const h = Math.min(100, (c / maxV) * 100);
         const isFuture = (p.date || '') > todayKey;
-        const above = (p.count || 0) >= bep;
-        return `<div class="ds-col ${isFuture ? 'future' : ''} ${above ? 'above' : 'below'}" title="${p.date}: ${p.count}">
+        const above = c >= bep;
+        return `<div class="ds-col ${isFuture ? 'future' : ''} ${above ? 'above' : 'below'}" title="${p.date}: ${c} מטופלים">
           <div class="ds-bar" style="height:${h}%"></div>
         </div>`;
       }).join('')}
       <div class="ds-bep-line" style="bottom:${bepPct}%"><em>זכאות ${bep}</em></div>
     </div>
   `;
+
+  const legendLine = panel.querySelector('[data-daily-spark-legend-line]');
+  if (legendLine) {
+    legendLine.textContent = `הקו הכתום = זכאות לבונוס (${fmtInt(bep)} מטופלים)`;
+  }
 }
 
 function renderNextTierCard(panel, ctx, daysLeftInMonth) {

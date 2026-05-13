@@ -129,8 +129,15 @@
           <span>תחזית לסוף חודש: <b data-stat="daysProjection">—</b></span>
         </div>
 
-        <div class="card-subtitle">תפוסה יומית</div>
-        <div data-daily-spark></div>
+        <div class="card-subtitle">תפוסה יומית — מספר מטופלים בכל יום בחודש</div>
+        <div class="daily-spark-wrap">
+          <div class="daily-spark-y-label">מטופלים</div>
+          <div data-daily-spark></div>
+        </div>
+        <ul class="daily-spark-legend">
+          <li><span class="dsl-mark dsl-line"></span><span data-daily-spark-legend-line>הקו הכתום = זכאות לבונוס</span></li>
+          <li><span class="dsl-mark dsl-bar"></span><span>העמודות = מספר מטופלים בפועל בכל יום</span></li>
+        </ul>
       </div>
 
       <div class="card tier-card">
