@@ -607,8 +607,12 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
   const dailyGap = Math.max(0, dailyThreshold - dailyNow);
 
   // CUMULATIVE gap + on-track projection (separate dimension from daily).
+  // Projection uses today's current occupancy ("if we maintain N patients/day,
+  // we'll end at..."), which matches how managers think about the rest of the month.
+  // Recent-avg is a fallback when patientsNow is missing.
   const cumulativeGap = Math.max(0, nextThr - ctx.nights);
-  const projected = ctx.nights + curAvg * Math.max(0, daysLeftInMonth || 0);
+  const paceDaily = Number.isFinite(Number(patientsNow)) ? Number(patientsNow) : curAvg;
+  const projected = ctx.nights + paceDaily * Math.max(0, daysLeftInMonth || 0);
   const achieved = ctx.nights >= nextThr;
   const onTrack  = !achieved && projected >= nextThr;
   const behind   = !achieved && !onTrack;
@@ -627,8 +631,10 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
 
   header.textContent = tierNum === 0 ? 'לבונוס הראשון:' : 'לבונוס הבא:';
 
-  // Primary (huge): daily gap
-  dailyGapEl.textContent = fmtInt(dailyGap);
+  // Primary (huge): TODAY's gap to the daily threshold.
+  // Show ✓ when threshold is met so the headline reads as a positive signal,
+  // not a zero that looks like a missing value.
+  dailyGapEl.textContent = dailyGap > 0 ? fmtInt(dailyGap) : '✓';
   dailyLabelEl.textContent = dailyGap > 0
     ? `מטופלים חסרים היום לסף הזכאות (${fmtInt(dailyThreshold)} · כעת ${fmtInt(dailyNow)})`
     : `הסף היומי הושג! (${fmtInt(dailyNow)} ≥ ${fmtInt(dailyThreshold)})`;
