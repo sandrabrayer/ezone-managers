@@ -8,6 +8,7 @@ const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL
   || 'https://script.google.com/macros/s/AKfycbxkUs27ZOJdKSyxv0NFyAYgvaEG-xcJP6bcmeMiPPQzgc2bRpJcA5TZ2nmND_ykLVjlRg/exec';
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/lib', express.static(path.join(__dirname, 'lib')));
 
 app.get('/api/sheets', async (req, res) => {
   try {

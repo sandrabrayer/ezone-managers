@@ -267,12 +267,7 @@ function renderNetworkSpark(houses) {
 }
 
 function qualifiesMonthly(h) {
-  if (!h) return false;
-  if (typeof h.bonus?.qualifies === 'boolean') return h.bonus.qualifies;
-  if (typeof h.qualifies === 'boolean') return h.qualifies;
-  const nights = treatmentNightsOf(h);
-  const target = monthlyTargetOf(h);
-  return target > 0 && nights >= target;
+  return window.BonusEligibility.qualifiesMonthly(h, resolveBep);
 }
 
 function monthlyBonusOf(h) {
