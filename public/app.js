@@ -822,13 +822,7 @@ function renderBreakdown(panel, data, ctx) {
     ? `${fmtCurrency(a3)} ✓ (מקסימום)`
     : `חסרים ${fmtInt(Math.max(0, t3 - nights))} ימי טיפול ל-${fmtInt(t3)}`;
 
-  const continuityFormula = (() => {
-    const parts = [];
-    if (ctx.cont.maintenance) parts.push(`${ctx.cont.maintenance} תחזוקתי × 100`);
-    if (ctx.cont.day_2x)      parts.push(`${ctx.cont.day_2x} יום 2/שבוע × 500`);
-    if (ctx.cont.day_daily)   parts.push(`${ctx.cont.day_daily} יום יומי × 1,000`);
-    return parts.length ? parts.join(' · ') : 'אין הפניות פעילות החודש';
-  })();
+  const continuityFormula = window.BonusEligibility.continuityFormulaText(ctx.cont);
 
   const q = data.bonus || {};
   const monthsWindow = q.quarterlyMonths || q.monthsWindow || 'מאי+יוני+יולי 2026';

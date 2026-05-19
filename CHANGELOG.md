@@ -1,5 +1,35 @@
 # Changelog
 
+## [Unreleased] — step 4: outpatient-continuation bonus display
+
+### Fixed
+
+- **"בונוס הפניות להמשך טיפול" formula text no longer contradicts the
+  amount.** The outpatient-continuation bonus is now sourced from the
+  OUTPATIENTS app as 5% of each continuing patient's upfront monthly
+  package (DASHBOARD step 3). That model has no per-therapy buckets, so
+  the feed sends maintenance/day_2x/day_daily = 0 and only `total`.
+  The old breakdown text (`× 100/500/1,000`) therefore always fell back
+  to "אין הפניות פעילות החודש" ("no active referrals") even when a
+  non-zero bonus amount was shown — a confusing contradiction. The line
+  now reads "5% מהחבילה החודשית של מטופלי המשך טיפול" when the feed
+  delivers a total with no legacy buckets. The **amount was always
+  correct** (`ctx.cont.total`); only the explanatory text was wrong.
+
+### Notes
+
+- No money/amount logic changed in MANAGERS. The continuity total is
+  already added OUTSIDE the 80% occupancy gate (gate applies only to the
+  tiered monthly piece), so the "paid regardless of occupancy" policy was
+  already satisfied here — verified, not assumed.
+- Formula logic extracted to the canonical `lib/bonus-eligibility.js`
+  (`continuityFormulaText`, dual CommonJS/browser) so it is unit-tested,
+  matching the repo's existing pattern. `public/app.js` now calls it.
+- Tests: 40 pass (35 prior + 5 new for the formula text). No new deps.
+- Legacy flat-rate branch retained in the helper for backward/rollback
+  safety (renders if any per-therapy bucket is ever non-zero).
+
+
 ## Unreleased
 
 ### Fixed (detail-page breakdown)
