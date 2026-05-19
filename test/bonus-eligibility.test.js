@@ -388,3 +388,43 @@ test('detail breakdown: treatment-days reads from bonus.treatmentNights when pre
   assert.equal(b.tier2, 2500);
   assert.equal(b.effectiveTier, 2);
 });
+
+/* ===== Outpatient-continuation formula text (step 4) =====
+ * Guards the "בונוס הפניות להמשך טיפול" explanation line so it never
+ * contradicts a non-zero amount. The 5%-of-package feed (DASHBOARD step
+ * 3) sends per-therapy counts as 0 and only `total`. */
+const { continuityFormulaText } = require('../lib/bonus-eligibility');
+
+test('continuity formula: 5% feed (no buckets, has total) -> package text', () => {
+  const txt = continuityFormulaText({ maintenance: 0, day_2x: 0, day_daily: 0, total: 210 });
+  assert.equal(txt, '5% מהחבילה החודשית של מטופלי המשך טיפול');
+});
+
+test('continuity formula: nothing at all -> no active referrals', () => {
+  assert.equal(
+    continuityFormulaText({ maintenance: 0, day_2x: 0, day_daily: 0, total: 0 }),
+    'אין הפניות פעילות החודש'
+  );
+  assert.equal(continuityFormulaText(undefined), 'אין הפניות פעילות החודש');
+  assert.equal(continuityFormulaText({}), 'אין הפניות פעילות החודש');
+});
+
+test('continuity formula: legacy buckets still render the flat-rate breakdown', () => {
+  assert.equal(
+    continuityFormulaText({ maintenance: 2, day_2x: 0, day_daily: 1, total: 1200 }),
+    '2 תחזוקתי × 100 · 1 יום יומי × 1,000'
+  );
+});
+
+test('continuity formula: buckets take precedence over total when present', () => {
+  // If any legacy bucket is set, show the bucket breakdown (legacy path).
+  assert.equal(
+    continuityFormulaText({ maintenance: 1, day_2x: 0, day_daily: 0, total: 999 }),
+    '1 תחזוקתי × 100'
+  );
+});
+
+test('continuity formula: non-zero total never yields the empty message', () => {
+  const txt = continuityFormulaText({ total: 1 });
+  assert.notEqual(txt, 'אין הפניות פעילות החודש');
+});
