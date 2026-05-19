@@ -534,8 +534,8 @@ function renderHouseDetail(key, data) {
   // Quarterly progress
   renderQuarterlyTrack(panel, merged, cfg, target);
 
-  // Bonus breakdown (educational)
-  renderBreakdown(panel, merged, { above, tier: tier.tier, cfg, target, nights, cont, quartly, totalBonus });
+  // Bonus breakdown (educational) — tier amounts use the new 80%-gate / floor rule
+  renderBreakdown(panel, merged, { above, tier: tier.tier, cfg, target, nights, cont, quartly, totalBonus, monthlyResult });
 
   // Logs
   renderEntries(panel.querySelector('[data-log="entries"]'), entries);
@@ -785,21 +785,41 @@ function renderBreakdown(panel, data, ctx) {
   const ul = panel.querySelector('[data-breakdown]');
   ul.innerHTML = '';
 
-  const t1 = ctx.target;
-  const t2 = ctx.target + ctx.cfg.tier2Threshold;
-  const t3 = ctx.target + ctx.cfg.tier3Threshold;
+  // Tier thresholds and amounts come from the canonical bonus-eligibility module
+  // so the breakdown stays in lockstep with monthlyBonusAmount.
+  const BE = window.BonusEligibility;
+  const t1 = BE.TIER1_DAYS;     // 300
+  const t2 = BE.TIER2_DAYS;     // 360
+  const t3 = BE.TIER3_DAYS;     // 420
+  const a1 = BE.TIER1_AMOUNT;   // 2,000
+  const a2 = BE.TIER2_AMOUNT;   // 2,500
+  const a3 = BE.TIER3_AMOUNT;   // 3,500
   const nights = ctx.nights;
 
-  const tier1Status = ctx.tier >= 1
-    ? `${fmtCurrency(ctx.cfg.base)} ✓`
+  const mr = ctx.monthlyResult || { amount: 0, tier: 0, eligible: false, usedFallback: false };
+
+  // Per-tier "paid" booleans under the new rule:
+  //   tier-1 floor pays whenever the occupancy gate (or its fallback) is met,
+  //   regardless of treatment-days. Higher tiers additionally require their
+  //   treatment-day threshold.
+  const tier1Paid = mr.eligible;
+  const tier2Paid = mr.eligible && nights >= t2;
+  const tier3Paid = mr.eligible && nights >= t3;
+
+  // Status / formula text — keep the informative "חסרים M ימי טיפול ל-X"
+  // wording so managers see the gap even when the amount is paid via floor.
+  const tier1Status = tier1Paid
+    ? (nights >= t1
+        ? `${fmtCurrency(a1)} ✓`
+        : `${fmtCurrency(a1)} ✓ · רף תפוסה (חסרים ${fmtInt(t1 - nights)} ימי טיפול ל-${fmtInt(t1)})`)
     : `חסרים ${fmtInt(Math.max(0, t1 - nights))} ימי טיפול ליעד ${fmtInt(t1)}`;
 
-  const tier2Status = ctx.tier >= 2
-    ? `${fmtCurrency(ctx.cfg.tier2Amount)} ✓`
+  const tier2Status = tier2Paid
+    ? `${fmtCurrency(a2)} ✓`
     : `חסרים ${fmtInt(Math.max(0, t2 - nights))} ימי טיפול ל-${fmtInt(t2)}`;
 
-  const tier3Status = ctx.tier >= 3
-    ? `${fmtCurrency(ctx.cfg.tier3Amount)} ✓ (מקסימום)`
+  const tier3Status = tier3Paid
+    ? `${fmtCurrency(a3)} ✓ (מקסימום)`
     : `חסרים ${fmtInt(Math.max(0, t3 - nights))} ימי טיפול ל-${fmtInt(t3)}`;
 
   const continuityFormula = (() => {
@@ -817,26 +837,23 @@ function renderBreakdown(panel, data, ctx) {
     {
       label: `בונוס מדרגה 1 (יעד ${fmtInt(t1)} ימי טיפול)`,
       formula: tier1Status,
-      amount: ctx.tier >= 1 ? ctx.cfg.base : 0,
-      zero: ctx.tier < 1,
-      gold: ctx.tier >= 1
+      amount: tier1Paid ? a1 : 0,
+      zero: !tier1Paid,
+      gold: tier1Paid
     },
     {
-      label: `בונוס מדרגה 2 (+${ctx.cfg.tier2Threshold} ימי טיפול)`,
+      label: `בונוס מדרגה 2 (יעד ${fmtInt(t2)} ימי טיפול)`,
       formula: tier2Status,
-      amount: ctx.tier >= 2 ? ctx.cfg.tier2Amount : 0,
-      zero: ctx.tier < 2,
-      gold: ctx.tier >= 2,
-      // tier 2 replaces tier 1, so dim tier 1 visually
-      replaces: ctx.tier >= 2
+      amount: tier2Paid ? a2 : 0,
+      zero: !tier2Paid,
+      gold: tier2Paid
     },
     {
-      label: `בונוס מדרגה 3 (+${ctx.cfg.tier3Threshold} ימי טיפול · מקס׳)`,
+      label: `בונוס מדרגה 3 (יעד ${fmtInt(t3)} ימי טיפול · מקס׳)`,
       formula: tier3Status,
-      amount: ctx.tier >= 3 ? ctx.cfg.tier3Amount : 0,
-      zero: ctx.tier < 3,
-      gold: ctx.tier >= 3,
-      replaces: ctx.tier >= 3
+      amount: tier3Paid ? a3 : 0,
+      zero: !tier3Paid,
+      gold: tier3Paid
     },
     {
       label: 'בונוס יציבות רבעוני',
@@ -856,14 +873,14 @@ function renderBreakdown(panel, data, ctx) {
     }
   ];
 
-  // The monthly bonus is the SINGLE-best tier — show all three but only the highest reached counts.
-  // For tier display: dim the lower tiers when a higher tier is reached so the sum visually matches.
+  // The monthly bonus is the SINGLE-best tier reached — dim lower tier rows
+  // when a higher tier wins so the visual matches "highest reached" semantics.
+  const effectiveTier = mr.eligible ? mr.tier : 0;
   items.forEach((item, idx) => {
     const li = document.createElement('li');
     if (item.zero) li.classList.add('zero');
     if (item.gold) li.classList.add('gold');
-    if (idx <= 2 && ctx.tier > 0 && ctx.tier !== (idx + 1)) {
-      // a different tier won — dim this one
+    if (idx <= 2 && effectiveTier > 0 && effectiveTier !== (idx + 1)) {
       li.classList.add('dim');
     }
     li.innerHTML = `

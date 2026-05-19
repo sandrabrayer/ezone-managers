@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Fixed (detail-page breakdown)
+- **`פירוט חישוב הבונוס` (renderBreakdown) now applies the same 80%-gate /
+  tier-1 floor rule** used by the dashboard KPI, the network total, and the
+  house card. Previously the per-tier rows in the detail breakdown still
+  derived their amounts from the legacy pure-treatment-days tier (i.e. they
+  only paid when `treatment-nights >= target`), so Ra'anana — eligible by
+  snapshot fallback but with treatment-days well below 300 — showed
+  "בונוס מדרגה 1 ... ₪0" even though the KPI and her card correctly showed
+  ₪2,000. The breakdown's tier-1 row now pays ₪2,000 whenever the occupancy
+  gate (or its snapshot fallback) is met, regardless of treatment-days; the
+  tier-2 row pays ₪2,500 only when eligible AND treatment-days ≥ 360; the
+  tier-3 row pays ₪3,500 only when eligible AND treatment-days ≥ 420. Tier
+  thresholds in the breakdown are now read from the canonical
+  `BonusEligibility.TIER{1,2,3}_DAYS` constants (300/360/420) instead of from
+  the house-specific `target + tier{2,3}Threshold`, keeping the breakdown in
+  lockstep with `monthlyBonusAmount`. The tier-1 status text shows the
+  "חסרים M ימי טיפול ל-300" gap alongside the paid floor amount when the
+  floor applies, so the informational gap stays visible.
+- **Unchanged in this fix:** the quarterly stability bonus row, the
+  continuity ("הפניות להמשך טיפול") row, the tier track visualization, the
+  "נצברו N ימי טיפול · חסרים M למדרגה" tier-current text, and the
+  eligibility badge / trophy logic.
+
 ### Changed (bonus AMOUNT calculation)
 - **Monthly bonus AMOUNT is now gated by an 80% occupancy rule and uses a
   treatment-days tier table with a tier-1 floor.** The bonus payable to a

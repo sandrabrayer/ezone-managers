@@ -234,3 +234,157 @@ test('daysInMonth=31: 25/31 = 80.6% passes; 24/31 = 77.4% fails', () => {
   assert.equal(monthlyBonusAmount(eligible, resolveBep, 31).eligible, true);
   assert.equal(monthlyBonusAmount(notEligible, resolveBep, 31).eligible, false);
 });
+
+/* ============================================================
+   Detail-page breakdown semantics — per-tier "paid" amounts.
+
+   renderBreakdown derives per-tier "paid" flags from monthlyBonusAmount:
+     tier1Paid = mr.eligible                                  (floor when below 300)
+     tier2Paid = mr.eligible && treatment-days >= TIER2_DAYS  (360)
+     tier3Paid = mr.eligible && treatment-days >= TIER3_DAYS  (420)
+   These tests pin down the per-tier amount the breakdown row should display.
+   ============================================================ */
+
+const { TIER1_DAYS, TIER2_DAYS, TIER3_DAYS,
+        TIER1_AMOUNT, TIER2_AMOUNT, TIER3_AMOUNT } = require('../lib/bonus-eligibility');
+
+function breakdownTierAmounts(h, days = DAYS_IN_MONTH) {
+  const r = monthlyBonusAmount(h, resolveBep, days);
+  const nights = (h.bonus && Number.isFinite(h.bonus.treatmentNights))
+    ? h.bonus.treatmentNights
+    : (Number.isFinite(h.treatmentDays) ? h.treatmentDays : 0);
+  return {
+    tier1: r.eligible ? TIER1_AMOUNT : 0,
+    tier2: (r.eligible && nights >= TIER2_DAYS) ? TIER2_AMOUNT : 0,
+    tier3: (r.eligible && nights >= TIER3_DAYS) ? TIER3_AMOUNT : 0,
+    effectiveTier: r.eligible ? r.tier : 0,
+    usedFallback: r.usedFallback,
+    totalMonthly: r.amount
+  };
+}
+
+test('detail breakdown: Raanana-like fallback (aboveBepDays 0, patientsNow>=bep, low days) → tier 1 floor 2000, others 0', () => {
+  // Mirrors the Raanana case the user described: backend not yet supplying
+  // aboveBepDays, snapshot eligible, treatment-days well below 300.
+  const raanana = {
+    key: 'raanana',
+    bep: 10,
+    patientsNow: 10,        // == BEP — snapshot eligible
+    treatmentDays: 80,      // well below tier-1 threshold of 300
+    bonus: { aboveBepDays: 0, bep: 10 }
+  };
+  const b = breakdownTierAmounts(raanana);
+  assert.equal(b.tier1, 2000);
+  assert.equal(b.tier2, 0);
+  assert.equal(b.tier3, 0);
+  assert.equal(b.effectiveTier, 1);
+  assert.equal(b.usedFallback, true);
+  assert.equal(b.totalMonthly, 2000);
+});
+
+test('detail breakdown: eligible + below tier-1 days → tier-1 line shows 2000 (floor), tier-2/3 show 0', () => {
+  const h = {
+    bep: 8, patientsNow: 10, treatmentDays: 200,
+    bonus: { aboveBepDays: 26 }
+  };
+  const b = breakdownTierAmounts(h);
+  assert.equal(b.tier1, 2000);
+  assert.equal(b.tier2, 0);
+  assert.equal(b.tier3, 0);
+  assert.equal(b.effectiveTier, 1);
+});
+
+test('detail breakdown: eligible at tier-2 days (>=360) → tier-1 and tier-2 lines both show their amounts; tier-3 shows 0', () => {
+  // Mirrors the original convention: each reached tier line shows its amount;
+  // lower lines are visually dimmed (the SINGLE-best tier is the payable).
+  const h = {
+    bep: 8, patientsNow: 10, treatmentDays: 380,
+    bonus: { aboveBepDays: 27 }
+  };
+  const b = breakdownTierAmounts(h);
+  assert.equal(b.tier1, 2000);
+  assert.equal(b.tier2, 2500);
+  assert.equal(b.tier3, 0);
+  assert.equal(b.effectiveTier, 2);
+  assert.equal(b.totalMonthly, 2500);
+});
+
+test('detail breakdown: eligible at tier-3 days (>=420) → all three tier lines show amounts', () => {
+  const h = {
+    bep: 8, patientsNow: 12, treatmentDays: 450,
+    bonus: { aboveBepDays: 29 }
+  };
+  const b = breakdownTierAmounts(h);
+  assert.equal(b.tier1, 2000);
+  assert.equal(b.tier2, 2500);
+  assert.equal(b.tier3, 3500);
+  assert.equal(b.effectiveTier, 3);
+  assert.equal(b.totalMonthly, 3500);
+});
+
+test('detail breakdown: occupancy gate fails → ALL tier lines show 0 regardless of treatment-days', () => {
+  // 20/30 = 66.7% → gate fails. Even with 450 treatment-days, breakdown rows are 0.
+  const h = {
+    bep: 8, patientsNow: 10, treatmentDays: 450,
+    bonus: { aboveBepDays: 20 }
+  };
+  const b = breakdownTierAmounts(h);
+  assert.equal(b.tier1, 0);
+  assert.equal(b.tier2, 0);
+  assert.equal(b.tier3, 0);
+  assert.equal(b.effectiveTier, 0);
+  assert.equal(b.totalMonthly, 0);
+});
+
+test('detail breakdown: snapshot fallback + low patientsNow → all tier lines 0', () => {
+  const h = {
+    bep: 10, patientsNow: 6, treatmentDays: 380,
+    bonus: {}  // aboveBepDays missing → fallback path
+  };
+  const b = breakdownTierAmounts(h);
+  assert.equal(b.tier1, 0);
+  assert.equal(b.tier2, 0);
+  assert.equal(b.tier3, 0);
+  assert.equal(b.usedFallback, true);
+});
+
+test('detail breakdown: boundary at exactly 360 treatment-days → tier-2 paid', () => {
+  const h = {
+    bep: 8, patientsNow: 10, treatmentDays: 360,
+    bonus: { aboveBepDays: 28 }
+  };
+  const b = breakdownTierAmounts(h);
+  assert.equal(b.tier2, 2500);
+  assert.equal(b.effectiveTier, 2);
+});
+
+test('detail breakdown: boundary at 359 treatment-days → tier-1 only (still floor amount)', () => {
+  const h = {
+    bep: 8, patientsNow: 10, treatmentDays: 359,
+    bonus: { aboveBepDays: 28 }
+  };
+  const b = breakdownTierAmounts(h);
+  assert.equal(b.tier1, 2000);
+  assert.equal(b.tier2, 0);
+  assert.equal(b.effectiveTier, 1);
+});
+
+test('detail breakdown: boundary at exactly 420 treatment-days → tier-3 paid', () => {
+  const h = {
+    bep: 8, patientsNow: 10, treatmentDays: 420,
+    bonus: { aboveBepDays: 28 }
+  };
+  const b = breakdownTierAmounts(h);
+  assert.equal(b.tier3, 3500);
+  assert.equal(b.effectiveTier, 3);
+});
+
+test('detail breakdown: treatment-days reads from bonus.treatmentNights when present', () => {
+  const h = {
+    bep: 8, patientsNow: 10,
+    bonus: { aboveBepDays: 28, treatmentNights: 380 }
+  };
+  const b = breakdownTierAmounts(h);
+  assert.equal(b.tier2, 2500);
+  assert.equal(b.effectiveTier, 2);
+});
