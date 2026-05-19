@@ -3,6 +3,17 @@
 ## Unreleased
 
 ### Fixed
+- **House cards now use the same eligibility rule as the dashboard.**
+  `buildHouseCard` was deriving its trophy / "✓ זכאי לבונוס" badge from
+  `tier.tier > 0` (treatment-nights tier reached) rather than from
+  `qualifiesMonthly`. Mid-month, that produced cards that said "⚠ לא זכאי"
+  even though `patientsNow >= bep`, contradicting the dashboard's
+  houses-above KPI and the network-spark coloring. Cards now call the same
+  `qualifiesMonthly(h)` (patients vs. BEP) used by the overview. The tier pill
+  ("מדרגה N") is now controlled independently by `tier.tier > 0`, so it only
+  appears when an actual treatment-nights tier has been reached. Bonus
+  amount is rendered based on `totalBonus`, so a qualifying-but-no-bonus-yet
+  mid-month state shows "0 ₪" honestly instead of a contradictory amount.
 - **Dashboard: bonus eligibility now ignores the backend `qualifies` flag.**
   The overview's "qualifies for bonus" indicator (houses-above KPI and the
   network spark coloring) now always computes eligibility locally as
@@ -24,6 +35,10 @@
   route in `server.js`.
 - The house-detail tab is unaffected — it derives its tier from
   treatment-nights and never consulted `qualifiesMonthly`.
+- The card's tier pill and bonus-amount display were decoupled from the
+  eligibility flag: the pill shows whenever `tier.tier > 0`, and the bonus
+  value shows whenever `totalBonus > 0`. This avoids a "מדרגה 0" rendering
+  when a house qualifies by occupancy but has not yet accumulated a tier.
 
 ### Security
 - This is a **data-integrity** fix. Bonus eligibility is a financial-status

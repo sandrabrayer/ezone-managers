@@ -296,10 +296,10 @@ function buildHouseCard(h) {
   const target = monthlyTargetOf(h);
   const nights = treatmentNightsOf(h);
   const tier = computeMonthlyBonus(nights, target, cfg);
-  const above = tier.tier > 0;
+  const above = qualifiesMonthly(h);
   const cont = continuityCounts(h.bonus || {});
   const quartly = h.bonus?.quarterly ?? 0;
-  const totalBonus = (above ? tier.amount : 0) + (cont.total || 0) + (quartly || 0);
+  const totalBonus = (tier.tier > 0 ? tier.amount : 0) + (cont.total || 0) + (quartly || 0);
 
   const card = document.createElement('div');
   card.className = `house-card ${above ? 'above' : 'below'}`;
@@ -311,10 +311,10 @@ function buildHouseCard(h) {
   const bepPct  = Math.min(100, (bep / denominator) * 100);
 
   const nightsShort = target ? Math.max(0, target - nights) : 0;
-  const bonusDisplay = above ? fmtCurrency(totalBonus) : '0 ₪';
-  const bonusClass = above ? '' : 'zero';
+  const bonusDisplay = totalBonus > 0 ? fmtCurrency(totalBonus) : '0 ₪';
+  const bonusClass = totalBonus > 0 ? '' : 'zero';
 
-  const tierBadge = above
+  const tierBadge = tier.tier > 0
     ? `<span class="tier-pill t${tier.tier}">מדרגה ${tier.tier}</span>`
     : '';
 
