@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+### Changed (bonus AMOUNT calculation)
+- **Monthly bonus AMOUNT is now gated by an 80% occupancy rule and uses a
+  treatment-days tier table with a tier-1 floor.** The bonus payable to a
+  house each month is computed as follows:
+  - **Occupancy gate:** the house must have been at-or-above its BEP on
+    **>= 80% of the month's days**, read from `h.bonus.aboveBepDays` divided
+    by days-in-month. If the gate is not met, the monthly bonus is **0**
+    regardless of accumulated treatment-days.
+  - **Tier amount (when the gate is met):**
+    - `>= 420` treatment-days → **3,500 ₪**
+    - `>= 360` treatment-days → **2,500 ₪**
+    - `>= 300` treatment-days → **2,000 ₪**
+    - `<  300` treatment-days → **2,000 ₪** (tier-1 floor — paid whenever the
+      occupancy gate passes, even if treatment-days haven't reached tier 1)
+  - **Snapshot fallback:** when `h.bonus.aboveBepDays` is missing or 0 (i.e.,
+    the backend Apps Script has not yet started reporting it), the gate falls
+    back to the live snapshot (`patientsNow >= resolveBep(h)`). In that
+    fallback path, the card and detail page render a small caveat
+    "מבוסס על תפוסה נוכחית" so it's clear the figure isn't yet using the
+    real 80%-of-month calculation.
+- **Backend requirement.** For the gate to compute against real occupancy,
+  the Apps Script feeding `/api/sheets?action=managersOverview` and
+  `action=managersHouse` must supply `bonus.aboveBepDays` per house — the
+  count of days in the current month on which active patients were >= BEP.
+  Until that field is wired up, every house's bonus will be computed via the
+  snapshot fallback and tagged with the "מבוסס על תפוסה נוכחית" caveat.
+- The overview's "סך בונוסים החודש" KPI is now summed locally from per-house
+  amounts rather than read from `totals.totalBonus`, since the backend total
+  predates this rule and would understate the floor / fail to apply the gate.
+- **Eligibility badge / trophy logic is unchanged.** The "✓ זכאי לבונוס" /
+  "⚠ לא זכאי" badge, the trophy on the card, the houses-above KPI, and the
+  network spark coloring all still come from `qualifiesMonthly` (live
+  `patientsNow >= resolveBep(h)`), as fixed in the earlier Unreleased work
+  below. Eligibility for the badge and the payable AMOUNT are now two
+  distinct decisions: a house can be "eligible" (badge on) while the monthly
+  amount is still 0 if it hasn't yet been above BEP for 80% of the month.
+
 ### Fixed
 - **House cards now use the same eligibility rule as the dashboard.**
   `buildHouseCard` was deriving its trophy / "✓ זכאי לבונוס" badge from

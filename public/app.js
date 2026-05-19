@@ -204,7 +204,8 @@ function renderOverview(data) {
 
   const housesAbove = houses.filter(qualifiesMonthly).length;
   const totalActive = totals.activePatients ?? houses.reduce((s, h) => s + (h.patientsNow ?? 0), 0);
-  const totalBonus  = totals.totalBonus ?? houses.reduce((s, h) => s + monthlyBonusOf(h), 0);
+  // Sum locally — the backend's totals.totalBonus predates the 80% occupancy gate.
+  const totalBonus  = houses.reduce((s, h) => s + totalBonusOf(h), 0);
   const daysInMonth = daysInMonthFromLabel(data.month);
   const daysLeft    = Math.max(0, daysInMonth - new Date().getDate());
 
@@ -270,16 +271,28 @@ function qualifiesMonthly(h) {
   return window.BonusEligibility.qualifiesMonthly(h, resolveBep);
 }
 
+function monthDaysOf(h) {
+  // Prefer the house-detail payload's month, then the network overview's month,
+  // then today. The 80% gate is computed against actual days-in-month.
+  const monthLabel = h?.month || state.overview?.month;
+  return daysInMonthFromLabel(monthLabel);
+}
+
+/** Monthly bonus AMOUNT — the per-house payable, via the 80% occupancy gate.
+    Returns the full BonusEligibility result so callers can show the fallback note. */
+function monthlyBonusResult(h) {
+  return window.BonusEligibility.monthlyBonusAmount(h, resolveBep, monthDaysOf(h));
+}
+
 function monthlyBonusOf(h) {
-  if (h?.bonus && Number.isFinite(h.bonus.monthly)) return h.bonus.monthly;
-  if (h?.bonus && Number.isFinite(h.bonus.total)) {
-    const cont = continuityCounts(h.bonus).total || 0;
-    const quart = h.bonus.quarterly || 0;
-    return Math.max(0, h.bonus.total - cont - quart);
-  }
-  const cfg = tierConfigFor(h);
-  const target = monthlyTargetOf(h);
-  return computeMonthlyBonus(treatmentNightsOf(h), target, cfg).amount;
+  return monthlyBonusResult(h).amount;
+}
+
+function totalBonusOf(h) {
+  const monthly = monthlyBonusOf(h);
+  const cont = continuityCounts(h?.bonus || {}).total || 0;
+  const quart = h?.bonus?.quarterly || 0;
+  return monthly + cont + quart;
 }
 
 function buildHouseCard(h) {
@@ -299,7 +312,9 @@ function buildHouseCard(h) {
   const above = qualifiesMonthly(h);
   const cont = continuityCounts(h.bonus || {});
   const quartly = h.bonus?.quarterly ?? 0;
-  const totalBonus = (tier.tier > 0 ? tier.amount : 0) + (cont.total || 0) + (quartly || 0);
+  const monthlyResult = monthlyBonusResult(h);
+  const totalBonus = monthlyResult.amount + (cont.total || 0) + (quartly || 0);
+  const showFallbackNote = monthlyResult.usedFallback && monthlyResult.amount > 0;
 
   const card = document.createElement('div');
   card.className = `house-card ${above ? 'above' : 'below'}`;
@@ -356,6 +371,7 @@ function buildHouseCard(h) {
       <div class="hc-bonus-label">בונוס החודש</div>
       <div class="hc-bonus-value ${bonusClass}">${bonusDisplay}</div>
     </div>
+    ${showFallbackNote ? `<div class="hc-bonus-fallback-note">מבוסס על תפוסה נוכחית</div>` : ''}
   `;
 
   const go = () => activateTab(key);
@@ -460,12 +476,29 @@ function renderHouseDetail(key, data) {
 
   const cont = continuityCounts(merged.bonus || {});
   const quartly = merged.bonus?.quarterly ?? 0;
-  const totalBonus = (above ? tier.amount : 0) + (cont.total || 0) + (quartly || 0);
+  const monthlyResult = monthlyBonusResult(merged);
+  const totalBonus = monthlyResult.amount + (cont.total || 0) + (quartly || 0);
+  const showFallbackNote = monthlyResult.usedFallback && monthlyResult.amount > 0;
 
   const bonusEl = panel.querySelector('[data-stat="bonus"]');
   bonusEl.classList.remove('is-skeleton');
   bonusEl.textContent = fmtCurrency(totalBonus);
   bonusEl.classList.toggle('gold', totalBonus > 0);
+
+  // Show fallback caveat ("מבוסס על תפוסה נוכחית") next to the bonus KPI when
+  // backend hasn't supplied aboveBepDays and we're using the snapshot signal.
+  let fallbackEl = panel.querySelector('[data-bonus-fallback-note]');
+  if (showFallbackNote) {
+    if (!fallbackEl) {
+      fallbackEl = document.createElement('div');
+      fallbackEl.setAttribute('data-bonus-fallback-note', '');
+      fallbackEl.className = 'bonus-fallback-note';
+      bonusEl.parentNode.appendChild(fallbackEl);
+    }
+    fallbackEl.textContent = 'מבוסס על תפוסה נוכחית';
+  } else if (fallbackEl) {
+    fallbackEl.remove();
+  }
 
   // BEP bar (treatment-nights vs target)
   const denom = Math.max(nights, target, projection, 1);

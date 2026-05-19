@@ -452,6 +452,17 @@ body::before {
   text-shadow: none;
   font-size: 30px;
 }
+.hc-bonus-fallback-note,
+.bonus-fallback-note {
+  font-size: 11px;
+  color: var(--text-mute);
+  font-weight: 500;
+  text-align: end;
+  margin-top: 4px;
+  font-style: italic;
+  position: relative;
+  z-index: 1;
+}
 
 /* progress bar with BEP star */
 .bep-bar {
