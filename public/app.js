@@ -7,19 +7,27 @@
 
 const HOUSE_KEYS = ['raanana', 'ramot', 'efroni', 'rehab'];
 
+/* `threshold` = end-of-month patients needed to be eligible for ANY bonus
+   (the agreed model: Ramot 18, others 10). This is NOT the internal
+   equilibrium point (11/8/8/7) — that point is internal-only and must not
+   gate the bonus. `capacity` is the physical bed count. */
 const HOUSE_LABELS = {
-  raanana: { name: 'רעננה אשר',     manager: 'עידו',  type: 'בית מאזן',     bep: 8,  capacity: 14 },
-  ramot:   { name: 'רמות השבים',    manager: 'שחר',   type: 'בית מאזן',     bep: 11, capacity: 20 },
-  efroni:  { name: 'קיסריה עפרוני', manager: 'חנן',   type: 'תחלואה כפולה', bep: 8,  capacity: 12 },
-  rehab:   { name: 'קיסריה ריהאב',  manager: 'רנטה',  type: 'גמילה',        bep: 7,  capacity: 13 }
+  raanana: { name: 'רעננה אשר',     manager: 'עידו',  type: 'בית מאזן',     threshold: 10, capacity: 14 },
+  ramot:   { name: 'רמות השבים',    manager: 'שחר',   type: 'בית מאזן',     threshold: 18, capacity: 20 },
+  efroni:  { name: 'קיסריה עפרוני', manager: 'חנן',   type: 'תחלואה כפולה', threshold: 10, capacity: 13 },
+  rehab:   { name: 'קיסריה ריהאב',  manager: 'רנטה',  type: 'גמילה',        threshold: 10, capacity: 13 }
 };
 
-function resolveBep(h) {
+/* Bonus-eligibility threshold for a house (end-of-month patient count).
+   Prefers the canonical per-house config in BonusEligibility, then explicit
+   payload fields, then the HOUSE_LABELS fallback. */
+function resolveThreshold(h) {
   if (!h) return 0;
-  if (h.bep) return h.bep;
-  if (h.bonus?.bep) return h.bonus.bep;
-  if (h.bonus?.monthlyTarget) return Math.round(h.bonus.monthlyTarget / 30);
-  return HOUSE_LABELS[h.key]?.bep || 0;
+  const fromLib = window.BonusEligibility?.thresholdOf?.(h);
+  if (Number.isFinite(fromLib) && fromLib > 0) return fromLib;
+  if (Number.isFinite(h.bonusThreshold)) return h.bonusThreshold;
+  if (Number.isFinite(h.threshold)) return h.threshold;
+  return HOUSE_LABELS[h.key]?.threshold || 0;
 }
 function resolveCapacity(h) {
   if (!h) return 0;
@@ -28,15 +36,6 @@ function resolveCapacity(h) {
 }
 
 const HEBREW_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
-
-const DEFAULT_TIER_CFG = {
-  base: 2000,
-  tier2Threshold: 30,
-  tier2Amount: 2500,
-  tier3Threshold: 60,
-  tier3Amount: 3500,
-  quarterly: 5000
-};
 
 const state = {
   overview: null,
@@ -100,37 +99,23 @@ function setStatus(text) {
 }
 
 /* ============================================================
-   Bonus model — tiered monthly + cumulative quarterly
+   Bonus model (Model A) — patient-count tiers + treatment-days gate.
+   The canonical amount logic lives in lib/bonus-eligibility.js. The helpers
+   below are thin wrappers so the rest of app.js reads naturally; there is no
+   longer a second, competing tier formula in this file.
    ============================================================ */
-
-function tierConfigFor(h) {
-  const b = (h && h.bonus) || {};
-  return {
-    base: b.base || b.tier1Amount || DEFAULT_TIER_CFG.base,
-    tier2Threshold: b.tier2Threshold ?? DEFAULT_TIER_CFG.tier2Threshold,
-    tier2Amount:    b.tier2Amount    || DEFAULT_TIER_CFG.tier2Amount,
-    tier3Threshold: b.tier3Threshold ?? DEFAULT_TIER_CFG.tier3Threshold,
-    tier3Amount:    b.tier3Amount    || DEFAULT_TIER_CFG.tier3Amount,
-    quarterly:      b.quarterlyAmount || b.quarterlyTarget || DEFAULT_TIER_CFG.quarterly
-  };
-}
-
-function monthlyTargetOf(h) {
-  if (h && h.bonus && Number.isFinite(h.bonus.monthlyTarget)) return h.bonus.monthlyTarget;
-  return resolveBep(h) * 30;
-}
 
 function treatmentNightsOf(h) {
   if (h?.bonus && Number.isFinite(h.bonus.treatmentNights)) return h.bonus.treatmentNights;
   return h?.treatmentDays ?? 0;
 }
 
-/** Compute monthly bonus tier from treatment-nights vs target. */
-function computeMonthlyBonus(nights, target, cfg) {
-  if (nights < target) return { tier: 0, amount: 0 };
-  if (nights >= target + cfg.tier3Threshold) return { tier: 3, amount: cfg.tier3Amount };
-  if (nights >= target + cfg.tier2Threshold) return { tier: 2, amount: cfg.tier2Amount };
-  return { tier: 1, amount: cfg.base };
+/* Treatment-days target for display: matched-tier patients × days-in-month
+   (falls back to the eligibility threshold when below any tier). */
+function monthlyTargetOf(h) {
+  const r = monthlyBonusResult(h);
+  if (r.target > 0) return r.target;
+  return resolveThreshold(h) * monthDaysOf(h);
 }
 
 function continuityCounts(b) {
@@ -238,16 +223,16 @@ function renderNetworkSpark(houses) {
   if (!houses.length) { el.innerHTML = ''; return; }
 
   const calcMax = Math.max(
-    ...houses.map(h => Math.max(h.patientsNow ?? 0, resolveBep(h), resolveCapacity(h)))
+    ...houses.map(h => Math.max(h.patientsNow ?? 0, resolveThreshold(h), resolveCapacity(h)))
   ) || 1;
 
   el.innerHTML = houses.map(h => {
     const occ = h.patientsNow ?? 0;
-    const bep = resolveBep(h);
+    const threshold = resolveThreshold(h);
     const cap = resolveCapacity(h);
     const above = qualifiesMonthly(h);
     const occH = Math.round((occ / calcMax) * 100);
-    const bepH = Math.round((bep / calcMax) * 100);
+    const bepH = Math.round((threshold / calcMax) * 100);
     const capH = Math.round((cap / calcMax) * 100);
     const fullName = h.name || HOUSE_LABELS[h.key]?.name || h.key;
     return `
@@ -268,20 +253,22 @@ function renderNetworkSpark(houses) {
 }
 
 function qualifiesMonthly(h) {
-  return window.BonusEligibility.qualifiesMonthly(h, resolveBep);
+  return window.BonusEligibility.qualifiesMonthly(h, resolveThreshold);
 }
 
 function monthDaysOf(h) {
   // Prefer the house-detail payload's month, then the network overview's month,
-  // then today. The 80% gate is computed against actual days-in-month.
+  // then today. The treatment-days target/gate is computed against actual
+  // days-in-month (target = tierPatients × daysInMonth).
   const monthLabel = h?.month || state.overview?.month;
   return daysInMonthFromLabel(monthLabel);
 }
 
-/** Monthly bonus AMOUNT — the per-house payable, via the 80% occupancy gate.
-    Returns the full BonusEligibility result so callers can show the fallback note. */
+/** Monthly bonus AMOUNT — the per-house payable. Tier amount comes from
+    end-of-month patient count; it is paid only if treatment-days met the
+    95% target gate. Returns the full BonusEligibility result. */
 function monthlyBonusResult(h) {
-  return window.BonusEligibility.monthlyBonusAmount(h, resolveBep, monthDaysOf(h));
+  return window.BonusEligibility.monthlyBonusAmount(h, resolveThreshold, monthDaysOf(h));
 }
 
 function monthlyBonusOf(h) {
@@ -303,27 +290,27 @@ function buildHouseCard(h) {
   const type = h.type || labels.type || '';
   const occ = Number.isFinite(h.patientsNow) ? h.patientsNow : 0;
   const cap = resolveCapacity(h);
-  const bep = resolveBep(h);
+  const threshold = resolveThreshold(h);
 
-  const cfg = tierConfigFor(h);
-  const target = monthlyTargetOf(h);
+  const monthlyResult = monthlyBonusResult(h);
+  const target = monthlyResult.target || (threshold * monthDaysOf(h));
   const nights = treatmentNightsOf(h);
-  const tier = computeMonthlyBonus(nights, target, cfg);
+  const tier = { tier: monthlyResult.tier, amount: monthlyResult.amount };
   const above = qualifiesMonthly(h);
   const cont = continuityCounts(h.bonus || {});
   const quartly = h.bonus?.quarterly ?? 0;
-  const monthlyResult = monthlyBonusResult(h);
   const totalBonus = monthlyResult.amount + (cont.total || 0) + (quartly || 0);
-  const showFallbackNote = monthlyResult.usedFallback && monthlyResult.amount > 0;
+  // Eligible by patient count but treatment-days gate not yet met → show a note.
+  const showGateNote = monthlyResult.eligible && !monthlyResult.gatePassed;
 
   const card = document.createElement('div');
   card.className = `house-card ${above ? 'above' : 'below'}`;
   card.setAttribute('role', 'button');
   card.setAttribute('tabindex', '0');
 
-  const denominator = cap || Math.max(occ, bep) || 1;
+  const denominator = cap || Math.max(occ, threshold) || 1;
   const fillPct = Math.min(100, (occ / denominator) * 100);
-  const bepPct  = Math.min(100, (bep / denominator) * 100);
+  const bepPct  = Math.min(100, (threshold / denominator) * 100);
 
   const nightsShort = target ? Math.max(0, target - nights) : 0;
   const bonusDisplay = totalBonus > 0 ? fmtCurrency(totalBonus) : '0 ₪';
@@ -349,12 +336,12 @@ function buildHouseCard(h) {
 
     <div class="hc-stats">
       <div class="hc-occ">${occ}<small> / ${cap || '—'}</small></div>
-      <div class="hc-bep">זכאות לבונוס: <b>${bep || '—'}</b></div>
+      <div class="hc-bep">זכאות לבונוס: <b>${threshold || '—'}</b></div>
     </div>
 
     <div class="bep-bar">
       <div class="bep-fill" style="width:${fillPct}%"></div>
-      <div class="bep-marker" style="right:${bepPct}%"><span>★</span><em>זכאות ${bep}</em></div>
+      <div class="bep-marker" style="right:${bepPct}%"><span>★</span><em>זכאות ${threshold}</em></div>
     </div>
 
     <div class="hc-nights">
@@ -371,7 +358,7 @@ function buildHouseCard(h) {
       <div class="hc-bonus-label">בונוס החודש</div>
       <div class="hc-bonus-value ${bonusClass}">${bonusDisplay}</div>
     </div>
-    ${showFallbackNote ? `<div class="hc-bonus-fallback-note">מבוסס על תפוסה נוכחית</div>` : ''}
+    ${showGateNote ? `<div class="hc-bonus-fallback-note">חסרים ${fmtInt(Math.max(0, Math.ceil(monthlyResult.minRequired - nights)))} ימי טיפול לסף התשלום (95% מ-${fmtInt(target)})</div>` : ''}
   `;
 
   const go = () => activateTab(key);
@@ -434,14 +421,28 @@ function renderHouseDetail(key, data) {
   const labels = HOUSE_LABELS[key] || {};
   const name = data.name || o.name || labels.name || key;
   const manager = data.manager || o.manager || labels.manager || '';
-  const bep = resolveBep(merged);
+  const threshold = resolveThreshold(merged);
   const occ = Number.isFinite(merged.patientsNow) ? merged.patientsNow : 0;
 
-  const cfg = tierConfigFor(merged);
-  const target = monthlyTargetOf(merged);
+  const monthlyResult = monthlyBonusResult(merged);
+  const target = monthlyResult.target || (threshold * monthDaysOf(merged));
   const nights = treatmentNightsOf(merged);
-  const tier = computeMonthlyBonus(nights, target, cfg);
-  const above = tier.tier > 0;
+  const tier = { tier: monthlyResult.tier, amount: monthlyResult.amount };
+  const eligible = monthlyResult.eligible;       // by end-of-month patient count
+  const paid = monthlyResult.gatePassed && monthlyResult.amount > 0;
+  const above = eligible;
+
+  // Compatibility config for the detail-page visualizations. Under Model A the
+  // payable amount is the single matched patient-count tier; `base` carries
+  // that amount so downstream renders show the correct figure. Tier patient
+  // counts come from the canonical per-house table. Quarterly is unchanged.
+  const houseCfg = (window.BonusEligibility.HOUSE_BONUS || {})[key] || null;
+  const tierTable = (houseCfg && Array.isArray(houseCfg.tiers)) ? houseCfg.tiers.slice() : [];
+  const cfg = {
+    base: monthlyResult.amount || (tierTable.length ? tierTable[tierTable.length - 1].amount : 0),
+    tierTable,                          // [{patients, amount}], highest first
+    quarterly: merged.bonus?.quarterlyAmount || merged.bonus?.quarterlyTarget || 5000
+  };
 
   const activity = Array.isArray(data.activity) ? data.activity : [];
   const entries = activity.filter(a => a.kind === 'entry');
@@ -455,18 +456,24 @@ function renderHouseDetail(key, data) {
 
   // Status banner
   const banner = panel.querySelector('[data-status-banner]');
-  banner.className = 'status-banner ' + (above ? 'above' : 'below');
-  const nightsShort = Math.max(0, target - nights);
-  banner.innerHTML = above
+  banner.className = 'status-banner ' + (paid ? 'above' : 'below');
+  const gapToGate = Math.max(0, Math.ceil(monthlyResult.minRequired - nights));
+  banner.innerHTML = paid
     ? `<div class="big-emoji">🏆</div>
        <div>
          <div class="sb-title">${name} — זכאי לבונוס מדרגה ${tier.tier}</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(nights)} ימי טיפול / יעד ${fmtInt(target)} · ${fmtCurrency(tier.amount)}</div>
+         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · ${fmtInt(nights)} ימי טיפול / יעד ${fmtInt(target)} · ${fmtCurrency(tier.amount)}</div>
        </div>`
-    : `<div class="big-emoji">⚠️</div>
+    : eligible
+      ? `<div class="big-emoji">⏳</div>
+       <div>
+         <div class="sb-title">${name} — זכאי לפי תפוסה, אך חסרים ימי טיפול</div>
+         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · ${fmtInt(nights)} ימי טיפול · חסרים ${fmtInt(gapToGate)} לסף 95% (${fmtInt(target)})</div>
+       </div>`
+      : `<div class="big-emoji">⚠️</div>
        <div>
          <div class="sb-title">${name} — לא זכאי לבונוס החודש</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(nights)} ימי טיפול · חסרים ${fmtInt(nightsShort)} ליעד ${fmtInt(target)}</div>
+         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · נדרשים ${fmtInt(threshold)} לזכאות</div>
        </div>`;
 
   // KPI stats
@@ -476,36 +483,36 @@ function renderHouseDetail(key, data) {
 
   const cont = continuityCounts(merged.bonus || {});
   const quartly = merged.bonus?.quarterly ?? 0;
-  const monthlyResult = monthlyBonusResult(merged);
   const totalBonus = monthlyResult.amount + (cont.total || 0) + (quartly || 0);
-  const showFallbackNote = monthlyResult.usedFallback && monthlyResult.amount > 0;
+  const showGateNote = monthlyResult.eligible && !monthlyResult.gatePassed;
 
   const bonusEl = panel.querySelector('[data-stat="bonus"]');
   bonusEl.classList.remove('is-skeleton');
   bonusEl.textContent = fmtCurrency(totalBonus);
   bonusEl.classList.toggle('gold', totalBonus > 0);
 
-  // Show fallback caveat ("מבוסס על תפוסה נוכחית") next to the bonus KPI when
-  // backend hasn't supplied aboveBepDays and we're using the snapshot signal.
+  // Show a caveat next to the bonus KPI when the house is eligible by patient
+  // count but the monthly amount is withheld because treatment-days are below
+  // the 95% target gate.
   let fallbackEl = panel.querySelector('[data-bonus-fallback-note]');
-  if (showFallbackNote) {
+  if (showGateNote) {
     if (!fallbackEl) {
       fallbackEl = document.createElement('div');
       fallbackEl.setAttribute('data-bonus-fallback-note', '');
       fallbackEl.className = 'bonus-fallback-note';
       bonusEl.parentNode.appendChild(fallbackEl);
     }
-    fallbackEl.textContent = 'מבוסס על תפוסה נוכחית';
+    fallbackEl.textContent = `חסרים ${fmtInt(gapToGate)} ימי טיפול לסף התשלום (95%)`;
   } else if (fallbackEl) {
     fallbackEl.remove();
   }
 
-  // BEP bar (treatment-nights vs target)
+  // Target bar (treatment-days vs target)
   const denom = Math.max(nights, target, projection, 1);
   const fillPct = Math.min(100, (nights / denom) * 100);
   const bepPct  = Math.min(100, (target / denom) * 100);
   const bar = panel.querySelector('[data-bep-bar]');
-  bar.classList.toggle('above', above);
+  bar.classList.toggle('above', paid);
   panel.querySelector('[data-bep-fill]').style.width = fillPct + '%';
   const marker = panel.querySelector('[data-bep-marker]');
   marker.style.right = bepPct + '%';
@@ -514,7 +521,7 @@ function renderHouseDetail(key, data) {
   setStat(panel, 'daysTarget',   fmtInt(target));
   setStat(panel, 'daysProjection', fmtInt(projection));
 
-  renderDailySpark(panel, data.dailyChart || [], bep, resolveCapacity(merged));
+  renderDailySpark(panel, data.dailyChart || [], threshold, resolveCapacity(merged));
 
   // "Missing for next tier" card (right after status banner)
   const daysLeftInMonth = Math.max(0, totalDaysMonth - today.getDate());
@@ -526,16 +533,16 @@ function renderHouseDetail(key, data) {
   const recentDailyAvg = pastCounts.length
     ? pastCounts.slice(-5).reduce((s, n) => s + n, 0) / Math.min(5, pastCounts.length)
     : (Number(merged.patientsNow) || 0);
-  renderNextTierCard(panel, { cfg, target, nights, tier: tier.tier }, daysLeftInMonth, recentDailyAvg, merged.patientsNow);
+  renderNextTierCard(panel, { cfg, target, nights, tier: tier.tier, occ, monthlyResult }, daysLeftInMonth, recentDailyAvg, merged.patientsNow);
 
   // Tier progress visualization
-  renderTierTrack(panel, { cfg, target, nights, tier: tier.tier });
+  renderTierTrack(panel, { cfg, target, nights, tier: tier.tier, occ, monthlyResult });
 
   // Quarterly progress
   renderQuarterlyTrack(panel, merged, cfg, target);
 
   // Bonus breakdown (educational) — tier amounts use the new 80%-gate / floor rule
-  renderBreakdown(panel, merged, { above, tier: tier.tier, cfg, target, nights, cont, quartly, totalBonus, monthlyResult });
+  renderBreakdown(panel, merged, { above, tier: tier.tier, cfg, target, nights, occ, cont, quartly, totalBonus, monthlyResult });
 
   // Logs
   renderEntries(panel.querySelector('[data-log="entries"]'), entries);
@@ -599,9 +606,14 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
   const statusEl = panel.querySelector('[data-next-tier-status]');
   const jump = panel.querySelector('[data-next-tier-jump]');
 
-  const tierNum = ctx.tier;
+  // Patient-count tiers (ascending) and current occupancy.
+  const tiersAsc = (ctx.cfg.tierTable || []).slice().sort((a, b) => a.patients - b.patients);
+  const occ = Number.isFinite(Number(patientsNow)) ? Number(patientsNow) : Math.round(Number(recentDailyAvg) || 0);
+  const mr = ctx.monthlyResult || {};
 
-  if (tierNum >= 3) {
+  // Already at the top tier by count?
+  const topTier = tiersAsc[tiersAsc.length - 1];
+  if (topTier && occ >= topTier.patients) {
     card.className = 'next-tier-card maxed';
     header.textContent = '🏆 הגעת לבונוס המקסימלי!';
     primary.style.display = 'none';
@@ -611,77 +623,42 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
     return;
   }
 
-  let nextThr, nextAmt, currentAmt;
-  if (tierNum === 0) {
-    nextThr = ctx.target;
-    nextAmt = ctx.cfg.base;
-    currentAmt = 0;
-  } else if (tierNum === 1) {
-    nextThr = ctx.target + ctx.cfg.tier2Threshold;
-    nextAmt = ctx.cfg.tier2Amount;
-    currentAmt = ctx.cfg.base;
-  } else {
-    nextThr = ctx.target + ctx.cfg.tier3Threshold;
-    nextAmt = ctx.cfg.tier3Amount;
-    currentAmt = ctx.cfg.tier2Amount;
-  }
+  // Find the next tier above current occupancy.
+  const next = tiersAsc.find(t => occ < t.patients) || topTier;
+  const current = [...tiersAsc].reverse().find(t => occ >= t.patients) || null;
+  const patientsGap = next ? Math.max(0, next.patients - occ) : 0;
+  const currentAmt = current ? current.amount : 0;
+  const nextAmt = next ? next.amount : 0;
 
-  // DAILY threshold: average daily occupancy needed across the standard 30-day model.
-  const dailyThreshold = Math.round(nextThr / 30);
-  const curAvg = Number(recentDailyAvg) || 0;
-  const dailyNow = Number.isFinite(Number(patientsNow))
-    ? Number(patientsNow)
-    : Math.round(curAvg);
-  const dailyGap = Math.max(0, dailyThreshold - dailyNow);
-
-  // CUMULATIVE gap + on-track projection (separate dimension from daily).
-  // Projection uses today's current occupancy ("if we maintain N patients/day,
-  // we'll end at..."), which matches how managers think about the rest of the month.
-  // Recent-avg is a fallback when patientsNow is missing.
-  const cumulativeGap = Math.max(0, nextThr - ctx.nights);
-  const paceDaily = Number.isFinite(Number(patientsNow)) ? Number(patientsNow) : curAvg;
-  const projected = ctx.nights + paceDaily * Math.max(0, daysLeftInMonth || 0);
-  const achieved = ctx.nights >= nextThr;
-  const onTrack  = !achieved && projected >= nextThr;
-  const behind   = !achieved && !onTrack;
-
-  // Card state class
-  let stateClass = tierNum === 0 ? 'first-tier' : 'gold';
-  if (achieved) stateClass = 'achieved';
-  else if (onTrack) stateClass += ' on-track';
-  else if (behind)  stateClass += ' behind';
-  card.className = 'next-tier-card ' + stateClass;
-
+  card.className = 'next-tier-card ' + (current ? 'gold' : 'first-tier');
   primary.style.display = '';
   cumulativeEl.style.display = '';
   statusEl.style.display = '';
   jump.style.display = '';
 
-  header.textContent = tierNum === 0 ? 'לבונוס הראשון:' : 'לבונוס הבא:';
+  header.textContent = current ? 'לבונוס הבא:' : 'לבונוס הראשון:';
 
-  // Primary (huge): TODAY's gap to the daily threshold.
-  // Show ✓ when threshold is met so the headline reads as a positive signal,
-  // not a zero that looks like a missing value.
-  dailyGapEl.textContent = dailyGap > 0 ? fmtInt(dailyGap) : '✓';
-  dailyLabelEl.textContent = dailyGap > 0
-    ? `מטופלים חסרים היום לסף הזכאות (${fmtInt(dailyThreshold)} · כעת ${fmtInt(dailyNow)})`
-    : `הסף היומי הושג! (${fmtInt(dailyNow)} ≥ ${fmtInt(dailyThreshold)})`;
+  // Primary (huge): patients needed to reach the next tier.
+  dailyGapEl.textContent = patientsGap > 0 ? fmtInt(patientsGap) : '✓';
+  dailyLabelEl.textContent = patientsGap > 0
+    ? `מטופלים חסרים למדרגה הבאה (${fmtInt(next.patients)} · כעת ${fmtInt(occ)})`
+    : `נדרש מספר המטופלים למדרגה זו הושג (${fmtInt(occ)})`;
 
-  // Secondary: cumulative info
-  cumulativeEl.textContent = achieved
-    ? `יעד חודשי הושג: ${fmtInt(ctx.nights)} / ${fmtInt(nextThr)} ימי טיפול`
-    : `במצטבר: עוד ${fmtInt(cumulativeGap)} ימי טיפול נדרשים החודש (נצברו ${fmtInt(ctx.nights)} מתוך ${fmtInt(nextThr)})`;
+  // Secondary: the treatment-days gate (this is what actually unlocks payment).
+  const gapToGate = Math.max(0, Math.ceil((mr.minRequired || 0) - (ctx.nights || 0)));
+  cumulativeEl.textContent = mr.gatePassed
+    ? `סף ימי הטיפול הושג: ${fmtInt(ctx.nights)} / ${fmtInt(mr.target || ctx.target)} (≥95%)`
+    : `סף תשלום: נדרשים ${fmtInt(Math.ceil((mr.minRequired || 0)))} ימי טיפול (95% מ-${fmtInt(mr.target || ctx.target)}) · חסרים ${fmtInt(gapToGate)}`;
 
-  // Status pill
-  if (achieved) {
-    statusEl.textContent = '🏆 הבונוס החודשי הושג!';
-  } else if (onTrack) {
-    statusEl.textContent = `🎯 במסלול ליעד החודשי · תחזית ${fmtInt(Math.round(projected))} ≥ ${fmtInt(nextThr)}`;
+  // Status pill reflects whether the bonus is actually payable now.
+  if (mr.gatePassed && mr.amount > 0) {
+    statusEl.textContent = '🏆 הבונוס החודשי משולם החודש!';
+  } else if (mr.eligible && !mr.gatePassed) {
+    statusEl.textContent = '⏳ זכאי לפי תפוסה — ממתין לסף ימי הטיפול';
   } else {
-    statusEl.textContent = `⚠️ מאחור בקצב · תחזית ${fmtInt(Math.round(projected))} < ${fmtInt(nextThr)}`;
+    statusEl.textContent = `⚠️ עדיין לא זכאי · נדרשים ${fmtInt((next && next.patients) || 0)} מטופלים`;
   }
 
-  // Jump amount
   jump.textContent = `הבונוס יקפוץ מ-${fmtCurrency(currentAmt)} ל-${fmtCurrency(nextAmt)}`;
 }
 
@@ -689,58 +666,62 @@ function renderTierTrack(panel, ctx) {
   const track = panel.querySelector('[data-tier-track]');
   if (!track) return;
 
-  const t1 = ctx.target;
-  const t2 = ctx.target + ctx.cfg.tier2Threshold;
-  const t3 = ctx.target + ctx.cfg.tier3Threshold;
+  // Patient-count tiers ascending: [{patients, amount}].
+  const tiersAsc = (ctx.cfg.tierTable || []).slice().sort((a, b) => a.patients - b.patients);
+  const occ = Number.isFinite(ctx.occ) ? ctx.occ : 0;
+  const p1 = tiersAsc[0]?.patients ?? 0;
+  const p2 = tiersAsc[1]?.patients ?? p1;
+  const p3 = tiersAsc[2]?.patients ?? p2;
 
-  // Fixed proportional positions so circles don't bunch when thresholds are small.
   const STOP_POS = { 1: 20, 2: 50, 3: 80 };
 
-  // Piecewise-linear map from nights → track %.
-  const fillFor = n => {
-    if (n <= 0) return 0;
-    if (n <= t1) return (n / t1) * STOP_POS[1];
-    if (n <= t2) return STOP_POS[1] + ((n - t1) / Math.max(1, t2 - t1)) * (STOP_POS[2] - STOP_POS[1]);
-    if (n <= t3) return STOP_POS[2] + ((n - t2) / Math.max(1, t3 - t2)) * (STOP_POS[3] - STOP_POS[2]);
-    return Math.min(100, STOP_POS[3] + ((n - t3) / Math.max(1, t3 * 0.1)) * (100 - STOP_POS[3]));
+  // Map current patient count → track %.
+  const fillFor = p => {
+    if (p <= 0 || p1 <= 0) return 0;
+    if (p <= p1) return (p / p1) * STOP_POS[1];
+    if (p <= p2) return STOP_POS[1] + ((p - p1) / Math.max(1, p2 - p1)) * (STOP_POS[2] - STOP_POS[1]);
+    if (p <= p3) return STOP_POS[2] + ((p - p2) / Math.max(1, p3 - p2)) * (STOP_POS[3] - STOP_POS[2]);
+    return 100;
   };
 
-  // Position stops along track (LTR within RTL doc)
+  // Which tier the current occupancy has reached (by count).
+  const reachedTier = occ >= p3 ? 3 : occ >= p2 ? 2 : occ >= p1 ? 1 : 0;
+
   const stops = track.querySelectorAll('[data-tier-stop]');
   stops.forEach(stop => {
     const idx = parseInt(stop.getAttribute('data-tier-stop'), 10);
     stop.style.left = STOP_POS[idx] + '%';
-    stop.classList.toggle('reached', ctx.tier >= idx);
-    stop.classList.toggle('active',  ctx.tier === idx);
+    stop.classList.toggle('reached', reachedTier >= idx);
+    stop.classList.toggle('active',  reachedTier === idx);
   });
 
-  panel.querySelector('[data-ts-nights="1"]').textContent = `${fmtInt(t1)} ימי טיפול`;
-  panel.querySelector('[data-ts-nights="2"]').textContent = `${fmtInt(t2)} ימי טיפול`;
-  panel.querySelector('[data-ts-nights="3"]').textContent = `${fmtInt(t3)} ימי טיפול`;
+  panel.querySelector('[data-ts-nights="1"]').textContent = `${fmtInt(p1)} מטופלים`;
+  panel.querySelector('[data-ts-nights="2"]').textContent = `${fmtInt(p2)} מטופלים`;
+  panel.querySelector('[data-ts-nights="3"]').textContent = `${fmtInt(p3)} מטופלים`;
 
   const ta1 = panel.querySelector('[data-ts-amount="1"]');
   const ta2 = panel.querySelector('[data-ts-amount="2"]');
   const ta3 = panel.querySelector('[data-ts-amount="3"]');
-  if (ta1) ta1.textContent = fmtCurrency(ctx.cfg.base);
-  if (ta2) ta2.textContent = fmtCurrency(ctx.cfg.tier2Amount);
-  if (ta3) ta3.textContent = fmtCurrency(ctx.cfg.tier3Amount);
+  if (ta1) ta1.textContent = fmtCurrency(tiersAsc[0]?.amount || 0);
+  if (ta2) ta2.textContent = fmtCurrency(tiersAsc[1]?.amount || 0);
+  if (ta3) ta3.textContent = fmtCurrency(tiersAsc[2]?.amount || 0);
 
-  panel.querySelector('[data-tier-fill]').style.width = fillFor(ctx.nights) + '%';
+  panel.querySelector('[data-tier-fill]').style.width = fillFor(occ) + '%';
 
   const cur = panel.querySelector('[data-tier-current]');
-  if (ctx.tier === 0) {
-    const need = Math.max(0, t1 - ctx.nights);
+  if (reachedTier === 0) {
+    const need = Math.max(0, p1 - occ);
     cur.className = 'tier-current zero';
-    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי טיפול · חסרים ${fmtInt(need)} למדרגה הראשונה`;
-  } else if (ctx.tier === 3) {
+    cur.textContent = `${fmtInt(occ)} מטופלים · חסרים ${fmtInt(need)} למדרגה הראשונה (${fmtInt(p1)})`;
+  } else if (reachedTier === 3) {
     cur.className = 'tier-current gold max';
-    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי טיפול · מדרגה 3 המקסימלית הושגה!`;
+    cur.textContent = `${fmtInt(occ)} מטופלים · מדרגה 3 המקסימלית הושגה!`;
   } else {
-    const nextThr = ctx.tier === 1 ? t2 : t3;
-    const nextAmt = ctx.tier === 1 ? ctx.cfg.tier2Amount : ctx.cfg.tier3Amount;
-    const need = Math.max(0, nextThr - ctx.nights);
+    const nextP = reachedTier === 1 ? p2 : p3;
+    const nextAmt = reachedTier === 1 ? (tiersAsc[1]?.amount || 0) : (tiersAsc[2]?.amount || 0);
+    const need = Math.max(0, nextP - occ);
     cur.className = 'tier-current gold';
-    cur.textContent = `נצברו ${fmtInt(ctx.nights)} ימי טיפול · חסרים ${fmtInt(need)} למדרגה ${ctx.tier + 1} (${fmtCurrency(nextAmt)})`;
+    cur.textContent = `${fmtInt(occ)} מטופלים · חסרים ${fmtInt(need)} למדרגה ${reachedTier + 1} (${fmtCurrency(nextAmt)})`;
   }
 }
 
@@ -785,42 +766,40 @@ function renderBreakdown(panel, data, ctx) {
   const ul = panel.querySelector('[data-breakdown]');
   ul.innerHTML = '';
 
-  // Tier thresholds and amounts come from the canonical bonus-eligibility module
-  // so the breakdown stays in lockstep with monthlyBonusAmount.
-  const BE = window.BonusEligibility;
-  const t1 = BE.TIER1_DAYS;     // 300
-  const t2 = BE.TIER2_DAYS;     // 360
-  const t3 = BE.TIER3_DAYS;     // 420
-  const a1 = BE.TIER1_AMOUNT;   // 2,000
-  const a2 = BE.TIER2_AMOUNT;   // 2,500
-  const a3 = BE.TIER3_AMOUNT;   // 3,500
+  // Patient-count tiers from the canonical per-house table. Under Model A the
+  // single matched tier is the payable amount, and it is only paid when the
+  // treatment-days gate (>= 95% of target) is met.
+  const mr = ctx.monthlyResult || { amount: 0, tier: 0, eligible: false, gatePassed: false, target: 0, minRequired: 0, tierPatients: 0 };
   const nights = ctx.nights;
+  const tierTable = (ctx.cfg && Array.isArray(ctx.cfg.tierTable)) ? ctx.cfg.tierTable : [];
+  // Render lowest tier first for readability.
+  const tiersAsc = tierTable.slice().sort((a, b) => a.patients - b.patients);
+  const occNow = Number.isFinite(data.patientsNow) ? data.patientsNow : 0;
+  const gapToGate = Math.max(0, Math.ceil(mr.minRequired - nights));
 
-  const mr = ctx.monthlyResult || { amount: 0, tier: 0, eligible: false, usedFallback: false };
-
-  // Per-tier "paid" booleans under the new rule:
-  //   tier-1 floor pays whenever the occupancy gate (or its fallback) is met,
-  //   regardless of treatment-days. Higher tiers additionally require their
-  //   treatment-day threshold.
-  const tier1Paid = mr.eligible;
-  const tier2Paid = mr.eligible && nights >= t2;
-  const tier3Paid = mr.eligible && nights >= t3;
-
-  // Status / formula text — keep the informative "חסרים M ימי טיפול ל-X"
-  // wording so managers see the gap even when the amount is paid via floor.
-  const tier1Status = tier1Paid
-    ? (nights >= t1
-        ? `${fmtCurrency(a1)} ✓`
-        : `${fmtCurrency(a1)} ✓ · רף תפוסה (חסרים ${fmtInt(t1 - nights)} ימי טיפול ל-${fmtInt(t1)})`)
-    : `חסרים ${fmtInt(Math.max(0, t1 - nights))} ימי טיפול ליעד ${fmtInt(t1)}`;
-
-  const tier2Status = tier2Paid
-    ? `${fmtCurrency(a2)} ✓`
-    : `חסרים ${fmtInt(Math.max(0, t2 - nights))} ימי טיפול ל-${fmtInt(t2)}`;
-
-  const tier3Status = tier3Paid
-    ? `${fmtCurrency(a3)} ✓ (מקסימום)`
-    : `חסרים ${fmtInt(Math.max(0, t3 - nights))} ימי טיפול ל-${fmtInt(t3)}`;
+  const tierItems = tiersAsc.map((row, i) => {
+    const tierNum = i + 1;
+    const reachedByCount = occNow >= row.patients;
+    const isMatched = mr.tierPatients === row.patients;
+    const paidHere = isMatched && mr.gatePassed && mr.amount > 0;
+    let formula;
+    if (!reachedByCount) {
+      formula = `נדרשים ${fmtInt(row.patients)} מטופלים (יש ${fmtInt(occNow)})`;
+    } else if (paidHere) {
+      formula = `${fmtCurrency(row.amount)} ✓ · ${fmtInt(occNow)} מטופלים · ${fmtInt(nights)}/${fmtInt(mr.target)} ימי טיפול`;
+    } else if (isMatched) {
+      formula = `מותנה: חסרים ${fmtInt(gapToGate)} ימי טיפול לסף 95% (${fmtInt(mr.target)})`;
+    } else {
+      formula = `${fmtInt(occNow)} מטופלים — מדרגה גבוהה יותר פעילה`;
+    }
+    return {
+      label: `בונוס מדרגה ${tierNum} (${fmtInt(row.patients)} מטופלים)`,
+      formula,
+      amount: paidHere ? row.amount : 0,
+      zero: !paidHere,
+      gold: paidHere
+    };
+  });
 
   const continuityFormula = (() => {
     const parts = [];
@@ -834,27 +813,7 @@ function renderBreakdown(panel, data, ctx) {
   const monthsWindow = q.quarterlyMonths || q.monthsWindow || 'מאי+יוני+יולי 2026';
 
   const items = [
-    {
-      label: `בונוס מדרגה 1 (יעד ${fmtInt(t1)} ימי טיפול)`,
-      formula: tier1Status,
-      amount: tier1Paid ? a1 : 0,
-      zero: !tier1Paid,
-      gold: tier1Paid
-    },
-    {
-      label: `בונוס מדרגה 2 (יעד ${fmtInt(t2)} ימי טיפול)`,
-      formula: tier2Status,
-      amount: tier2Paid ? a2 : 0,
-      zero: !tier2Paid,
-      gold: tier2Paid
-    },
-    {
-      label: `בונוס מדרגה 3 (יעד ${fmtInt(t3)} ימי טיפול · מקס׳)`,
-      formula: tier3Status,
-      amount: tier3Paid ? a3 : 0,
-      zero: !tier3Paid,
-      gold: tier3Paid
-    },
+    ...tierItems,
     {
       label: 'בונוס יציבות רבעוני',
       formula: ctx.quartly > 0
