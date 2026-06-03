@@ -464,6 +464,32 @@ body::before {
   z-index: 1;
 }
 
+/* settled previous month + in-progress current month split */
+.month-split {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ms-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "tag amt" "sub sub";
+  gap: 2px 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line, rgba(255,255,255,0.08));
+  background: rgba(255,255,255,0.02);
+  text-align: end;
+}
+.ms-prev { border-color: rgba(252, 211, 77, 0.28); background: rgba(252, 211, 77, 0.04); }
+.ms-cur  { border-style: dashed; }
+.ms-tag { grid-area: tag; font-size: 12px; font-weight: 600; color: var(--text, #e8e8e8); text-align: start; }
+.ms-amt { grid-area: amt; font-size: 16px; font-weight: 700; }
+.ms-amt.gold { color: var(--gold); }
+.ms-amt.zero { color: var(--text-mute); }
+.ms-sub { grid-area: sub; font-size: 11px; color: var(--text-mute); text-align: start; }
+
 /* progress bar with BEP star */
 .bep-bar {
   position: relative;
