@@ -520,10 +520,17 @@ function renderHouseDetail(key, data) {
   const exits   = activity.filter(a => a.kind === 'exit');
 
   const totalDaysMonth = daysInMonthFromLabel(data.month);
-  const today = new Date();
-  const elapsedDays = Math.max(1, Math.min(totalDaysMonth, today.getDate()));
-  const dailyAvg = nights / elapsedDays;
-  const projection = Math.round(dailyAvg * totalDaysMonth);
+  // Honest pace: average occupancy over the FULL month so far
+  // (treatmentDays / daysInMonth), not / elapsed-days. Patient stays are often
+  // dated for the whole month up front, so dividing by elapsed days inflates
+  // the figure (e.g. 540 treatment-days on day 3 → 180/day → 5,400 projected).
+  // Averaging over the full month never overshoots actual occupancy.
+  const dailyAvg = totalDaysMonth > 0 ? nights / totalDaysMonth : 0;
+  // Projection: if current occupancy holds for the rest of the month, the
+  // month ends at roughly (current daily occupancy × days in month). Since
+  // dailyAvg already spans the full month, the projection is simply nights
+  // when stays are pre-dated, and grows with real day-by-day entry otherwise.
+  const projection = Math.round(Math.max(nights, dailyAvg * totalDaysMonth));
 
   // Status banner
   const banner = panel.querySelector('[data-status-banner]');
