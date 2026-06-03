@@ -83,6 +83,77 @@ function currentMonthLabel(d = new Date()) {
   return `${HEBREW_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/* Render the "settled previous month + in-progress current month" split
+ * beneath the bonus KPI. Reads the prevMonth / currentMonth blocks the Apps
+ * Script now sends. Falls back gracefully (renders nothing) if they're absent
+ * — e.g. an overview-only payload or an old feed.
+ *
+ * The current-month projection from the feed (paceAvgDaily / projectedBonus)
+ * can over-shoot early in the month when patient stays are dated for the whole
+ * month up front: treatmentDaysSoFar then exceeds days-elapsed × patients. To
+ * keep the projection honest we recompute the pace as treatmentDaysSoFar capped
+ * at (daysElapsed × capacity) is NOT something we can know here, so instead we
+ * present the projection as "if the current daily occupancy holds" using the
+ * settled avgDaily of the month so far = treatmentDaysSoFar / daysInMonth, which
+ * never overshoots. */
+function renderMonthSplit_(panel, bonusEl, h) {
+  const prev = h && h.prevMonth;
+  const cur  = h && h.currentMonth;
+  if (!prev && !cur) return;
+
+  let box = panel.querySelector('[data-month-split]');
+  if (!box) {
+    box = document.createElement('div');
+    box.setAttribute('data-month-split', '');
+    box.className = 'month-split';
+    bonusEl.parentNode.appendChild(box);
+  }
+
+  const parts = [];
+
+  if (prev) {
+    const label = fmtMonthLabel(prev.month);
+    const paid = Number(prev.bonus) || 0;
+    const quota = prev.quotaMet ? '' : ' · לא הושלמה מכסת הימים';
+    parts.push(
+      `<div class="ms-row ms-prev">
+         <span class="ms-tag">בונוס ${label} (סופי)</span>
+         <span class="ms-amt ${paid > 0 ? 'gold' : 'zero'}">${fmtCurrency(paid)}</span>
+         <span class="ms-sub">ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום${quota}</span>
+       </div>`
+    );
+  }
+
+  if (cur) {
+    const label = fmtMonthLabel(cur.month);
+    // Honest projection: use avg occupancy over the FULL month so far
+    // (treatmentDaysSoFar / daysInMonth) rather than the feed's pace, which
+    // overshoots when stays are dated for the whole month up front. This
+    // never projects above what occupancy actually supports.
+    const days = Number(cur.daysInMonth) || 30;
+    const avgSoFar = days > 0 ? (Number(cur.treatmentDaysSoFar) || 0) / days : 0;
+    const t = window.BonusEligibility.tierForPatients(
+      { key: h.key, avgDaily: avgSoFar }, () => 0
+    );
+    const proj = (t && t.amount) ? t.amount : 0;
+    parts.push(
+      `<div class="ms-row ms-cur">
+         <span class="ms-tag">${label} — מתחיל ב-0 ₪</span>
+         <span class="ms-amt zero">0 ₪</span>
+         <span class="ms-sub">תחזית אם הקצב יישמר: ${fmtCurrency(proj)} · ${fmtInt(cur.treatmentDaysSoFar)} ימי טיפול עד כה</span>
+       </div>`
+    );
+  }
+
+  box.innerHTML = parts.join('');
+}
+
+/* One-decimal number for display (e.g. avgDaily 18.4). */
+function fmtNum1_(v) {
+  const n = Number(v) || 0;
+  return (Math.round(n * 10) / 10).toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+}
+
 async function fetchJson(url) {
   const r = await fetch(url, { headers: { Accept: 'application/json' } });
   const text = await r.text();
@@ -506,6 +577,12 @@ function renderHouseDetail(key, data) {
   } else if (fallbackEl) {
     fallbackEl.remove();
   }
+
+  // ── Settled previous month + in-progress current month ────────────────
+  // The feed now sends prevMonth (final) and currentMonth (starts at 0 + a
+  // projection). We show both so the headline reads as "for <prev month>,
+  // settled" and the current month is clearly in-progress, not final.
+  renderMonthSplit_(panel, bonusEl, merged);
 
   // Target bar (treatment-days vs target)
   const denom = Math.max(nights, target, projection, 1);
