@@ -83,6 +83,12 @@ function currentMonthLabel(d = new Date()) {
   return `${HEBREW_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/* Current month as YYYY-MM (local), for "is this the in-progress month?" checks. */
+function currentMonthYM_(d = new Date()) {
+  const m = d.getMonth() + 1;
+  return `${d.getFullYear()}-${m < 10 ? '0' + m : m}`;
+}
+
 /* Render the "settled previous month + in-progress current month" split
  * beneath the bonus KPI. Reads the prevMonth / currentMonth blocks the Apps
  * Script now sends. Falls back gracefully (renders nothing) if they're absent
@@ -520,17 +526,32 @@ function renderHouseDetail(key, data) {
   const exits   = activity.filter(a => a.kind === 'exit');
 
   const totalDaysMonth = daysInMonthFromLabel(data.month);
-  // Honest pace: average occupancy over the FULL month so far
-  // (treatmentDays / daysInMonth), not / elapsed-days. Patient stays are often
-  // dated for the whole month up front, so dividing by elapsed days inflates
-  // the figure (e.g. 540 treatment-days on day 3 → 180/day → 5,400 projected).
-  // Averaging over the full month never overshoots actual occupancy.
-  const dailyAvg = totalDaysMonth > 0 ? nights / totalDaysMonth : 0;
-  // Projection: if current occupancy holds for the rest of the month, the
-  // month ends at roughly (current daily occupancy × days in month). Since
-  // dailyAvg already spans the full month, the projection is simply nights
-  // when stays are pre-dated, and grows with real day-by-day entry otherwise.
-  const projection = Math.round(Math.max(nights, dailyAvg * totalDaysMonth));
+  const today = new Date();
+
+  // Treatment-days SO FAR — count only days that have actually elapsed this
+  // month. The raw `nights` (treatmentDays) counts every day a patient's stay
+  // covers, including days still in the future when stays are dated for the
+  // whole month up front. Summing the daily chart up to today gives the honest
+  // accrued-so-far figure (e.g. 18 patients × 3 elapsed days = 54, not 540).
+  const isCurrentMonth = (data.month || '') === currentMonthYM_();
+  const elapsedDays = isCurrentMonth
+    ? Math.max(1, Math.min(totalDaysMonth, today.getDate()))
+    : totalDaysMonth;
+  const todayKey0 = today.toISOString().slice(0, 10);
+  let nightsSoFar = nights;
+  if (Array.isArray(data.dailyChart) && data.dailyChart.length) {
+    nightsSoFar = data.dailyChart.reduce((sum, p) => {
+      const d = p && p.date ? String(p.date) : '';
+      if (isCurrentMonth && d > todayKey0) return sum; // skip future days
+      return sum + (Number(p && p.count) || 0);
+    }, 0);
+  }
+
+  // Pace = avg daily occupancy over the days elapsed so far.
+  const dailyAvg = elapsedDays > 0 ? nightsSoFar / elapsedDays : 0;
+  // Projection: if the current daily occupancy holds for the rest of the
+  // month, the month ends at ~ dailyAvg × totalDaysMonth.
+  const projection = Math.round(dailyAvg * totalDaysMonth);
 
   // Status banner
   const banner = panel.querySelector('[data-status-banner]');
@@ -591,9 +612,9 @@ function renderHouseDetail(key, data) {
   // settled" and the current month is clearly in-progress, not final.
   renderMonthSplit_(panel, bonusEl, merged);
 
-  // Target bar (treatment-days vs target)
-  const denom = Math.max(nights, target, projection, 1);
-  const fillPct = Math.min(100, (nights / denom) * 100);
+  // Target bar (treatment-days so far vs target)
+  const denom = Math.max(nightsSoFar, target, projection, 1);
+  const fillPct = Math.min(100, (nightsSoFar / denom) * 100);
   const bepPct  = Math.min(100, (target / denom) * 100);
   const bar = panel.querySelector('[data-bep-bar]');
   bar.classList.toggle('above', paid);
@@ -601,7 +622,7 @@ function renderHouseDetail(key, data) {
   const marker = panel.querySelector('[data-bep-marker]');
   marker.style.right = bepPct + '%';
   panel.querySelector('[data-bep-marker-label]').textContent = `יעד ${fmtInt(target)}`;
-  setStat(panel, 'daysSoFar',    fmtInt(nights));
+  setStat(panel, 'daysSoFar',    fmtInt(nightsSoFar));
   setStat(panel, 'daysTarget',   fmtInt(target));
   setStat(panel, 'daysProjection', fmtInt(projection));
 
