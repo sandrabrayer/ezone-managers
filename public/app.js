@@ -804,37 +804,42 @@ function renderTierTrack(panel, ctx) {
 
 function renderQuarterlyTrack(panel, data, cfg, monthlyTarget) {
   const b = data.bonus || {};
-  const q = {
-    cumulativeNights: b.cumulativeNights ?? b.quarterlyNights ?? 0,
-    quarterlyTarget:  b.quarterlyTarget ?? monthlyTarget * 3,
-    eligible:         !!(b.quarterlyEligible ?? b.quarterly),
-    amount:           b.quarterly ?? 0,
-    monthsWindow:     b.quarterlyMonths || b.monthsWindow || ''
-  };
-  const pct = q.quarterlyTarget > 0
-    ? Math.min(100, (q.cumulativeNights / q.quarterlyTarget) * 100)
-    : 0;
+  const monthsMet      = Number(b.quarterlyMonthsMet) || 0;
+  const monthsRequired = Number(b.quarterlyMonthsRequired) || 3;
+  const monthsElapsed  = Number(b.quarterlyMonthsElapsed) || 0;
+  const amount         = Number(b.quarterly) || 0;
+  const quarterlyMax   = Number(b.quarterlyAmount) || cfg.quarterly || 5000;
+  const window         = Array.isArray(b.quarterlyWindow) ? b.quarterlyWindow : [];
+  const windowTxt      = window.length ? window.map(fmtMonthLabel).join(' · ') : '';
 
+  // Bar fills by months met out of 3.
+  const pct = monthsRequired > 0 ? Math.min(100, (monthsMet / monthsRequired) * 100) : 0;
   const fill = panel.querySelector('[data-quarterly-fill]');
   if (fill) {
     fill.style.width = pct + '%';
-    fill.classList.toggle('full', pct >= 100);
+    fill.classList.toggle('full', monthsMet >= monthsRequired);
   }
+
+  // Target label: months met + the theoretical accrued fraction.
   const tgt = panel.querySelector('[data-quarterly-target]');
-  if (tgt) tgt.textContent = `${fmtInt(q.cumulativeNights)} / ${fmtInt(q.quarterlyTarget)} ימי טיפול`;
+  if (tgt) {
+    const fracText = monthsMet > 0 ? ` · ${fmtCurrency(Math.round(quarterlyMax * monthsMet / monthsRequired))} תאורטי` : '';
+    tgt.textContent = `${monthsMet} מתוך ${monthsRequired} חודשים שעמדו בסף${fracText}`;
+  }
 
   const note = panel.querySelector('[data-quarterly-note]');
   if (note) {
-    if (q.amount > 0) {
+    if (amount > 0) {
       note.className = 'quarterly-note gold';
-      note.textContent = `זכאי לבונוס יציבות רבעוני · ${fmtCurrency(q.amount)}${q.monthsWindow ? ' · ' + q.monthsWindow : ''}`;
+      note.textContent = `זכאי לבונוס יציבות רבעוני · ${fmtCurrency(amount)}${windowTxt ? ' · ' + windowTxt : ''}`;
     } else {
-      const need = Math.max(0, q.quarterlyTarget - q.cumulativeNights);
       note.className = 'quarterly-note';
-      const windowTxt = q.monthsWindow ? ` (${q.monthsWindow})` : '';
-      note.textContent = need > 0
-        ? `חסרים ${fmtInt(need)} ימי טיפול במצטבר ל-3 חודשים${windowTxt} עבור בונוס יציבות ${fmtCurrency(cfg.quarterly)}`
-        : `בונוס יציבות רבעוני יחושב בסוף החלון${windowTxt}`;
+      const wtxt = windowTxt ? ` (${windowTxt})` : '';
+      // Show theoretical progress instead of a bare "missing".
+      const monthsLeft = Math.max(0, monthsRequired - monthsElapsed);
+      note.textContent = monthsMet > 0
+        ? `נצברו ${monthsMet}/${monthsRequired} חודשים עבור בונוס יציבות ${fmtCurrency(quarterlyMax)} · יחושב בסוף הרבעון${wtxt}`
+        : `בונוס יציבות ${fmtCurrency(quarterlyMax)} — נדרשים ${monthsRequired} חודשים רצופים מעל הסף · יחושב בסוף הרבעון${wtxt}`;
     }
   }
 }
@@ -887,15 +892,19 @@ function renderBreakdown(panel, data, ctx) {
   })();
 
   const q = data.bonus || {};
-  const monthsWindow = q.quarterlyMonths || q.monthsWindow || 'מאי+יוני+יולי 2026';
+  const qWindow = Array.isArray(q.quarterlyWindow) && q.quarterlyWindow.length
+    ? q.quarterlyWindow.map(fmtMonthLabel).join(' · ')
+    : 'מאי · יוני · יולי 2026';
+  const qMet = Number(q.quarterlyMonthsMet) || 0;
+  const qReq = Number(q.quarterlyMonthsRequired) || 3;
 
   const items = [
     ...tierItems,
     {
       label: 'בונוס יציבות רבעוני',
       formula: ctx.quartly > 0
-        ? `${fmtCurrency(ctx.cfg.quarterly)} עבור ${monthsWindow}`
-        : `${fmtCurrency(ctx.cfg.quarterly)} עבור 3 חודשים מצטבר (${monthsWindow})`,
+        ? `${fmtCurrency(ctx.cfg.quarterly)} · כל ${qReq} החודשים עמדו בסף (${qWindow})`
+        : `${qMet}/${qReq} חודשים שעמדו בסף · יחושב בסוף הרבעון (${qWindow})`,
       amount: ctx.quartly,
       zero: !ctx.quartly,
       gold: ctx.quartly > 0
