@@ -348,14 +348,101 @@ function monthlyBonusResult(h) {
   return window.BonusEligibility.monthlyBonusAmount(h, resolveThreshold, monthDaysOf(h));
 }
 
+/**
+ * Current-month-aware monthly status. The raw monthlyBonusResult treats the
+ * month as finished (uses full-month avgDaily/treatmentDays), which would
+ * "settle" the bonus mid-month. This wraps it with the actual rule:
+ *
+ *   - If the month being viewed is NOT the current calendar month, it's a
+ *     finished month → use the settled result as-is (earned/0).
+ *   - If it IS the current (unfinished) month:
+ *       • LOCKED  — treatment-days SO FAR already >= 95% of the target for the
+ *                   tier they're on track for. The bonus can no longer be lost,
+ *                   so show it as guaranteed (gold).
+ *       • PROJECTION — not yet locked. Show 0 as the amount (nothing earned
+ *                   yet) plus the tier they're heading toward and the gap in
+ *                   treatment-days needed to guarantee it.
+ *
+ * Returns: { state:'finished'|'locked'|'projection',
+ *            amount,            // shekels to count toward the total (0 if projection)
+ *            projectedTier, projectedAmount,
+ *            daysSoFar, target, minRequired, gapDays }
+ */
+function monthlyStatus(h) {
+  const settled = monthlyBonusResult(h);
+  const viewingMonth = h?.month || state.overview?.month || currentMonthYM_();
+  const isCurrent = viewingMonth === currentMonthYM_();
+
+  if (!isCurrent) {
+    return {
+      state: 'finished',
+      amount: settled.amount,
+      projectedTier: settled.tier,
+      projectedAmount: settled.amount,
+      daysSoFar: settled.treatmentDays || treatmentNightsOf(h),
+      target: settled.target,
+      minRequired: settled.minRequired,
+      gapDays: 0
+    };
+  }
+
+  // Current month — work from days accrued SO FAR.
+  const cur = h.currentMonth || {};
+  const daysInMonth = Number(cur.daysInMonth) || monthDaysOf(h);
+  const daysSoFar = Number.isFinite(cur.treatmentDaysSoFar)
+    ? cur.treatmentDaysSoFar
+    : treatmentNightsOf(h);
+
+  // Tier they're ON TRACK for if current daily occupancy holds to month-end:
+  // avg-so-far = daysSoFar / elapsed days, projected over the full month.
+  const todayDate = new Date().getDate();
+  const elapsed = Math.max(1, Math.min(daysInMonth, todayDate));
+  // Cap the so-far average at the house capacity: front-dated stays can make
+  // daysSoFar/elapsed exceed what beds physically allow, which would project an
+  // impossibly high tier. Capacity is the real ceiling.
+  const capacity = resolveCapacity(h) || Infinity;
+  const avgSoFar = Math.min(capacity, daysSoFar / elapsed);
+  const projTier = window.BonusEligibility.tierForPatients(
+    { key: h.key, avgDaily: avgSoFar }, resolveThreshold
+  );
+  const projectedAmount = (projTier && projTier.amount) || 0;
+  const tierPatients = (projTier && projTier.tierPatients) || 0;
+
+  // Target & 95% gate for that tier, measured against days SO FAR.
+  const target = tierPatients * daysInMonth;
+  const minRequired = Math.ceil(0.95 * target);
+  const locked = projectedAmount > 0 && daysSoFar >= minRequired;
+  const gapDays = Math.max(0, minRequired - daysSoFar);
+
+  return {
+    state: locked ? 'locked' : 'projection',
+    amount: locked ? projectedAmount : 0,    // only count locked bonuses in totals
+    projectedTier: projTier ? projTier.tier : 0,
+    projectedAmount,
+    daysSoFar,
+    target,
+    minRequired,
+    gapDays
+  };
+}
+
+/** Quarterly amount that may be counted in a total: only the actually-earned
+    amount the backend reports (0 until the quarter is complete & all months
+    met). Never count projected quarterly mid-quarter. */
+function quarterlyEarnedAmount(h) {
+  const b = h && h.bonus ? h.bonus : {};
+  // The backend sets quarterly>0 only when complete && all months met.
+  return Number(b.quarterly) || 0;
+}
+
 function monthlyBonusOf(h) {
   return monthlyBonusResult(h).amount;
 }
 
 function totalBonusOf(h) {
-  const monthly = monthlyBonusOf(h);
+  const monthly = monthlyStatus(h).amount;       // locked/finished only; 0 if mid-month projection
   const cont = continuityCounts(h?.bonus || {}).total || 0;
-  const quart = h?.bonus?.quarterly || 0;
+  const quart = quarterlyEarnedAmount(h);         // 0 until quarter complete & all months met
   return monthly + cont + quart;
 }
 
@@ -370,15 +457,18 @@ function buildHouseCard(h) {
   const threshold = resolveThreshold(h);
 
   const monthlyResult = monthlyBonusResult(h);
+  const status = monthlyStatus(h);
   const target = monthlyResult.target || (threshold * monthDaysOf(h));
   const nights = treatmentNightsOf(h);
-  const tier = { tier: monthlyResult.tier, amount: monthlyResult.amount };
+  const tier = { tier: status.projectedTier, amount: status.projectedAmount };
   const above = qualifiesMonthly(h);
   const cont = continuityCounts(h.bonus || {});
-  const quartly = h.bonus?.quarterly ?? 0;
-  const totalBonus = monthlyResult.amount + (cont.total || 0) + (quartly || 0);
-  // Eligible by patient count but treatment-days gate not yet met → show a note.
-  const showGateNote = monthlyResult.eligible && !monthlyResult.gatePassed;
+  const quartly = quarterlyEarnedAmount(h);
+  // Only LOCKED/finished monthly bonuses and an actually-earned quarterly are
+  // counted. A mid-month projection contributes 0 to the displayed total.
+  const totalBonus = status.amount + (cont.total || 0) + (quartly || 0);
+  // Mid-month, not yet locked: show how far they are from guaranteeing it.
+  const showGateNote = status.state === 'projection';
 
   const card = document.createElement('div');
   card.className = `house-card ${above ? 'above' : 'below'}`;
@@ -432,10 +522,14 @@ function buildHouseCard(h) {
       : `<div class="hc-shortfall">חסרים ${fmtInt(nightsShort)} ימי טיפול ליעד</div>`}
 
     <div class="hc-bonus">
-      <div class="hc-bonus-label">בונוס החודש</div>
+      <div class="hc-bonus-label">${status.state === 'projection' ? 'בונוס החודש (בתהליך)' : status.state === 'locked' ? 'בונוס החודש ✓ מובטח' : 'בונוס החודש'}</div>
       <div class="hc-bonus-value ${bonusClass}">${bonusDisplay}</div>
     </div>
-    ${showGateNote ? `<div class="hc-bonus-fallback-note">חסרים ${fmtInt(Math.max(0, Math.ceil(monthlyResult.minRequired - nights)))} ימי טיפול לסף התשלום (95% מ-${fmtInt(target)})</div>` : ''}
+    ${status.state === 'projection'
+      ? (status.projectedAmount > 0
+          ? `<div class="hc-bonus-fallback-note">בדרך למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)}) · חסרים ${fmtInt(status.gapDays)} ימי טיפול כדי להבטיח</div>`
+          : `<div class="hc-bonus-fallback-note">עדיין לא בטווח זכאות · ${fmtInt(status.daysSoFar)} ימי טיפול עד כה</div>`)
+      : ''}
   `;
 
   const go = () => activateTab(key);
@@ -502,11 +596,15 @@ function renderHouseDetail(key, data) {
   const occ = Number.isFinite(merged.patientsNow) ? merged.patientsNow : 0;
 
   const monthlyResult = monthlyBonusResult(merged);
+  const status = monthlyStatus(merged);
   const target = monthlyResult.target || (threshold * monthDaysOf(merged));
   const nights = treatmentNightsOf(merged);
-  const tier = { tier: monthlyResult.tier, amount: monthlyResult.amount };
-  const eligible = monthlyResult.eligible;       // by end-of-month patient count
-  const paid = monthlyResult.gatePassed && monthlyResult.amount > 0;
+  const tier = { tier: status.projectedTier, amount: status.projectedAmount };
+  const eligible = status.projectedAmount > 0;
+  // "paid" now means actually secured: a finished month that earned, or a
+  // current month already locked in (days-so-far >= 95% of target).
+  const paid = (status.state === 'finished' && status.amount > 0) || status.state === 'locked';
+  const isProjection = status.state === 'projection';
   const above = eligible;
 
   // Compatibility config for the detail-page visualizations. Under Model A the
@@ -581,9 +679,10 @@ function renderHouseDetail(key, data) {
   setStat(panel, 'treatmentDays', fmtInt(nights));
 
   const cont = continuityCounts(merged.bonus || {});
-  const quartly = merged.bonus?.quarterly ?? 0;
-  const totalBonus = monthlyResult.amount + (cont.total || 0) + (quartly || 0);
-  const showGateNote = monthlyResult.eligible && !monthlyResult.gatePassed;
+  const quartly = quarterlyEarnedAmount(merged);
+  // Only secured monthly (locked/finished) + actually-earned quarterly.
+  const totalBonus = status.amount + (cont.total || 0) + (quartly || 0);
+  const showGateNote = isProjection;
 
   const bonusEl = panel.querySelector('[data-stat="bonus"]');
   bonusEl.classList.remove('is-skeleton');
@@ -601,7 +700,9 @@ function renderHouseDetail(key, data) {
       fallbackEl.className = 'bonus-fallback-note';
       bonusEl.parentNode.appendChild(fallbackEl);
     }
-    fallbackEl.textContent = `חסרים ${fmtInt(gapToGate)} ימי טיפול לסף התשלום (95%)`;
+    fallbackEl.textContent = status.projectedAmount > 0
+      ? `בדרך למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)}) · חסרים ${fmtInt(status.gapDays)} ימי טיפול כדי להבטיח`
+      : `עדיין לא בטווח זכאות · ${fmtInt(status.daysSoFar)} ימי טיפול עד כה`;
   } else if (fallbackEl) {
     fallbackEl.remove();
   }
@@ -647,7 +748,7 @@ function renderHouseDetail(key, data) {
   renderQuarterlyTrack(panel, merged, cfg, target);
 
   // Bonus breakdown (educational) — tier amounts use the new 80%-gate / floor rule
-  renderBreakdown(panel, merged, { above, tier: tier.tier, cfg, target, nights, occ, cont, quartly, totalBonus, monthlyResult });
+  renderBreakdown(panel, merged, { above, tier: tier.tier, cfg, target, nights, occ, cont, quartly, totalBonus, monthlyResult, status });
 
   // Logs
   renderEntries(panel.querySelector('[data-log="entries"]'), entries);
@@ -880,34 +981,34 @@ function renderBreakdown(panel, data, ctx) {
   // single matched tier is the payable amount, and it is only paid when the
   // treatment-days gate (>= 95% of target) is met.
   const mr = ctx.monthlyResult || { amount: 0, tier: 0, eligible: false, gatePassed: false, target: 0, minRequired: 0, tierPatients: 0 };
+  const st = ctx.status || { state: 'finished', amount: 0, projectedTier: 0, projectedAmount: 0, daysSoFar: 0, target: 0, minRequired: 0, gapDays: 0 };
   const nights = ctx.nights;
   const tierTable = (ctx.cfg && Array.isArray(ctx.cfg.tierTable)) ? ctx.cfg.tierTable : [];
   // Render lowest tier first for readability.
   const tiersAsc = tierTable.slice().sort((a, b) => a.patients - b.patients);
   const occNow = Number.isFinite(data.patientsNow) ? data.patientsNow : 0;
-  const gapToGate = Math.max(0, Math.ceil(mr.minRequired - nights));
+  const secured = (st.state === 'finished' && st.amount > 0) || st.state === 'locked';
 
   const tierItems = tiersAsc.map((row, i) => {
     const tierNum = i + 1;
-    const reachedByCount = occNow >= row.patients;
-    const isMatched = mr.tierPatients === row.patients;
-    const paidHere = isMatched && mr.gatePassed && mr.amount > 0;
+    const matchedAmount = secured ? st.amount : st.projectedAmount;
+    const isMatched = matchedAmount > 0 && row.amount === matchedAmount;
+    const securedHere = isMatched && secured;
     let formula;
-    if (!reachedByCount) {
-      formula = `נדרשים ${fmtInt(row.patients)} מטופלים (יש ${fmtInt(occNow)})`;
-    } else if (paidHere) {
-      formula = `${fmtCurrency(row.amount)} ✓ · ${fmtInt(occNow)} מטופלים · ${fmtInt(nights)}/${fmtInt(mr.target)} ימי טיפול`;
-    } else if (isMatched) {
-      formula = `מותנה: חסרים ${fmtInt(gapToGate)} ימי טיפול לסף 95% (${fmtInt(mr.target)})`;
+    if (!isMatched) {
+      formula = `נדרש ממוצע ${fmtInt(row.patients)} מטופלים/יום`;
+    } else if (securedHere) {
+      formula = `${fmtCurrency(row.amount)} ✓ מובטח · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`;
     } else {
-      formula = `${fmtInt(occNow)} מטופלים — מדרגה גבוהה יותר פעילה`;
+      // current month, on track for this tier but not yet locked
+      formula = `בדרך לכאן — חסרים ${fmtInt(st.gapDays)} ימי טיפול כדי להבטיח (${fmtInt(st.daysSoFar)}/${fmtInt(st.minRequired)})`;
     }
     return {
       label: `בונוס מדרגה ${tierNum} (${fmtInt(row.patients)} מטופלים)`,
       formula,
-      amount: paidHere ? row.amount : 0,
-      zero: !paidHere,
-      gold: paidHere
+      amount: securedHere ? row.amount : 0,
+      zero: !securedHere,
+      gold: securedHere
     };
   });
 
