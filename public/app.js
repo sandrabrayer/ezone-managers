@@ -386,14 +386,41 @@ function monthlyStatus(h) {
     };
   }
 
-  // Current month — work from days accrued SO FAR.
+  // Current month — work from days accrued SO FAR. Prefer the backend's
+  // currentMonth block, which now reports TRUE elapsed-days (treatmentDaysSoFar
+  // counts only days up to today) plus a lockedIn flag and projection. If those
+  // fields are present we trust them directly; otherwise we fall back to a
+  // local computation.
   const cur = h.currentMonth || {};
   const daysInMonth = Number(cur.daysInMonth) || monthDaysOf(h);
   const daysSoFar = Number.isFinite(cur.treatmentDaysSoFar)
     ? cur.treatmentDaysSoFar
     : treatmentNightsOf(h);
 
-  // Tier they're ON TRACK for if current daily occupancy holds to month-end:
+  if (cur && (cur.lockedIn !== undefined || cur.projectedBonus !== undefined)) {
+    const projectedAmount = Number(cur.projectedBonus) || 0;
+    const locked = !!cur.lockedIn;
+    const lockedAmount = Number(cur.lockedAmount) || projectedAmount;
+    // Recover the tier patients for the projected amount to size the gap text.
+    const t = window.BonusEligibility.tierForPatients(
+      { key: h.key, avgDaily: Number(cur.paceAvgDaily) || 0 }, resolveThreshold
+    );
+    const tierPatients = (t && t.tierPatients) || 0;
+    const target = tierPatients * daysInMonth;
+    const minRequired = Math.ceil(0.95 * target);
+    return {
+      state: locked ? 'locked' : 'projection',
+      amount: locked ? lockedAmount : 0,
+      projectedTier: Number(cur.projectedTier) || (t ? t.tier : 0),
+      projectedAmount: locked ? lockedAmount : projectedAmount,
+      daysSoFar,
+      target,
+      minRequired,
+      gapDays: Math.max(0, minRequired - daysSoFar)
+    };
+  }
+
+  // Fallback: local computation (older feed without lockedIn).
   // avg-so-far = daysSoFar / elapsed days, projected over the full month.
   const todayDate = new Date().getDate();
   const elapsed = Math.max(1, Math.min(daysInMonth, todayDate));
@@ -653,25 +680,31 @@ function renderHouseDetail(key, data) {
 
   // Status banner
   const banner = panel.querySelector('[data-status-banner]');
-  banner.className = 'status-banner ' + (paid ? 'above' : 'below');
-  const gapToGate = Math.max(0, Math.ceil(monthlyResult.minRequired - nights));
-  banner.innerHTML = paid
-    ? `<div class="big-emoji">🏆</div>
+  const isLocked   = status.state === 'locked' || (status.state === 'finished' && status.amount > 0);
+  const isProject  = status.state === 'projection';
+  banner.className = 'status-banner ' + (isLocked ? 'above' : 'below');
+  if (isLocked) {
+    // Guaranteed (finished-and-earned, or current month already locked in).
+    const lockNote = status.state === 'locked' ? ' (מובטח)' : '';
+    banner.innerHTML = `<div class="big-emoji">🏆</div>
        <div>
-         <div class="sb-title">${name} — זכאי לבונוס מדרגה ${tier.tier}</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · ${fmtInt(nights)} ימי טיפול / יעד ${fmtInt(target)} · ${fmtCurrency(tier.amount)}</div>
-       </div>`
-    : eligible
-      ? `<div class="big-emoji">⏳</div>
+         <div class="sb-title">${name} — זכאי לבונוס מדרגה ${status.projectedTier}${lockNote}</div>
+         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · ${fmtInt(status.daysSoFar)} ימי טיפול · ${fmtCurrency(status.amount)}</div>
+       </div>`;
+  } else if (isProject && status.projectedAmount > 0) {
+    // On track for a tier but not yet secured.
+    banner.innerHTML = `<div class="big-emoji">⏳</div>
        <div>
-         <div class="sb-title">${name} — זכאי לפי תפוסה, אך חסרים ימי טיפול</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · ${fmtInt(nights)} ימי טיפול · חסרים ${fmtInt(gapToGate)} לסף 95% (${fmtInt(target)})</div>
-       </div>`
-      : `<div class="big-emoji">⚠️</div>
+         <div class="sb-title">${name} — בדרך למדרגה ${status.projectedTier} (עדיין לא הושג)</div>
+         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · חסרים ${fmtInt(status.gapDays)} ימי טיפול כדי להבטיח ${fmtCurrency(status.projectedAmount)}</div>
+       </div>`;
+  } else {
+    banner.innerHTML = `<div class="big-emoji">⚠️</div>
        <div>
          <div class="sb-title">${name} — לא זכאי לבונוס החודש</div>
          <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · נדרשים ${fmtInt(threshold)} לזכאות</div>
        </div>`;
+  }
 
   // KPI stats
   setStat(panel, 'entries', fmtInt(entries.length || data.entriesMonth || 0));
@@ -739,7 +772,7 @@ function renderHouseDetail(key, data) {
   const recentDailyAvg = pastCounts.length
     ? pastCounts.slice(-5).reduce((s, n) => s + n, 0) / Math.min(5, pastCounts.length)
     : (Number(merged.patientsNow) || 0);
-  renderNextTierCard(panel, { cfg, target, nights, tier: tier.tier, occ, monthlyResult }, daysLeftInMonth, recentDailyAvg, merged.patientsNow);
+  renderNextTierCard(panel, { cfg, target, nights, tier: tier.tier, occ, monthlyResult, status }, daysLeftInMonth, recentDailyAvg, merged.patientsNow);
 
   // Tier progress visualization
   renderTierTrack(panel, { cfg, target, nights, tier: tier.tier, occ, monthlyResult });
@@ -819,7 +852,12 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
 
   // Already at the top tier by count?
   const topTier = tiersAsc[tiersAsc.length - 1];
-  if (topTier && occ >= topTier.patients) {
+  const st = ctx.status || {};
+  const secured = st.state === 'locked' || (st.state === 'finished' && st.amount > 0);
+  // Only celebrate "max bonus reached" when the top tier is actually SECURED
+  // (locked/finished). Mid-month, even at top occupancy, it's still in
+  // progress — show the projection toward it instead.
+  if (topTier && occ >= topTier.patients && secured && st.amount >= topTier.amount) {
     card.className = 'next-tier-card maxed';
     header.textContent = '🏆 הגעת לבונוס המקסימלי!';
     primary.style.display = 'none';
@@ -856,11 +894,12 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
     ? `סף ימי הטיפול הושג: ${fmtInt(ctx.nights)} / ${fmtInt(mr.target || ctx.target)} (≥95%)`
     : `סף תשלום: נדרשים ${fmtInt(Math.ceil((mr.minRequired || 0)))} ימי טיפול (95% מ-${fmtInt(mr.target || ctx.target)}) · חסרים ${fmtInt(gapToGate)}`;
 
-  // Status pill reflects whether the bonus is actually payable now.
-  if (mr.gatePassed && mr.amount > 0) {
-    statusEl.textContent = '🏆 הבונוס החודשי משולם החודש!';
-  } else if (mr.eligible && !mr.gatePassed) {
-    statusEl.textContent = '⏳ זכאי לפי תפוסה — ממתין לסף ימי הטיפול';
+  // Status pill reflects whether the bonus is actually SECURED now (locked or
+  // finished-and-earned). Mid-month projection must not say "paid".
+  if (secured && st.amount > 0) {
+    statusEl.textContent = '🏆 הבונוס החודשי מובטח החודש!';
+  } else if (st.state === 'projection' && st.projectedAmount > 0) {
+    statusEl.textContent = `⏳ בדרך למדרגה ${st.projectedTier} — חסרים ${fmtInt(st.gapDays)} ימי טיפול כדי להבטיח`;
   } else {
     statusEl.textContent = `⚠️ עדיין לא זכאי · נדרשים ${fmtInt((next && next.patients) || 0)} מטופלים`;
   }
