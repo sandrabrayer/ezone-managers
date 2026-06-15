@@ -895,8 +895,7 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
   statusEl.style.display = '';
   jump.style.display = '';
 
-  const atTopTier = current && (!next || next.amount <= current.amount);
-  header.textContent = atTopTier ? 'מדרגה עליונה:' : current ? 'לבונוס הבא:' : 'לבונוס הראשון:';
+  header.textContent = current ? 'לבונוס הבא:' : 'לבונוס הראשון:';
 
   // Primary (huge): patients needed to reach the next tier.
   dailyGapEl.textContent = patientsGap > 0 ? fmtInt(patientsGap) : '✓';
@@ -920,20 +919,7 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
     statusEl.textContent = `⚠️ עדיין לא זכאי · נדרשים ${fmtInt((next && next.patients) || 0)} מטופלים`;
   }
 
-  // Only show the "jump" line when there's a genuinely HIGHER tier to reach.
-  // At the top tier (next === current amount), a "from X to X" line is
-  // meaningless, so hide it.
-  const hasHigherTier = next && current && next.amount > current.amount;
-  if (hasHigherTier) {
-    jump.style.display = '';
-    jump.textContent = `הבונוס יקפוץ מ-${fmtCurrency(currentAmt)} ל-${fmtCurrency(nextAmt)}`;
-  } else if (next && !current) {
-    // Below the first tier: heading toward the first bonus.
-    jump.style.display = '';
-    jump.textContent = `בונוס ראשון: ${fmtCurrency(nextAmt)}`;
-  } else {
-    jump.style.display = 'none';
-  }
+  jump.textContent = `הבונוס יקפוץ מ-${fmtCurrency(currentAmt)} ל-${fmtCurrency(nextAmt)}`;
 }
 
 function renderTierTrack(panel, ctx) {
