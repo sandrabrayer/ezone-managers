@@ -264,7 +264,12 @@ function renderOverview(data) {
 
   document.getElementById('monthTag').textContent = fmtMonthLabel(data.month);
 
-  const housesAbove = houses.filter(qualifiesMonthly).length;
+  // Count houses whose bonus is actually secured (locked this month or a
+  // finished month that earned), not merely occupancy-eligible mid-month.
+  const housesAbove = houses.filter(h => {
+    const s = monthlyStatus(h);
+    return s.state === 'locked' || (s.state === 'finished' && s.amount > 0);
+  }).length;
   const totalActive = totals.activePatients ?? houses.reduce((s, h) => s + (h.patientsNow ?? 0), 0);
   // Sum locally — the backend's totals.totalBonus predates the 80% occupancy gate.
   const totalBonus  = houses.reduce((s, h) => s + totalBonusOf(h), 0);
@@ -494,11 +499,15 @@ function buildHouseCard(h) {
   // Only LOCKED/finished monthly bonuses and an actually-earned quarterly are
   // counted. A mid-month projection contributes 0 to the displayed total.
   const totalBonus = status.amount + (cont.total || 0) + (quartly || 0);
-  // Mid-month, not yet locked: show how far they are from guaranteeing it.
+  // Secured = bonus can no longer be lost (locked this month, or a finished
+  // month that earned). Projection = on track but not yet guaranteed.
+  const secured = status.state === 'locked' || (status.state === 'finished' && status.amount > 0);
+  const isProjection = status.state === 'projection' && status.projectedAmount > 0;
   const showGateNote = status.state === 'projection';
 
   const card = document.createElement('div');
-  card.className = `house-card ${above ? 'above' : 'below'}`;
+  // Green only when secured; projection and not-eligible are both "below".
+  card.className = `house-card ${secured ? 'above' : 'below'}${isProjection ? ' projection' : ''}`;
   card.setAttribute('role', 'button');
   card.setAttribute('tabindex', '0');
 
@@ -515,7 +524,7 @@ function buildHouseCard(h) {
     : '';
 
   card.innerHTML = `
-    ${above ? '<div class="trophy" aria-label="זכאי לבונוס">🏆</div>' : ''}
+    ${secured ? '<div class="trophy" aria-label="זכאי לבונוס">🏆</div>' : ''}
 
     <div class="hc-head">
       <div class="hc-head-text">
@@ -523,9 +532,11 @@ function buildHouseCard(h) {
         <div class="hc-manager">מנהל/ת: ${manager}</div>
         ${type ? `<div class="hc-type">${type}</div>` : ''}
       </div>
-      ${above
+      ${secured
         ? `<div class="qualify-badge">✓ זכאי לבונוס</div>`
-        : `<div class="warn-badge">⚠ לא זכאי</div>`}
+        : isProjection
+          ? `<div class="progress-badge">⏳ בתהליך</div>`
+          : `<div class="warn-badge">⚠ לא זכאי</div>`}
     </div>
 
     <div class="hc-stats">
