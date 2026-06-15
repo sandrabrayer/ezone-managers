@@ -421,7 +421,10 @@ function monthlyStatus(h) {
       daysSoFar,
       target,
       minRequired,
-      gapDays: Math.max(0, minRequired - daysSoFar)
+      // Gap = days still needed to reach the FULL tier target by month-end
+      // (e.g. Ra'anana tier 3 = 390; 195 accrued → gap 195), not the 95% lock
+      // threshold. This matches "needs 390 by end of month".
+      gapDays: Math.max(0, target - daysSoFar)
     };
   }
 
@@ -444,7 +447,8 @@ function monthlyStatus(h) {
   const target = tierPatients * daysInMonth;
   const minRequired = Math.ceil(0.95 * target);
   const locked = projectedAmount > 0 && daysSoFar >= minRequired;
-  const gapDays = Math.max(0, minRequired - daysSoFar);
+  // Gap to the FULL tier target by month-end (not the 95% lock threshold).
+  const gapDays = Math.max(0, target - daysSoFar);
 
   return {
     state: locked ? 'locked' : 'projection',
@@ -565,7 +569,7 @@ function buildHouseCard(h) {
     </div>
     ${status.state === 'projection'
       ? (status.projectedAmount > 0
-          ? `<div class="hc-bonus-fallback-note">בדרך למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)}) · חסרים ${fmtInt(status.gapDays)} ימי טיפול כדי להבטיח</div>`
+          ? `<div class="hc-bonus-fallback-note">בדרך למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)}) · ${fmtInt(status.daysSoFar)}/${fmtInt(status.target)} ימי טיפול · חסרים ${fmtInt(status.gapDays)}</div>`
           : `<div class="hc-bonus-fallback-note">עדיין לא בטווח זכאות · ${fmtInt(status.daysSoFar)} ימי טיפול עד כה</div>`)
       : ''}
   `;
@@ -707,7 +711,7 @@ function renderHouseDetail(key, data) {
     banner.innerHTML = `<div class="big-emoji">⏳</div>
        <div>
          <div class="sb-title">${name} — בדרך למדרגה ${status.projectedTier} (עדיין לא הושג)</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · חסרים ${fmtInt(status.gapDays)} ימי טיפול כדי להבטיח ${fmtCurrency(status.projectedAmount)}</div>
+         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · ${fmtInt(status.daysSoFar)}/${fmtInt(status.target)} ימי טיפול · חסרים ${fmtInt(status.gapDays)} למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)})</div>
        </div>`;
   } else {
     banner.innerHTML = `<div class="big-emoji">⚠️</div>
@@ -745,7 +749,7 @@ function renderHouseDetail(key, data) {
       bonusEl.parentNode.appendChild(fallbackEl);
     }
     fallbackEl.textContent = status.projectedAmount > 0
-      ? `בדרך למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)}) · חסרים ${fmtInt(status.gapDays)} ימי טיפול כדי להבטיח`
+      ? `בדרך למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)}) · ${fmtInt(status.daysSoFar)}/${fmtInt(status.target)} ימי טיפול · חסרים ${fmtInt(status.gapDays)}`
       : `עדיין לא בטווח זכאות · ${fmtInt(status.daysSoFar)} ימי טיפול עד כה`;
   } else if (fallbackEl) {
     fallbackEl.remove();
@@ -910,7 +914,7 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
   if (secured && st.amount > 0) {
     statusEl.textContent = '🏆 הבונוס החודשי מובטח החודש!';
   } else if (st.state === 'projection' && st.projectedAmount > 0) {
-    statusEl.textContent = `⏳ בדרך למדרגה ${st.projectedTier} — חסרים ${fmtInt(st.gapDays)} ימי טיפול כדי להבטיח`;
+    statusEl.textContent = `⏳ בדרך למדרגה ${st.projectedTier} — ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול · חסרים ${fmtInt(st.gapDays)}`;
   } else {
     statusEl.textContent = `⚠️ עדיין לא זכאי · נדרשים ${fmtInt((next && next.patients) || 0)} מטופלים`;
   }
@@ -1051,7 +1055,7 @@ function renderBreakdown(panel, data, ctx) {
       formula = `${fmtCurrency(row.amount)} ✓ מובטח · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`;
     } else {
       // current month, on track for this tier but not yet locked
-      formula = `בדרך לכאן — חסרים ${fmtInt(st.gapDays)} ימי טיפול כדי להבטיח (${fmtInt(st.daysSoFar)}/${fmtInt(st.minRequired)})`;
+      formula = `בדרך לכאן — ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול · חסרים ${fmtInt(st.gapDays)}`;
     }
     return {
       label: `בונוס מדרגה ${tierNum} (${fmtInt(row.patients)} מטופלים)`,
