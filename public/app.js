@@ -724,7 +724,7 @@ function renderHouseDetail(key, data) {
   // KPI stats
   setStat(panel, 'entries', fmtInt(entries.length || data.entriesMonth || 0));
   setStat(panel, 'exits',   fmtInt(exits.length || data.exitsMonth || 0));
-  setStat(panel, 'treatmentDays', fmtInt(nights));
+  setStat(panel, 'treatmentDays', fmtInt(nightsSoFar));
 
   const cont = continuityCounts(merged.bonus || {});
   const quartly = quarterlyEarnedAmount(merged);
