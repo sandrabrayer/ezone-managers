@@ -363,6 +363,22 @@ body::before {
   box-shadow: 0 0 12px rgba(248, 113, 113, 0.35);
   letter-spacing: 0.02em;
 }
+.progress-badge {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #3A2A00;
+  background: linear-gradient(135deg, #FCD34D, #F59E0B);
+  padding: 6px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+  letter-spacing: 0.02em;
+}
+/* Projection card: amber dashed edge — on track but not yet secured. */
+.house-card.projection {
+  border-color: rgba(245, 158, 11, 0.45);
+  border-style: dashed;
+}
 
 .hc-stats {
   display: flex;
