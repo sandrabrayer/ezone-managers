@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+### Fixed (secured tier floor + consistent day/target display)
+- **A house sitting BETWEEN two tiers now shows its SECURED floor instead of
+  hiding it behind the projection.** `lib/bonus-eligibility.js` gains
+  `securedFloor(h, resolveThreshold, daysInMonth, daysSoFar)`, which returns the
+  HIGHEST tier already guaranteed: it walks the house tier table from the lowest
+  tier up and counts a tier as secured only when occupancy ≥ that tier's patient
+  count AND days-so-far ≥ 95% (`GATE_RATIO`) of `tierPatients × daysInMonth`,
+  stopping at the first tier whose gate fails (higher tiers have larger targets
+  and so cannot be secured either). It returns
+  `{ tier, amount, tierPatients, target, minRequired }`, all 0 when nothing is
+  secured. Example: Ra'anana Asher at avg 11 patients has cleared tier-1
+  (threshold 10, target 300 days) with 285 accrued days (≥ 95% of 300), so it
+  has SECURED the 2,000 ₪ tier-1 floor while still climbing toward tier-2
+  (12 patients → 2,500 ₪). Previously the app showed only the projected tier-2
+  and rendered "בתהליך / 0 ₪", hiding the guaranteed floor.
+- **`monthlyStatus(h)` now locks in the secured floor.** For the current month
+  it computes `securedFloor(...)` and, in BOTH the backend-feed branch and the
+  local-fallback branch, marks the state `locked` whenever `floor.tier > 0`
+  (even when the backend `lockedIn` flag is still false), sets the counted
+  amount to the floor amount, and adds `securedTier`, `securedAmount`, and a
+  `hasUpside` flag (true when the projected tier is strictly above the floor and
+  pays more). `projectedTier` / `projectedAmount` continue to describe the
+  next-tier upside, and `gapDays` is still measured against the full tier target.
+- **Detail-panel day/target figures are now consistent and anchored.** For the
+  current month the panel drives `nights` off `status.daysSoFar` instead of
+  `treatmentNightsOf` (which returns the full-month front-dated count), so every
+  "X / Y days" line shares one basis — fixing the panel that mixed a full-month
+  count (e.g. 362) with the days-so-far count (285). The displayed `target` is
+  anchored to the SECURED tier via a new `securedTierTarget(h, status)` helper
+  (mapping `status.securedTier` back to its patient count through
+  `BonusEligibility.HOUSE_BONUS`, × `monthDaysOf(h)`), instead of being measured
+  against the projected next tier's larger target (e.g. tier-1's 300 rather than
+  tier-2's 360). `renderNextTierCard`'s payment-gate line ("סף ימי הטיפול…") now
+  reads its target and min-required from the status object (days-so-far basis)
+  so it matches the banner and the KPIs. The locked status banner now names the
+  secured tier and appends the upside ("בדרך למדרגה N") only when `hasUpside`.
+
 ### Fixed (detail-page breakdown)
 - **`פירוט חישוב הבונוס` (renderBreakdown) now applies the same 80%-gate /
   tier-1 floor rule** used by the dashboard KPI, the network total, and the

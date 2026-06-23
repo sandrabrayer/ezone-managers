@@ -384,6 +384,9 @@ function monthlyStatus(h) {
       amount: settled.amount,
       projectedTier: settled.tier,
       projectedAmount: settled.amount,
+      securedTier: settled.tier,
+      securedAmount: settled.amount,
+      hasUpside: false,
       daysSoFar: settled.treatmentDays || treatmentNightsOf(h),
       target: settled.target,
       minRequired: settled.minRequired,
@@ -402,10 +405,13 @@ function monthlyStatus(h) {
     ? cur.treatmentDaysSoFar
     : treatmentNightsOf(h);
 
+  // Highest tier already SECURED by actual occupancy + days-so-far. A secured
+  // floor can never be lost, so it locks the bonus even when the backend's
+  // lockedIn flag still reads false.
+  const floor = window.BonusEligibility.securedFloor(h, resolveThreshold, daysInMonth, daysSoFar);
+
   if (cur && (cur.lockedIn !== undefined || cur.projectedBonus !== undefined)) {
     const projectedAmount = Number(cur.projectedBonus) || 0;
-    const locked = !!cur.lockedIn;
-    const lockedAmount = Number(cur.lockedAmount) || projectedAmount;
     // Recover the tier patients for the projected amount to size the gap text.
     const t = window.BonusEligibility.tierForPatients(
       { key: h.key, avgDaily: Number(cur.paceAvgDaily) || 0 }, resolveThreshold
@@ -413,11 +419,20 @@ function monthlyStatus(h) {
     const tierPatients = (t && t.tierPatients) || 0;
     const target = tierPatients * daysInMonth;
     const minRequired = Math.ceil(0.95 * target);
+    const projectedTier = Number(cur.projectedTier) || (t ? t.tier : 0);
+    const locked = floor.tier > 0 || !!cur.lockedIn;
+    const lockedAmount = floor.tier > 0
+      ? floor.amount
+      : (Number(cur.lockedAmount) || projectedAmount);
+    const hasUpside = projectedTier > floor.tier && projectedAmount > floor.amount;
     return {
       state: locked ? 'locked' : 'projection',
       amount: locked ? lockedAmount : 0,
-      projectedTier: Number(cur.projectedTier) || (t ? t.tier : 0),
-      projectedAmount: locked ? lockedAmount : projectedAmount,
+      projectedTier,
+      projectedAmount,
+      securedTier: floor.tier,
+      securedAmount: floor.amount,
+      hasUpside,
       daysSoFar,
       target,
       minRequired,
@@ -442,24 +457,48 @@ function monthlyStatus(h) {
   );
   const projectedAmount = (projTier && projTier.amount) || 0;
   const tierPatients = (projTier && projTier.tierPatients) || 0;
+  const projectedTier = projTier ? projTier.tier : 0;
 
   // Target & 95% gate for that tier, measured against days SO FAR.
   const target = tierPatients * daysInMonth;
   const minRequired = Math.ceil(0.95 * target);
-  const locked = projectedAmount > 0 && daysSoFar >= minRequired;
+  // Locked once a tier floor is secured, or once the projected tier's own
+  // days-so-far gate is met.
+  const locked = floor.tier > 0 || (projectedAmount > 0 && daysSoFar >= minRequired);
+  const amount = floor.tier > 0 ? floor.amount : (locked ? projectedAmount : 0);
+  const hasUpside = projectedTier > floor.tier && projectedAmount > floor.amount;
   // Gap to the FULL tier target by month-end (not the 95% lock threshold).
   const gapDays = Math.max(0, target - daysSoFar);
 
   return {
     state: locked ? 'locked' : 'projection',
-    amount: locked ? projectedAmount : 0,    // only count locked bonuses in totals
-    projectedTier: projTier ? projTier.tier : 0,
+    amount,                                  // only count secured/locked bonuses in totals
+    projectedTier,
     projectedAmount,
+    securedTier: floor.tier,
+    securedAmount: floor.amount,
+    hasUpside,
     daysSoFar,
     target,
     minRequired,
     gapDays
   };
+}
+
+/** Treatment-days target anchored to the SECURED tier. When a floor is locked
+    in, the panel's "X / Y days" lines must measure against that tier's target
+    (tierPatients × days-in-month), not the projected next tier. Falls back to
+    the settled monthly target (or threshold × days) when nothing is secured. */
+function securedTierTarget(h, status) {
+  const st = status || {};
+  const table = (window.BonusEligibility.HOUSE_BONUS || {})[h?.key];
+  if (st.securedTier > 0 && table && Array.isArray(table.tiers)) {
+    // tiers are highest-patients-first; securedTier is 1-based from the bottom.
+    const tier = table.tiers[table.tiers.length - st.securedTier];
+    if (tier) return tier.patients * monthDaysOf(h);
+  }
+  const mr = monthlyBonusResult(h);
+  return mr.target || (resolveThreshold(h) * monthDaysOf(h));
 }
 
 /** Quarterly amount that may be counted in a total: only the actually-earned
@@ -639,8 +678,13 @@ function renderHouseDetail(key, data) {
 
   const monthlyResult = monthlyBonusResult(merged);
   const status = monthlyStatus(merged);
-  const target = monthlyResult.target || (threshold * monthDaysOf(merged));
-  const nights = treatmentNightsOf(merged);
+  const viewingCurrentMonth = (data.month || merged.month || state.overview?.month || '') === currentMonthYM_();
+  // Anchor the target to the SECURED tier (falls back to settled target).
+  const target = securedTierTarget(merged, status);
+  // For the current month every "X / Y days" line must use the days-so-far
+  // basis (status.daysSoFar), not treatmentNightsOf's full-month front-dated
+  // count. Finished months keep the settled treatment-nights total.
+  const nights = viewingCurrentMonth ? status.daysSoFar : treatmentNightsOf(merged);
   const tier = { tier: status.projectedTier, amount: status.projectedAmount };
   const eligible = status.projectedAmount > 0;
   // "paid" now means actually secured: a finished month that earned, or a
@@ -700,11 +744,17 @@ function renderHouseDetail(key, data) {
   banner.className = 'status-banner ' + (isLocked ? 'above' : 'below');
   if (isLocked) {
     // Guaranteed (finished-and-earned, or current month already locked in).
+    // Title shows the SECURED tier (the guaranteed floor); the upside toward a
+    // higher projected tier is appended when there is one.
     const lockNote = status.state === 'locked' ? ' (מובטח)' : '';
+    const securedTierLabel = status.securedTier || status.projectedTier;
+    const upsideNote = status.hasUpside
+      ? ` · בדרך למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)})`
+      : '';
     banner.innerHTML = `<div class="big-emoji">🏆</div>
        <div>
-         <div class="sb-title">${name} — זכאי לבונוס מדרגה ${status.projectedTier}${lockNote}</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · ${fmtInt(status.daysSoFar)} ימי טיפול · ${fmtCurrency(status.amount)}</div>
+         <div class="sb-title">${name} — זכאי לבונוס מדרגה ${securedTierLabel}${lockNote}</div>
+         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · ${fmtInt(status.daysSoFar)} ימי טיפול · ${fmtCurrency(status.amount)}${upsideNote}</div>
        </div>`;
   } else if (isProject && status.projectedAmount > 0) {
     // On track for a tier but not yet secured.
@@ -863,7 +913,6 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
   // Patient-count tiers (ascending) and current occupancy.
   const tiersAsc = (ctx.cfg.tierTable || []).slice().sort((a, b) => a.patients - b.patients);
   const occ = Number.isFinite(Number(patientsNow)) ? Number(patientsNow) : Math.round(Number(recentDailyAvg) || 0);
-  const mr = ctx.monthlyResult || {};
 
   // Already at the top tier by count?
   const topTier = tiersAsc[tiersAsc.length - 1];
@@ -905,10 +954,15 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
     : `נדרש מספר המטופלים למדרגה זו הושג (${fmtInt(occ)})`;
 
   // Secondary: the treatment-days gate (this is what actually unlocks payment).
-  const gapToGate = Math.max(0, Math.ceil((mr.minRequired || 0) - (ctx.nights || 0)));
-  cumulativeEl.textContent = mr.gatePassed
-    ? `סף ימי הטיפול הושג: ${fmtInt(ctx.nights)} / ${fmtInt(mr.target || ctx.target)} (≥95%)`
-    : `סף תשלום: נדרשים ${fmtInt(Math.ceil((mr.minRequired || 0)))} ימי טיפול (95% מ-${fmtInt(mr.target || ctx.target)}) · חסרים ${fmtInt(gapToGate)}`;
+  // Target and min-required come from the status object (days-so-far basis) so
+  // this line matches the banner and the KPIs rather than the full-month result.
+  const gateTarget = st.target || ctx.target || 0;
+  const gateMin = Math.ceil(st.minRequired || 0);
+  const gatePassed = gateMin > 0 && (ctx.nights || 0) >= gateMin;
+  const gapToGate = Math.max(0, gateMin - (ctx.nights || 0));
+  cumulativeEl.textContent = gatePassed
+    ? `סף ימי הטיפול הושג: ${fmtInt(ctx.nights)} / ${fmtInt(gateTarget)} (≥95%)`
+    : `סף תשלום: נדרשים ${fmtInt(gateMin)} ימי טיפול (95% מ-${fmtInt(gateTarget)}) · חסרים ${fmtInt(gapToGate)}`;
 
   // Status pill reflects whether the bonus is actually SECURED now (locked or
   // finished-and-earned). Mid-month projection must not say "paid".

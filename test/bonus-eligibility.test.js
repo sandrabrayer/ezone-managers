@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   qualifiesMonthly,
   monthlyBonusAmount,
+  securedFloor,
   tierForPatients,
   treatmentTarget,
   thresholdOf,
@@ -128,4 +129,58 @@ test('minRequired = GATE_RATIO × target', () => {
 test('null house → amount 0', () => {
   const r = monthlyBonusAmount(null, resolveThreshold, DAYS_31);
   assert.equal(r.amount, 0);
+});
+
+/* securedFloor — the HIGHEST tier already secured mid-month (occupancy + a
+   95% days-so-far gate against tierPatients × daysInMonth). Targets below use a
+   30-day month: tier-1 (10) = 300, tier-2 (12) = 360; Ramot tier-1 (18) = 540. */
+const DAYS_30 = 30;
+
+test("Ra'anana avg 11 with 285/300 → tier-1 (2000) secured", () => {
+  const f = securedFloor({ key: 'raanana', avgDaily: 11 }, resolveThreshold, DAYS_30, 285);
+  assert.equal(f.tier, 1);
+  assert.equal(f.amount, 2000);
+  assert.equal(f.tierPatients, 10);
+  assert.equal(f.target, 300);
+  assert.equal(f.minRequired, GATE_RATIO * 300);
+});
+
+test("Ra'anana avg 11 with 284 days → nothing secured (boundary)", () => {
+  const f = securedFloor({ key: 'raanana', avgDaily: 11 }, resolveThreshold, DAYS_30, 284);
+  assert.equal(f.tier, 0);
+  assert.equal(f.amount, 0);
+});
+
+test("Ra'anana avg 11 with 360 days → still tier-1 (occupancy 11 < 12)", () => {
+  const f = securedFloor({ key: 'raanana', avgDaily: 11 }, resolveThreshold, DAYS_30, 360);
+  assert.equal(f.tier, 1);
+  assert.equal(f.amount, 2000);
+});
+
+test("Ra'anana avg 12 with 342 days → tier-2 (2500)", () => {
+  const f = securedFloor({ key: 'raanana', avgDaily: 12 }, resolveThreshold, DAYS_30, 342);
+  assert.equal(f.tier, 2);
+  assert.equal(f.amount, 2500);
+  assert.equal(f.tierPatients, 12);
+  assert.equal(f.target, 360);
+});
+
+test("Ra'anana avg 9 → nothing secured", () => {
+  const f = securedFloor({ key: 'raanana', avgDaily: 9 }, resolveThreshold, DAYS_30, 9999);
+  assert.equal(f.tier, 0);
+  assert.equal(f.amount, 0);
+});
+
+test('Ramot avg 18 with 513 days → tier-1 (2000) secured', () => {
+  const f = securedFloor({ key: 'ramot', avgDaily: 18 }, resolveThreshold, DAYS_30, 513);
+  assert.equal(f.tier, 1);
+  assert.equal(f.amount, 2000);
+  assert.equal(f.tierPatients, 18);
+  assert.equal(f.target, 540);
+});
+
+test('securedFloor null house → all zeros', () => {
+  const f = securedFloor(null, resolveThreshold, DAYS_30, 9999);
+  assert.equal(f.tier, 0);
+  assert.equal(f.amount, 0);
 });
