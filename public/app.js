@@ -13,7 +13,7 @@ const HOUSE_KEYS = ['raanana', 'ramot', 'efroni', 'rehab'];
    gate the bonus. `capacity` is the physical bed count. */
 const HOUSE_LABELS = {
   raanana: { name: 'רעננה אשר',     manager: 'עידו',  type: 'בית מאזן',     threshold: 10, capacity: 14 },
-  ramot:   { name: 'רמות השבים',    manager: 'שחר',   type: 'בית מאזן',     threshold: 18, capacity: 20 },
+  ramot:   { name: 'רמות השבים',    manager: 'שחר',   type: 'בית מאזן',     threshold: 17, capacity: 20 },
   efroni:  { name: 'קיסריה עפרוני', manager: 'חנן',   type: 'תחלואה כפולה', threshold: 10, capacity: 13 },
   rehab:   { name: 'קיסריה ריהאב',  manager: 'רנטה',  type: 'גמילה',        threshold: 10, capacity: 13 }
 };
@@ -418,7 +418,7 @@ function monthlyStatus(h) {
     );
     const tierPatients = (t && t.tierPatients) || 0;
     const target = tierPatients * daysInMonth;
-    const minRequired = Math.ceil(0.95 * target);
+    const minRequired = target; // full target, no 95% discount
     const projectedTier = Number(cur.projectedTier) || (t ? t.tier : 0);
     const locked = floor.tier > 0 || !!cur.lockedIn;
     const lockedAmount = floor.tier > 0
@@ -459,9 +459,9 @@ function monthlyStatus(h) {
   const tierPatients = (projTier && projTier.tierPatients) || 0;
   const projectedTier = projTier ? projTier.tier : 0;
 
-  // Target & 95% gate for that tier, measured against days SO FAR.
+  // Target & full-target gate for that tier, measured against days SO FAR.
   const target = tierPatients * daysInMonth;
-  const minRequired = Math.ceil(0.95 * target);
+  const minRequired = target; // full target, no 95% discount
   // Locked once a tier floor is secured, or once the projected tier's own
   // days-so-far gate is met.
   const locked = floor.tier > 0 || (projectedAmount > 0 && daysSoFar >= minRequired);
@@ -961,8 +961,8 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
   const gatePassed = gateMin > 0 && (ctx.nights || 0) >= gateMin;
   const gapToGate = Math.max(0, gateMin - (ctx.nights || 0));
   cumulativeEl.textContent = gatePassed
-    ? `סף ימי הטיפול הושג: ${fmtInt(ctx.nights)} / ${fmtInt(gateTarget)} (≥95%)`
-    : `סף תשלום: נדרשים ${fmtInt(gateMin)} ימי טיפול (95% מ-${fmtInt(gateTarget)}) · חסרים ${fmtInt(gapToGate)}`;
+    ? `סף ימי הטיפול הושג: ${fmtInt(ctx.nights)} / ${fmtInt(gateTarget)}`
+    : `סף תשלום: נדרשים ${fmtInt(gateMin)} ימי טיפול (מ-${fmtInt(gateTarget)}) · חסרים ${fmtInt(gapToGate)}`;
 
   // Status pill reflects whether the bonus is actually SECURED now (locked or
   // finished-and-earned). Mid-month projection must not say "paid".
