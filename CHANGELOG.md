@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Changed (lower bonus break-even rules)
+- **Treatment-days gate raised to the FULL target (no 95% discount).**
+  `GATE_RATIO` in `lib/bonus-eligibility.js` is now `1.0` (was `0.95`), so a tier
+  pays only when treatment-days reach 100% of the target (`tierPatients ×
+  daysInMonth`). Example: Ramot tier-1 at 17 patients in a 31-day month now
+  requires the full 527 treatment-days (17 × 31) to pay, where it previously
+  paid at 95% (≈501). This affects all houses, both the settled
+  `monthlyBonusAmount` gate and the mid-month `securedFloor` lock.
+- **Ramot HaShavim eligibility lowered from 18 to 17 patients.** The house's
+  `threshold` is now `17` and its bottom tier is `{ patients: 17, amount: 2000 }`
+  (was `18 → 2000`). The upper steps are unchanged (`19 → 2500`, `20 → 3500`).
+  `HOUSE_LABELS.ramot.threshold` in `public/app.js` is updated to `17` to match.
+- **Front-end gate display drops the "95%" wording.** The payment-gate lines in
+  `renderNextTierCard` no longer show `(≥95%)` / `(95% מ-…)`, and both
+  `const minRequired = Math.ceil(0.95 * target)` computations in `monthlyStatus`
+  are now `const minRequired = target` (full target, no discount).
+- Tests in `test/bonus-eligibility.test.js` updated for threshold 17 and the
+  full-target gate: Ramot eligibility boundary is now 16.9/17.0, and the gate
+  boundary cases assert the exact full target (e.g. Ramot tier-1 = 17 × 31 = 527,
+  pass at 527, fail at 526).
+
 ### Fixed (secured tier floor + consistent day/target display)
 - **A house sitting BETWEEN two tiers now shows its SECURED floor instead of
   hiding it behind the projection.** `lib/bonus-eligibility.js` gains
