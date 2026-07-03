@@ -9,10 +9,9 @@ It reads data via the existing E-Zone Apps Script endpoints — it never writes 
 - `GET /api/sheets?action=managersOverview` — all 4 houses + bonus calculations
 - `GET /api/sheets?action=managersHouse&key=<houseKey>` — full detail for one house
 
-Both are proxied through `server.js` to:
-`https://script.google.com/macros/s/AKfycbxkUs27ZOJdKSyxv0NFyAYgvaEG-xcJP6bcmeMiPPQzgc2bRpJcA5TZ2nmND_ykLVjlRg/exec`
+Both are proxied through `server.js` to the E-Zone Apps Script `/exec` endpoint.
 
-Override via the `APPS_SCRIPT_URL` env var if needed.
+The endpoint URL is configured via the `APPS_SCRIPT_URL` env var. It is **required** — there is no hardcoded fallback, and the server refuses to start if it is not set.
 
 ## Local
 
