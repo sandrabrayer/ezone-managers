@@ -4,8 +4,11 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL
-  || 'https://script.google.com/macros/s/AKfycbxkUs27ZOJdKSyxv0NFyAYgvaEG-xcJP6bcmeMiPPQzgc2bRpJcA5TZ2nmND_ykLVjlRg/exec';
+const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL;
+if (!APPS_SCRIPT_URL) {
+  console.error('APPS_SCRIPT_URL environment variable is required but not set. Refusing to start.');
+  process.exit(1);
+}
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/lib', express.static(path.join(__dirname, 'lib')));
