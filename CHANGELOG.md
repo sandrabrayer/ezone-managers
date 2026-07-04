@@ -3,6 +3,28 @@
 
 ## Unreleased
 
+### Added (finished-month payable on the dashboard + readability)
+- **Every overview house card now leads with the SETTLED bonus for the month
+  that finished** ("בונוס <חודש> (לתשלום)"), computed locally on load by
+  fetching last month's overview (`managersOverview&month=YYYY-MM`) and running
+  the canonical rules (tier by avg occupancy + fixed threshold×30 gate) on that
+  month's raw figures. Shows amount, tier, and why it wasn't earned when 0.
+- **KPI "סך בונוסים החודש" replaced with "בונוסים לתשלום — <חודש קודם>"** —
+  the sum of the settled previous-month bonuses across the four houses.
+- **KPI "ימים שנותרו לחודש" replaced with "יום בחודש" (X מתוך Y)** — counting
+  runs from the 1st; a days-left counter was confusing.
+
+### Changed (clarity + readability)
+- Current-month card line renamed to "ימי טיפול מתחילת החודש" and now shows
+  days ACCRUED SO FAR against the fixed gate (never the front-dated full-month
+  total, which previously displayed e.g. 342/300 on the 4th of the month).
+- Gap wording clarified: "חסרים עוד X עד סוף החודש".
+- Removed the misleading "חסרים X ימי טיפול ליעד" shortfall chip (front-dated
+  math); the note under the bonus now carries since-the-1st progress.
+- Readability pass across all tabs: `--text-mute` opacity 0.45 → 0.72; small
+  note fonts raised (10→12px, 11/11.5→13px); new `.hc-prev-bonus` styles.
+
+
 ### Changed (fixed threshold×30 gate + finished-month payable headline)
 - **Treatment-days gate is now FIXED per house: eligibility threshold × 30.**
   `lib/bonus-eligibility.js` replaces the per-tier `tierPatients × daysInMonth`
