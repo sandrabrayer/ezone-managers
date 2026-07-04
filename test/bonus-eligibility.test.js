@@ -6,14 +6,14 @@ const {
   securedFloor,
   tierForPatients,
   treatmentTarget,
+  gateTarget,
   thresholdOf,
-  GATE_RATIO
+  GATE_DAYS_FACTOR
 } = require('../lib/bonus-eligibility');
 
-/* Tier driven by AVERAGE DAILY occupancy (h.avgDaily). A tier is reached only
-   when avgDaily meets the whole-number threshold: Ramot 17/19/20, others
-   10/12/13. Amount pays only if treatment-days >= 100% of (tierPatients ×
-   daysInMonth). */
+/* Model: tier by AVERAGE DAILY occupancy (whole-number thresholds), paid only
+   when the month's treatment-days reach the FIXED house gate:
+   threshold × 30 (Ramot 17×30=510; others 10×30=300), for every month. */
 
 const resolveThreshold = h => {
   if (!h) return 0;
@@ -22,6 +22,7 @@ const resolveThreshold = h => {
   return 0;
 };
 const DAYS_31 = 31;
+const DAYS_28 = 28;
 
 test('null/undefined house → not eligible', () => {
   assert.equal(qualifiesMonthly(null, resolveThreshold), false);
@@ -85,31 +86,61 @@ for (const key of ['raanana', 'efroni', 'rehab']) {
   });
 }
 
-test('target = tierPatients × daysInMonth (17 × 31 = 527)', () => {
-  assert.equal(treatmentTarget(17, 31), 527);
+/* ── The FIXED gate: threshold × 30 ── */
+
+test('GATE_DAYS_FACTOR is 30', () => {
+  assert.equal(GATE_DAYS_FACTOR, 30);
 });
 
-test('target falls back to 30 days when daysInMonth invalid', () => {
+test('gateTarget: Ramot 510, others 300 — independent of month', () => {
+  assert.equal(gateTarget({ key: 'ramot' }), 510);
+  assert.equal(gateTarget({ key: 'raanana' }), 300);
+  assert.equal(gateTarget({ key: 'efroni' }), 300);
+  assert.equal(gateTarget({ key: 'rehab' }), 300);
+});
+
+test('legacy treatmentTarget still = tierPatients × daysInMonth', () => {
+  assert.equal(treatmentTarget(17, 31), 527);
   assert.equal(treatmentTarget(17, 0), 510);
 });
 
-test('Ramot avg 17, days 527 (= full target 17×31) → 2000', () => {
-  const r = monthlyBonusAmount({ key: 'ramot', avgDaily: 17, treatmentDays: 527 }, resolveThreshold, DAYS_31);
+test('Ramot avg 17, days 510 (= gate 17×30) → 2000, in a 31-day month too', () => {
+  const r = monthlyBonusAmount({ key: 'ramot', avgDaily: 17, treatmentDays: 510 }, resolveThreshold, DAYS_31);
   assert.equal(r.gatePassed, true);
   assert.equal(r.amount, 2000);
+  assert.equal(r.target, 510);
+  assert.equal(r.minRequired, 510);
 });
 
-test('Ramot avg 17, days 526 (< full target 527) → gate fails, 0', () => {
-  const r = monthlyBonusAmount({ key: 'ramot', avgDaily: 17, treatmentDays: 526 }, resolveThreshold, DAYS_31);
+test('Ramot avg 17, days 509 (< gate 510) → gate fails, 0', () => {
+  const r = monthlyBonusAmount({ key: 'ramot', avgDaily: 17, treatmentDays: 509 }, resolveThreshold, DAYS_31);
   assert.equal(r.eligible, true);
   assert.equal(r.gatePassed, false);
   assert.equal(r.amount, 0);
 });
 
-test('Ramot avg 19, sufficient days → 2500', () => {
-  // tier-2 target = 19 × 31 = 589; full gate needs >= 589.
-  const r = monthlyBonusAmount({ key: 'ramot', avgDaily: 19, treatmentDays: 589 }, resolveThreshold, DAYS_31);
+test('gate is the SAME in February (28 days): Ramot needs 510', () => {
+  const fail = monthlyBonusAmount({ key: 'ramot', avgDaily: 18, treatmentDays: 509 }, resolveThreshold, DAYS_28);
+  assert.equal(fail.amount, 0);
+  const pass = monthlyBonusAmount({ key: 'ramot', avgDaily: 18.2, treatmentDays: 510 }, resolveThreshold, DAYS_28);
+  assert.equal(pass.amount, 2000);
+});
+
+test('gate does NOT grow with the tier: Ramot avg 19, days 510 → 2500', () => {
+  const r = monthlyBonusAmount({ key: 'ramot', avgDaily: 19, treatmentDays: 510 }, resolveThreshold, DAYS_31);
   assert.equal(r.amount, 2500);
+  assert.equal(r.target, 510);
+});
+
+test("Ra'anana avg 13, days 300 (= gate 10×30) → 3500", () => {
+  const r = monthlyBonusAmount({ key: 'raanana', avgDaily: 13, treatmentDays: 300 }, resolveThreshold, DAYS_31);
+  assert.equal(r.amount, 3500);
+});
+
+test("Ra'anana avg 10, days 299 → gate fails, 0", () => {
+  const r = monthlyBonusAmount({ key: 'raanana', avgDaily: 10, treatmentDays: 299 }, resolveThreshold, DAYS_31);
+  assert.equal(r.amount, 0);
+  assert.equal(r.gatePassed, false);
 });
 
 test('Ramot avg 18.9 high days → still 2000 (tier from avg)', () => {
@@ -122,20 +153,12 @@ test('Ramot avg 16.9 → 0 regardless of days', () => {
   assert.equal(r.amount, 0);
 });
 
-test('minRequired = GATE_RATIO × target', () => {
-  const r = monthlyBonusAmount({ key: 'ramot', avgDaily: 17, treatmentDays: 527 }, resolveThreshold, DAYS_31);
-  assert.equal(r.target, 527);
-  assert.equal(r.minRequired, GATE_RATIO * 527);
-});
-
 test('null house → amount 0', () => {
   const r = monthlyBonusAmount(null, resolveThreshold, DAYS_31);
   assert.equal(r.amount, 0);
 });
 
-/* securedFloor — the HIGHEST tier already secured mid-month (occupancy + a
-   full days-so-far gate against tierPatients × daysInMonth). Targets below use a
-   30-day month: tier-1 (10) = 300, tier-2 (12) = 360; Ramot tier-1 (17) = 510. */
+/* ── securedFloor: single lock condition = daysSoFar >= threshold × 30 ── */
 const DAYS_30 = 30;
 
 test("Ra'anana avg 11 with 300/300 → tier-1 (2000) secured", () => {
@@ -144,7 +167,7 @@ test("Ra'anana avg 11 with 300/300 → tier-1 (2000) secured", () => {
   assert.equal(f.amount, 2000);
   assert.equal(f.tierPatients, 10);
   assert.equal(f.target, 300);
-  assert.equal(f.minRequired, GATE_RATIO * 300);
+  assert.equal(f.minRequired, 300);
 });
 
 test("Ra'anana avg 11 with 299 days → nothing secured (boundary)", () => {
@@ -153,32 +176,38 @@ test("Ra'anana avg 11 with 299 days → nothing secured (boundary)", () => {
   assert.equal(f.amount, 0);
 });
 
-test("Ra'anana avg 11 with 360 days → still tier-1 (occupancy 11 < 12)", () => {
-  const f = securedFloor({ key: 'raanana', avgDaily: 11 }, resolveThreshold, DAYS_30, 360);
-  assert.equal(f.tier, 1);
-  assert.equal(f.amount, 2000);
-});
-
-test("Ra'anana avg 12 with 360 days → tier-2 (2500)", () => {
-  const f = securedFloor({ key: 'raanana', avgDaily: 12 }, resolveThreshold, DAYS_30, 360);
+test("Ra'anana avg 12 with 300 days → tier-2 (2500) secured (gate met, tier by occupancy)", () => {
+  const f = securedFloor({ key: 'raanana', avgDaily: 12 }, resolveThreshold, DAYS_30, 300);
   assert.equal(f.tier, 2);
   assert.equal(f.amount, 2500);
   assert.equal(f.tierPatients, 12);
-  assert.equal(f.target, 360);
+  assert.equal(f.target, 300);
 });
 
-test("Ra'anana avg 9 → nothing secured", () => {
+test("Ra'anana avg 9 → nothing secured even with many days", () => {
   const f = securedFloor({ key: 'raanana', avgDaily: 9 }, resolveThreshold, DAYS_30, 9999);
   assert.equal(f.tier, 0);
   assert.equal(f.amount, 0);
 });
 
-test('Ramot avg 18 with 510 days (= full target 17×30) → tier-1 (2000) secured', () => {
+test('Ramot avg 18 with 510 days (= gate 17×30) → tier-1 (2000) secured', () => {
   const f = securedFloor({ key: 'ramot', avgDaily: 18 }, resolveThreshold, DAYS_30, 510);
   assert.equal(f.tier, 1);
   assert.equal(f.amount, 2000);
   assert.equal(f.tierPatients, 17);
   assert.equal(f.target, 510);
+});
+
+test('Ramot avg 20 with 510 days → tier-3 (3500) secured', () => {
+  const f = securedFloor({ key: 'ramot', avgDaily: 20 }, resolveThreshold, DAYS_30, 510);
+  assert.equal(f.tier, 3);
+  assert.equal(f.amount, 3500);
+});
+
+test('securedFloor gate is month-length independent (31-day month, still 510)', () => {
+  const f = securedFloor({ key: 'ramot', avgDaily: 18 }, resolveThreshold, 31, 510);
+  assert.equal(f.tier, 1);
+  assert.equal(f.minRequired, 510);
 });
 
 test('securedFloor null house → all zeros', () => {
