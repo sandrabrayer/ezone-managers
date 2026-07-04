@@ -96,6 +96,54 @@ function prevMonthYM_(ym) {
   return currentMonthYM_(d);
 }
 
+/* Trophy banner announcing WHO earned WHAT for the month that finished —
+ * per manager, computed locally. Quarterly 5,000 is added when earned. */
+function renderWinnersBanner_(houses) {
+  const el = document.getElementById('winnersBanner');
+  if (!el) return;
+  const po = state.prevOverview;
+  if (!po) { el.hidden = true; return; }
+  const label = fmtMonthLabel(po.month);
+
+  const rows = houses.map(h => {
+    const p = prevMonthSettled_(h.key);
+    const q = quarterlyLocal_(h.key);
+    const manager = (h.manager || '').trim();
+    return {
+      name: HOUSE_LABELS[h.key]?.name || h.name || h.key,
+      manager,
+      amount: p ? p.amount : 0,
+      tier: p ? p.tier : 0,
+      quarterly: q.earned
+    };
+  });
+  const winners = rows.filter(r => r.amount > 0 || r.quarterly > 0);
+
+  if (!winners.length) {
+    el.innerHTML = `<div class="wb-head"><span class="wb-trophy">🏆</span>
+      <span class="wb-title">בונוסים לתשלום — ${label}</span></div>
+      <div class="wb-none">אף בית לא הגיע לזכאות החודש — היעד הבא: ${fmtMonthLabel(currentMonthYM_())}</div>`;
+    el.hidden = false;
+    return;
+  }
+
+  const chips = winners.map(r => `
+    <div class="wb-chip">
+      <span class="wb-house">${r.name}</span>
+      <span class="wb-manager">${r.manager ? 'מנהל/ת: ' + r.manager : ''}</span>
+      <span class="wb-amt">${fmtCurrency(r.amount + r.quarterly)}</span>
+      <span class="wb-detail">${r.amount > 0 ? `מדרגה ${r.tier}` : ''}${r.quarterly > 0 ? ` · כולל בונוס רבעוני ${fmtCurrency(r.quarterly)}` : ''}</span>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div class="wb-head">
+      <span class="wb-trophy">🏆</span>
+      <span class="wb-title">בונוסים לתשלום — ${label}</span>
+    </div>
+    <div class="wb-chips">${chips}</div>`;
+  el.hidden = false;
+}
+
 /* Settled bonus for a house in a given FINISHED month, computed locally with
  * the canonical rules. Returns the amount, or null when that month's feed is
  * unavailable. */
@@ -383,6 +431,7 @@ function renderOverview(data) {
   if (bonusLabelEl && prevMonthLabel) bonusLabelEl.textContent = `בונוסים לתשלום — ${prevMonthLabel}`;
   setKpi('kpiBonus',       state.prevOverview ? fmtCurrency(prevTotal) : '—');
   setKpi('kpiDaysLeft',    `${fmtInt(dayOfMonth)} מתוך ${fmtInt(daysInMonth)}`);
+  renderWinnersBanner_(houses);
 
   renderNetworkSpark(houses);
 
