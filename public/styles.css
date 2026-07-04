@@ -1233,3 +1233,34 @@ body::before {
 .hc-prev-amt { grid-area: amt; font-size: 20px; font-weight: 800; color: var(--gold); }
 .hc-prev-bonus.not-earned .hc-prev-amt { color: var(--text-mute); }
 .hc-prev-sub { grid-area: sub; font-size: 13px; color: var(--text-mute); text-align: start; }
+
+
+/* Trophy banner — who earned what for the finished month */
+.winners-banner {
+  margin: 14px 0 4px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 2px solid rgba(252, 211, 77, 0.45);
+  background: linear-gradient(135deg, rgba(252, 211, 77, 0.14), rgba(252, 140, 90, 0.08));
+  box-shadow: 0 0 24px rgba(252, 211, 77, 0.12);
+}
+.wb-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.wb-trophy { font-size: 28px; }
+.wb-title { font-size: 18px; font-weight: 800; color: var(--gold); }
+.wb-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.wb-chip {
+  display: grid;
+  grid-template-areas: "house amt" "manager amt" "detail detail";
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(252, 211, 77, 0.3);
+  background: rgba(0, 0, 0, 0.22);
+}
+.wb-house { grid-area: house; font-weight: 800; font-size: 15px; }
+.wb-manager { grid-area: manager; font-size: 13px; color: var(--text-mute); }
+.wb-amt { grid-area: amt; align-self: center; font-size: 22px; font-weight: 800; color: var(--gold); }
+.wb-detail { grid-area: detail; font-size: 13px; color: var(--text-mute); }
+.wb-none { font-size: 14px; color: var(--text-mute); }
+@media (max-width: 640px) { .wb-chips { grid-template-columns: 1fr; } }

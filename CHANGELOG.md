@@ -3,6 +3,16 @@
 
 ## Unreleased
 
+### Added (winners trophy banner)
+- **Trophy banner at the top of the dashboard announcing WHO earned WHAT for
+  the month that finished** — "🏆 בונוסים לתשלום — <חודש>", one gold chip per
+  earning house with the house name, manager name, total amount (monthly +
+  quarterly 5,000 ₪ when earned), and the tier reached. Computed locally from
+  the settled figures (same canonical rules); shows a friendly "no house
+  qualified" line when nobody earned. XSS-safe: renders only known house
+  labels, numeric amounts, and sheet-sourced manager names.
+
+
 ### Changed (Ra'anana tier 3 = 14 + fully local quarterly bonus)
 - **Ra'anana Asher tier 3 corrected to 14 patients** (capacity), per the
   original May 2026 spec: 10 → 2,000 / 12 → 2,500 / **14 → 3,500** ₪.
