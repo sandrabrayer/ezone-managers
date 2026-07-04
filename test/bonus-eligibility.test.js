@@ -76,7 +76,7 @@ test('Ramot avg 16.9 → 0', () => {
   assert.equal(tierForPatients({ key: 'ramot', avgDaily: 16.9 }).amount, 0);
 });
 
-for (const key of ['raanana', 'efroni', 'rehab']) {
+for (const key of ['efroni', 'rehab']) {
   test(`${key}: avg 10→2000, 11.9→2000, 12→2500, 13→3500, 9.9→0`, () => {
     assert.equal(tierForPatients({ key, avgDaily: 10 }).amount, 2000);
     assert.equal(tierForPatients({ key, avgDaily: 11.9 }).amount, 2000);
@@ -132,8 +132,8 @@ test('gate does NOT grow with the tier: Ramot avg 19, days 510 → 2500', () => 
   assert.equal(r.target, 510);
 });
 
-test("Ra'anana avg 13, days 300 (= gate 10×30) → 3500", () => {
-  const r = monthlyBonusAmount({ key: 'raanana', avgDaily: 13, treatmentDays: 300 }, resolveThreshold, DAYS_31);
+test("Ra'anana avg 14, days 300 (= gate 10×30) → 3500", () => {
+  const r = monthlyBonusAmount({ key: 'raanana', avgDaily: 14, treatmentDays: 300 }, resolveThreshold, DAYS_31);
   assert.equal(r.amount, 3500);
 });
 
@@ -214,4 +214,44 @@ test('securedFloor null house → all zeros', () => {
   const f = securedFloor(null, resolveThreshold, DAYS_30, 9999);
   assert.equal(f.tier, 0);
   assert.equal(f.amount, 0);
+});
+
+/* ── Ra'anana tier 3 at 14 patients ── */
+test("Ra'anana: 13→2500 (tier 2), 14→3500 (tier 3)", () => {
+  assert.equal(tierForPatients({ key: 'raanana', avgDaily: 13 }).amount, 2500);
+  assert.equal(tierForPatients({ key: 'raanana', avgDaily: 13.9 }).amount, 2500);
+  assert.equal(tierForPatients({ key: 'raanana', avgDaily: 14 }).amount, 3500);
+});
+
+/* ── Quarterly: anchored window + standing ── */
+const { quarterWindowFor, quarterlyStatus, QUARTERLY_AMOUNT } = require('../lib/bonus-eligibility');
+
+test('quarter windows anchored May 2026', () => {
+  assert.deepEqual(quarterWindowFor('2026-05'), ['2026-05', '2026-06', '2026-07']);
+  assert.deepEqual(quarterWindowFor('2026-07'), ['2026-05', '2026-06', '2026-07']);
+  assert.deepEqual(quarterWindowFor('2026-08'), ['2026-08', '2026-09', '2026-10']);
+  assert.deepEqual(quarterWindowFor('2026-12'), ['2026-11', '2026-12', '2027-01']);
+  assert.equal(quarterWindowFor('2026-04'), null);
+  assert.equal(quarterWindowFor('bad'), null);
+});
+
+test('quarterly pays 5000 only when all 3 finished months earned >= 2000', () => {
+  const win = ['2026-05', '2026-06', '2026-07'];
+  const full = quarterlyStatus(win, { '2026-05': 2000, '2026-06': 2500, '2026-07': 3500 });
+  assert.equal(full.monthsMet, 3);
+  assert.equal(full.complete, true);
+  assert.equal(full.earned, QUARTERLY_AMOUNT);
+
+  const oneMiss = quarterlyStatus(win, { '2026-05': 2000, '2026-06': 0, '2026-07': 3500 });
+  assert.equal(oneMiss.monthsMet, 2);
+  assert.equal(oneMiss.earned, 0);
+
+  const midQuarter = quarterlyStatus(win, { '2026-05': 2000, '2026-06': 2500 });
+  assert.equal(midQuarter.monthsMet, 2);
+  assert.equal(midQuarter.monthsFinished, 2);
+  assert.equal(midQuarter.complete, false);
+  assert.equal(midQuarter.earned, 0);
+
+  const boundary = quarterlyStatus(win, { '2026-05': 1999, '2026-06': 2500, '2026-07': 3500 });
+  assert.equal(boundary.earned, 0);
 });

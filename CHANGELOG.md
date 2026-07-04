@@ -3,6 +3,29 @@
 
 ## Unreleased
 
+### Changed (Ra'anana tier 3 = 14 + fully local quarterly bonus)
+- **Ra'anana Asher tier 3 corrected to 14 patients** (capacity), per the
+  original May 2026 spec: 10 → 2,000 / 12 → 2,500 / **14 → 3,500** ₪.
+  Avg 13 now pays the 2,500 tier. Efroni and Rehab stay at 10/12/13; Ramot at
+  17/19/20.
+- **Quarterly stability bonus is now computed locally** in
+  `lib/bonus-eligibility.js` (`quarterWindowFor`, `quarterlyStatus`) — the
+  backend's quarterly fields are no longer read anywhere. Windows are anchored
+  at May 2026 (May–Jul, Aug–Oct, Nov–Jan, ...). A month counts when its
+  SETTLED monthly bonus (canonical local rules) was ≥ 2,000 ₪; the 5,000 ₪
+  pays only when all 3 months of the window are finished and all met the bar.
+  First possible payout: end of July 2026 (May–Jun–Jul window).
+- The overview loader now fetches every finished month of the current quarter
+  window (`managersOverview&month=…`, in parallel) so both the settled
+  prev-month payable and the quarterly standing come from raw data + local
+  rules. Quarterly track, breakdown line, and totals all use the local figures.
+- Security/robustness: month params are URL-encoded; failed month fetches
+  degrade gracefully (standing shows fewer finished months, never crashes).
+- Tests: 36 passing — new coverage for Ra'anana 13/13.9 → 2,500 vs 14 → 3,500,
+  anchored window math (incl. year rollover Nov–Jan), and quarterly standing
+  (full pay, one-month miss, mid-quarter, 1,999 boundary).
+
+
 ### Added (finished-month payable on the dashboard + readability)
 - **Every overview house card now leads with the SETTLED bonus for the month
   that finished** ("בונוס <חודש> (לתשלום)"), computed locally on load by
