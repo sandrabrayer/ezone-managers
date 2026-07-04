@@ -1,6 +1,33 @@
+[CHANGELOG (10).md](https://github.com/user-attachments/files/29659642/CHANGELOG.10.md)
 # Changelog
 
 ## Unreleased
+
+### Changed (fixed threshold×30 gate + finished-month payable headline)
+- **Treatment-days gate is now FIXED per house: eligibility threshold × 30.**
+  `lib/bonus-eligibility.js` replaces the per-tier `tierPatients × daysInMonth`
+  target with `gateTarget(h) = threshold × GATE_DAYS_FACTOR (30)`. Ramot needs
+  510 treatment-days, the other houses 300 — the SAME in every month (28, 30 or
+  31 days) and for EVERY tier. The tier amount is still driven by average
+  daily occupancy (Ramot 17/19/20, others 10/12/13 → 2,000/2,500/3,500 ₪),
+  identical logic for all houses: more patients → higher tier → bigger bonus.
+- **The finished month's payable bonus is now the headline.** The month-split
+  box leads with "בונוס לתשלום — <month> (סופי)", styled larger (`ms-headline`),
+  computed on the 1st of the following month. The in-progress month remains a
+  clearly-marked projection starting at 0 ₪.
+- **The frontend no longer trusts ANY backend bonus math.** The previous month's
+  amount is recomputed locally from the feed's raw data (avgDaily /
+  treatmentDays), and the current-month `lockedIn` / `projectedBonus` /
+  `lockedAmount` flags from the Apps Script are ignored. The backend now only
+  supplies raw occupancy and treatment-day figures; all bonus rules live in
+  one place (`lib/bonus-eligibility.js`), eliminating the recurring
+  two-systems-out-of-sync bug. (Quarterly standing fields — `quarterlyMonthsMet`
+  etc. — are still read from the feed and displayed as X-of-3 progress.)
+- **`securedFloor` simplified to the single fixed gate**: a tier is secured
+  once days-so-far ≥ threshold × 30 AND occupancy supports the tier.
+- Tests rewritten for the fixed gate (34 tests): gate boundaries 510/509 and
+  300/299, month-length independence (February needs the same 510), gate does
+  not grow with the tier, secured-floor boundaries. All pass via `node --test`.
 
 ### Changed (lower bonus break-even rules)
 - **Treatment-days gate raised to the FULL target (no 95% discount).**
