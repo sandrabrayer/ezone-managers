@@ -3,6 +3,9 @@
 
 ## Unreleased
 
+### Docs
+- **`EZONE-ECOSYSTEM-STATUS.md` added at repo root** — the July 4 merged cross-app ecosystem status doc, distributed to the root of all six E-Zone repos so every project/session starts from the true state.
+
 ### Added (winners trophy banner)
 - **Trophy banner at the top of the dashboard announcing WHO earned WHAT for
   the month that finished** — "🏆 בונוסים לתשלום — <חודש>", one gold chip per
