@@ -96,6 +96,33 @@ function prevMonthYM_(ym) {
   return currentMonthYM_(d);
 }
 
+/* Settled bonus for a house in a given FINISHED month, computed locally with
+ * the canonical rules. Returns the amount, or null when that month's feed is
+ * unavailable. */
+function settledAmountFor_(key, ym) {
+  const byKey = (state.monthOverviews || {})[ym];
+  const ph = byKey ? byKey[key] : null;
+  if (!ph) return null;
+  const r = window.BonusEligibility.monthlyBonusAmount(
+    { key, avgDaily: Number(ph.avgDaily) || 0, treatmentDays: Number(ph.treatmentDays) || 0 },
+    resolveThreshold, daysInMonthFromLabel(ym)
+  );
+  return r.amount;
+}
+
+/* Quarterly standing for a house — computed LOCALLY (window anchored May 2026:
+ * May–Jul, Aug–Oct, ...). A month counts when its settled monthly bonus was
+ * >= 2,000; the 5,000 pays only when all 3 finished months met it. */
+function quarterlyLocal_(key) {
+  const win = state.quarterWindow || [];
+  const settled = {};
+  win.forEach(ym => {
+    const amt = settledAmountFor_(key, ym);
+    if (amt !== null) settled[ym] = amt;
+  });
+  return window.BonusEligibility.quarterlyStatus(win, settled);
+}
+
 /* Settled bonus for a house in LAST month, computed locally with the
  * canonical rules from the fetched prev-month overview. Returns
  * { month, amount, tier, gatePassed, avgDaily, treatmentDays } or null when
@@ -292,21 +319,30 @@ async function loadOverview() {
     const houses = Array.isArray(data.houses) ? data.houses : [];
     houses.forEach(h => { if (h && h.key) state.housesById[h.key] = h; });
 
-    // Fetch LAST month's overview too — the settled "bonus to pay" per house
-    // is computed on the 1st for the month that finished, from that month's
-    // raw figures (avgDaily / treatmentDays), using the canonical local rules.
-    const prevYM = prevMonthYM_(data.month || currentMonthYM_());
-    try {
-      const prevData = await fetchJson(`/api/sheets?action=managersOverview&month=${encodeURIComponent(prevYM)}`);
-      const byKey = {};
-      (Array.isArray(prevData.houses) ? prevData.houses : []).forEach(ph => {
-        if (ph && ph.key) byKey[ph.key] = ph;
-      });
-      state.prevOverview = { month: prevData.month || prevYM, byKey };
-    } catch (e) {
-      console.error('prev-month overview failed', e);
-      state.prevOverview = null;
-    }
+    // Fetch every FINISHED month of the current quarter window (plus last
+    // month) — the settled "bonus to pay" and the quarterly standing are both
+    // computed LOCALLY from those months' raw figures via the canonical rules.
+    const nowYM = data.month || currentMonthYM_();
+    const prevYM = prevMonthYM_(nowYM);
+    const qWindow = window.BonusEligibility.quarterWindowFor(nowYM) || [];
+    const finishedMonths = [...new Set([prevYM, ...qWindow.filter(m => m < nowYM)])];
+    state.monthOverviews = {};
+    await Promise.all(finishedMonths.map(async ym => {
+      try {
+        const md = await fetchJson(`/api/sheets?action=managersOverview&month=${encodeURIComponent(ym)}`);
+        const byKey = {};
+        (Array.isArray(md.houses) ? md.houses : []).forEach(ph => {
+          if (ph && ph.key) byKey[ph.key] = ph;
+        });
+        state.monthOverviews[ym] = byKey;
+      } catch (e) {
+        console.error(`overview for ${ym} failed`, e);
+      }
+    }));
+    state.quarterWindow = qWindow;
+    state.prevOverview = state.monthOverviews[prevYM]
+      ? { month: prevYM, byKey: state.monthOverviews[prevYM] }
+      : null;
 
     renderOverview(data);
     setStatus(`עודכן ${new Date().toLocaleTimeString('he-IL')}`);
@@ -525,13 +561,13 @@ function securedTierTarget(h, status) {
   return window.BonusEligibility.gateTarget(h, resolveThreshold);
 }
 
-/** Quarterly amount that may be counted in a total: only the actually-earned
-    amount the backend reports (0 until the quarter is complete & all months
-    met). Never count projected quarterly mid-quarter. */
+/** Quarterly amount that may be counted in a total: computed LOCALLY —
+    5,000 only when the quarter window is complete and every month's settled
+    bonus was >= 2,000. Never counts a projection mid-quarter, and never
+    trusts the backend's quarterly math. */
 function quarterlyEarnedAmount(h) {
-  const b = h && h.bonus ? h.bonus : {};
-  // The backend sets quarterly>0 only when complete && all months met.
-  return Number(b.quarterly) || 0;
+  if (!h || !h.key) return 0;
+  return quarterlyLocal_(h.key).earned;
 }
 
 function monthlyBonusOf(h) {
@@ -739,7 +775,7 @@ function renderHouseDetail(key, data) {
   const cfg = {
     base: monthlyResult.amount || (tierTable.length ? tierTable[tierTable.length - 1].amount : 0),
     tierTable,                          // [{patients, amount}], highest first
-    quarterly: merged.bonus?.quarterlyAmount || merged.bonus?.quarterlyTarget || 5000
+    quarterly: window.BonusEligibility.QUARTERLY_AMOUNT
   };
 
   const activity = Array.isArray(data.activity) ? data.activity : [];
@@ -1091,14 +1127,15 @@ function renderTierTrack(panel, ctx) {
 }
 
 function renderQuarterlyTrack(panel, data, cfg, monthlyTarget) {
-  const b = data.bonus || {};
-  const monthsMet      = Number(b.quarterlyMonthsMet) || 0;
-  const monthsRequired = Number(b.quarterlyMonthsRequired) || 3;
-  const monthsElapsed  = Number(b.quarterlyMonthsElapsed) || 0;
-  const amount         = Number(b.quarterly) || 0;
-  const quarterlyMax   = Number(b.quarterlyAmount) || cfg.quarterly || 5000;
-  const window         = Array.isArray(b.quarterlyWindow) ? b.quarterlyWindow : [];
-  const windowTxt      = window.length ? window.map(fmtMonthLabel).join(' · ') : '';
+  // Quarterly standing is computed LOCALLY from the finished months of the
+  // anchored window (May–Jul 2026, Aug–Oct, ...) — never from backend fields.
+  const q = quarterlyLocal_(data.key);
+  const monthsMet      = q.monthsMet;
+  const monthsRequired = q.monthsRequired;
+  const monthsElapsed  = q.monthsFinished;
+  const amount         = q.earned;
+  const quarterlyMax   = window.BonusEligibility.QUARTERLY_AMOUNT;
+  const windowTxt      = q.window.length ? q.window.map(fmtMonthLabel).join(' · ') : '';
 
   // Bar fills by months met out of 3.
   const pct = monthsRequired > 0 ? Math.min(100, (monthsMet / monthsRequired) * 100) : 0;
@@ -1179,12 +1216,11 @@ function renderBreakdown(panel, data, ctx) {
     return parts.length ? parts.join(' · ') : 'אין הפניות פעילות החודש';
   })();
 
-  const q = data.bonus || {};
-  const qWindow = Array.isArray(q.quarterlyWindow) && q.quarterlyWindow.length
-    ? q.quarterlyWindow.map(fmtMonthLabel).join(' · ')
-    : 'מאי · יוני · יולי 2026';
-  const qMet = Number(q.quarterlyMonthsMet) || 0;
-  const qReq = Number(q.quarterlyMonthsRequired) || 3;
+  // Quarterly line — LOCAL standing (anchored window), no backend fields.
+  const q = quarterlyLocal_(data.key);
+  const qWindow = q.window.length ? q.window.map(fmtMonthLabel).join(' · ') : '';
+  const qMet = q.monthsMet;
+  const qReq = q.monthsRequired;
 
   const items = [
     ...tierItems,
