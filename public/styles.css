@@ -499,6 +499,9 @@ body::before {
   text-align: end;
 }
 .ms-prev { border-color: rgba(252, 211, 77, 0.28); background: rgba(252, 211, 77, 0.04); }
+.ms-headline { padding: 12px 12px; border-width: 2px; }
+.ms-headline .ms-tag { font-size: 13px; font-weight: 700; }
+.ms-headline .ms-amt { font-size: 22px; }
 .ms-cur  { border-style: dashed; }
 .ms-tag { grid-area: tag; font-size: 12px; font-weight: 600; color: var(--text, #e8e8e8); text-align: start; }
 .ms-amt { grid-area: amt; font-size: 16px; font-weight: 700; }
