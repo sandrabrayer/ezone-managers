@@ -119,11 +119,25 @@ function renderMonthSplit_(panel, bonusEl, h) {
 
   if (prev) {
     const label = fmtMonthLabel(prev.month);
-    const paid = Number(prev.bonus) || 0;
-    const quota = prev.quotaMet ? '' : ' · לא הושלמה מכסת הימים';
+    // Recompute the finished month LOCALLY with the canonical rules (tier by
+    // avg occupancy + fixed threshold×30 gate) so the amount never depends on
+    // the backend's bonus formula. The feed supplies the raw data only.
+    const prevDaysInMonth = daysInMonthFromLabel(prev.month);
+    const prevTreatmentDays = Number.isFinite(prev.treatmentDays)
+      ? prev.treatmentDays
+      : Math.round((Number(prev.avgDaily) || 0) * prevDaysInMonth);
+    const settledPrev = window.BonusEligibility.monthlyBonusAmount(
+      { key: h.key, avgDaily: Number(prev.avgDaily) || 0, treatmentDays: prevTreatmentDays },
+      resolveThreshold, prevDaysInMonth
+    );
+    const paid = settledPrev.amount;
+    const gate = settledPrev.minRequired;
+    const quota = settledPrev.gatePassed || paid > 0
+      ? ''
+      : ` · מכסת ימי הטיפול לא הושלמה (${fmtInt(prevTreatmentDays)}/${fmtInt(gate)})`;
     parts.push(
-      `<div class="ms-row ms-prev">
-         <span class="ms-tag">בונוס ${label} (סופי)</span>
+      `<div class="ms-row ms-prev ms-headline">
+         <span class="ms-tag">בונוס לתשלום — ${label} (סופי)</span>
          <span class="ms-amt ${paid > 0 ? 'gold' : 'zero'}">${fmtCurrency(paid)}</span>
          <span class="ms-sub">ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום${quota}</span>
        </div>`
@@ -187,12 +201,10 @@ function treatmentNightsOf(h) {
   return h?.treatmentDays ?? 0;
 }
 
-/* Treatment-days target for display: matched-tier patients × days-in-month
-   (falls back to the eligibility threshold when below any tier). */
+/* Treatment-days target for display: the fixed house gate —
+   eligibility threshold × 30 (Ramot 510, others 300). */
 function monthlyTargetOf(h) {
-  const r = monthlyBonusResult(h);
-  if (r.target > 0) return r.target;
-  return resolveThreshold(h) * monthDaysOf(h);
+  return window.BonusEligibility.gateTarget(h, resolveThreshold);
 }
 
 function continuityCounts(b) {
@@ -340,15 +352,15 @@ function qualifiesMonthly(h) {
 
 function monthDaysOf(h) {
   // Prefer the house-detail payload's month, then the network overview's month,
-  // then today. The treatment-days target/gate is computed against actual
-  // days-in-month (target = tierPatients × daysInMonth).
+  // then today. Used for elapsed-day math and month labels; the bonus GATE is
+  // fixed at threshold × 30 and does not depend on days-in-month.
   const monthLabel = h?.month || state.overview?.month;
   return daysInMonthFromLabel(monthLabel);
 }
 
 /** Monthly bonus AMOUNT — the per-house payable. Tier amount comes from
-    end-of-month patient count; it is paid only if treatment-days met the
-    95% target gate. Returns the full BonusEligibility result. */
+    average daily occupancy; it is paid only if treatment-days met the fixed
+    house gate (threshold × 30). Returns the full BonusEligibility result. */
 function monthlyBonusResult(h) {
   return window.BonusEligibility.monthlyBonusAmount(h, resolveThreshold, monthDaysOf(h));
 }
@@ -361,8 +373,8 @@ function monthlyBonusResult(h) {
  *   - If the month being viewed is NOT the current calendar month, it's a
  *     finished month → use the settled result as-is (earned/0).
  *   - If it IS the current (unfinished) month:
- *       • LOCKED  — treatment-days SO FAR already >= 95% of the target for the
- *                   tier they're on track for. The bonus can no longer be lost,
+ *       • LOCKED  — treatment-days SO FAR already met the fixed house gate
+ *                   (threshold × 30). The bonus can no longer be lost,
  *                   so show it as guaranteed (gold).
  *       • PROJECTION — not yet locked. Show 0 as the amount (nothing earned
  *                   yet) plus the tier they're heading toward and the gap in
@@ -394,56 +406,23 @@ function monthlyStatus(h) {
     };
   }
 
-  // Current month — work from days accrued SO FAR. Prefer the backend's
-  // currentMonth block, which now reports TRUE elapsed-days (treatmentDaysSoFar
-  // counts only days up to today) plus a lockedIn flag and projection. If those
-  // fields are present we trust them directly; otherwise we fall back to a
-  // local computation.
+  // Current month — work from days accrued SO FAR. The feed's raw data
+  // (treatmentDaysSoFar / daysInMonth) is used, but ALL bonus math is computed
+  // locally by lib/bonus-eligibility.js so the frontend never depends on the
+  // backend's bonus rules staying in sync. The backend's lockedIn /
+  // projectedBonus flags are deliberately ignored.
   const cur = h.currentMonth || {};
   const daysInMonth = Number(cur.daysInMonth) || monthDaysOf(h);
   const daysSoFar = Number.isFinite(cur.treatmentDaysSoFar)
     ? cur.treatmentDaysSoFar
     : treatmentNightsOf(h);
 
-  // Highest tier already SECURED by actual occupancy + days-so-far. A secured
-  // floor can never be lost, so it locks the bonus even when the backend's
-  // lockedIn flag still reads false.
+  // Highest tier already SECURED: days-so-far met the fixed house gate
+  // (threshold × 30) and occupancy supports the tier. A secured floor can
+  // never be lost.
   const floor = window.BonusEligibility.securedFloor(h, resolveThreshold, daysInMonth, daysSoFar);
 
-  if (cur && (cur.lockedIn !== undefined || cur.projectedBonus !== undefined)) {
-    const projectedAmount = Number(cur.projectedBonus) || 0;
-    // Recover the tier patients for the projected amount to size the gap text.
-    const t = window.BonusEligibility.tierForPatients(
-      { key: h.key, avgDaily: Number(cur.paceAvgDaily) || 0 }, resolveThreshold
-    );
-    const tierPatients = (t && t.tierPatients) || 0;
-    const target = tierPatients * daysInMonth;
-    const minRequired = target; // full target, no 95% discount
-    const projectedTier = Number(cur.projectedTier) || (t ? t.tier : 0);
-    const locked = floor.tier > 0 || !!cur.lockedIn;
-    const lockedAmount = floor.tier > 0
-      ? floor.amount
-      : (Number(cur.lockedAmount) || projectedAmount);
-    const hasUpside = projectedTier > floor.tier && projectedAmount > floor.amount;
-    return {
-      state: locked ? 'locked' : 'projection',
-      amount: locked ? lockedAmount : 0,
-      projectedTier,
-      projectedAmount,
-      securedTier: floor.tier,
-      securedAmount: floor.amount,
-      hasUpside,
-      daysSoFar,
-      target,
-      minRequired,
-      // Gap = days still needed to reach the FULL tier target by month-end
-      // (e.g. Ra'anana tier 3 = 390; 195 accrued → gap 195), not the 95% lock
-      // threshold. This matches "needs 390 by end of month".
-      gapDays: Math.max(0, target - daysSoFar)
-    };
-  }
-
-  // Fallback: local computation (older feed without lockedIn).
+  // Local computation:
   // avg-so-far = daysSoFar / elapsed days, projected over the full month.
   const todayDate = new Date().getDate();
   const elapsed = Math.max(1, Math.min(daysInMonth, todayDate));
@@ -456,18 +435,17 @@ function monthlyStatus(h) {
     { key: h.key, avgDaily: avgSoFar }, resolveThreshold
   );
   const projectedAmount = (projTier && projTier.amount) || 0;
-  const tierPatients = (projTier && projTier.tierPatients) || 0;
   const projectedTier = projTier ? projTier.tier : 0;
 
-  // Target & full-target gate for that tier, measured against days SO FAR.
-  const target = tierPatients * daysInMonth;
-  const minRequired = target; // full target, no 95% discount
-  // Locked once a tier floor is secured, or once the projected tier's own
-  // days-so-far gate is met.
-  const locked = floor.tier > 0 || (projectedAmount > 0 && daysSoFar >= minRequired);
-  const amount = floor.tier > 0 ? floor.amount : (locked ? projectedAmount : 0);
+  // The gate is FIXED per house: eligibility threshold × 30 (Ramot 510,
+  // others 300), regardless of month length or the tier reached.
+  const target = window.BonusEligibility.gateTarget(h, resolveThreshold);
+  const minRequired = target;
+  // Locked once the fixed gate is met and a tier is supported by occupancy.
+  const locked = floor.tier > 0;
+  const amount = floor.tier > 0 ? floor.amount : 0;
   const hasUpside = projectedTier > floor.tier && projectedAmount > floor.amount;
-  // Gap to the FULL tier target by month-end (not the 95% lock threshold).
+  // Gap = treatment-days still needed to reach the fixed gate.
   const gapDays = Math.max(0, target - daysSoFar);
 
   return {
@@ -485,20 +463,11 @@ function monthlyStatus(h) {
   };
 }
 
-/** Treatment-days target anchored to the SECURED tier. When a floor is locked
-    in, the panel's "X / Y days" lines must measure against that tier's target
-    (tierPatients × days-in-month), not the projected next tier. Falls back to
-    the settled monthly target (or threshold × days) when nothing is secured. */
+/** Treatment-days target for the panel's "X / Y days" lines. Under the fixed
+    gate model this is always the house gate: eligibility threshold × 30
+    (Ramot 510, others 300) — the same for every tier and every month. */
 function securedTierTarget(h, status) {
-  const st = status || {};
-  const table = (window.BonusEligibility.HOUSE_BONUS || {})[h?.key];
-  if (st.securedTier > 0 && table && Array.isArray(table.tiers)) {
-    // tiers are highest-patients-first; securedTier is 1-based from the bottom.
-    const tier = table.tiers[table.tiers.length - st.securedTier];
-    if (tier) return tier.patients * monthDaysOf(h);
-  }
-  const mr = monthlyBonusResult(h);
-  return mr.target || (resolveThreshold(h) * monthDaysOf(h));
+  return window.BonusEligibility.gateTarget(h, resolveThreshold);
 }
 
 /** Quarterly amount that may be counted in a total: only the actually-earned
@@ -533,7 +502,7 @@ function buildHouseCard(h) {
 
   const monthlyResult = monthlyBonusResult(h);
   const status = monthlyStatus(h);
-  const target = monthlyResult.target || (threshold * monthDaysOf(h));
+  const target = window.BonusEligibility.gateTarget(h, resolveThreshold);
   const nights = treatmentNightsOf(h);
   const tier = { tier: status.projectedTier, amount: status.projectedAmount };
   const above = qualifiesMonthly(h);
@@ -688,7 +657,7 @@ function renderHouseDetail(key, data) {
   const tier = { tier: status.projectedTier, amount: status.projectedAmount };
   const eligible = status.projectedAmount > 0;
   // "paid" now means actually secured: a finished month that earned, or a
-  // current month already locked in (days-so-far >= 95% of target).
+  // current month already locked in (days-so-far >= the fixed gate).
   const paid = (status.state === 'finished' && status.amount > 0) || status.state === 'locked';
   const isProjection = status.state === 'projection';
   const above = eligible;
@@ -789,7 +758,7 @@ function renderHouseDetail(key, data) {
 
   // Show a caveat next to the bonus KPI when the house is eligible by patient
   // count but the monthly amount is withheld because treatment-days are below
-  // the 95% target gate.
+  // the fixed gate (threshold × 30).
   let fallbackEl = panel.querySelector('[data-bonus-fallback-note]');
   if (showGateNote) {
     if (!fallbackEl) {
@@ -962,7 +931,7 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
   const gapToGate = Math.max(0, gateMin - (ctx.nights || 0));
   cumulativeEl.textContent = gatePassed
     ? `סף ימי הטיפול הושג: ${fmtInt(ctx.nights)} / ${fmtInt(gateTarget)}`
-    : `סף תשלום: נדרשים ${fmtInt(gateMin)} ימי טיפול (מ-${fmtInt(gateTarget)}) · חסרים ${fmtInt(gapToGate)}`;
+    : `סף תשלום: נדרשים ${fmtInt(gateMin)} ימי טיפול · חסרים ${fmtInt(gapToGate)}`;
 
   // Status pill reflects whether the bonus is actually SECURED now (locked or
   // finished-and-earned). Mid-month projection must not say "paid".
@@ -1101,7 +1070,7 @@ function renderBreakdown(panel, data, ctx) {
 
   // Patient-count tiers from the canonical per-house table. Under Model A the
   // single matched tier is the payable amount, and it is only paid when the
-  // treatment-days gate (>= 95% of target) is met.
+  // treatment-days gate (threshold × 30) is met.
   const mr = ctx.monthlyResult || { amount: 0, tier: 0, eligible: false, gatePassed: false, target: 0, minRequired: 0, tierPatients: 0 };
   const st = ctx.status || { state: 'finished', amount: 0, projectedTier: 0, projectedAmount: 0, daysSoFar: 0, target: 0, minRequired: 0, gapDays: 0 };
   const nights = ctx.nights;
