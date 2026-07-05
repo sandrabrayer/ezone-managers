@@ -13,6 +13,25 @@ Both are proxied through `server.js` to the E-Zone Apps Script `/exec` endpoint.
 
 The endpoint URL is configured via the `APPS_SCRIPT_URL` env var. It is **required** — there is no hardcoded fallback, and the server refuses to start if it is not set.
 
+## Auth (ezone-staffing standard)
+
+All data access requires login. `POST /api/login` with `{ "pin": "..." }`
+returns an HMAC session token; the frontend sends it as
+`Authorization: Bearer <token>` on `GET /api/sheets`. Login is rate-limited
+(8 attempts / 15 min per IP). Tokens expire after `SESSION_DAYS` (default 7).
+
+Required env vars (fail-closed — the server refuses to start without them):
+
+| Var | Notes |
+|---|---|
+| `APPS_SCRIPT_URL` | Dashboard Apps Script `/exec` URL |
+| `APP_PIN` | Login PIN, up to 6 characters (input maxlength is 6) |
+| `SESSION_SECRET` | Random string, **minimum 32 chars** (e.g. `openssl rand -hex 32`) |
+| `SESSION_DAYS` | Optional, token lifetime in days (default 7) |
+
+Server-only `lib/auth.js` is never served over HTTP; only
+`/lib/bonus-eligibility.js` is exposed to the browser.
+
 ## Local
 
 ```bash

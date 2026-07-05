@@ -280,8 +280,26 @@ function fmtNum1_(v) {
   return (Math.round(n * 10) / 10).toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
 }
 
+/* ---- session token (HMAC session issued by /api/login) ---- */
+const TOKEN_KEY = 'ezm_session_token';
+
+function getToken() {
+  try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
+}
+function setToken(t) {
+  try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch { /* private mode */ }
+}
+
 async function fetchJson(url) {
-  const r = await fetch(url, { headers: { Accept: 'application/json' } });
+  const headers = { Accept: 'application/json' };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const r = await fetch(url, { headers });
+  if (r.status === 401) {
+    setToken('');
+    showLogin();
+    throw new Error('נדרשת התחברות');
+  }
   const text = await r.text();
   let data;
   try { data = JSON.parse(text); } catch { throw new Error(`Bad JSON from ${url} — ${text.slice(0, 160)}`); }
@@ -1348,15 +1366,83 @@ function renderExits(ul, list) {
    Boot
    ============================================================ */
 
+/* ---- login overlay ---- */
+function showLogin() {
+  const ov = document.getElementById('loginOverlay');
+  if (!ov) return;
+  ov.hidden = false;
+  const pin = document.getElementById('loginPin');
+  if (pin) { pin.value = ''; setTimeout(() => pin.focus(), 50); }
+}
+
+function hideLogin() {
+  const ov = document.getElementById('loginOverlay');
+  if (ov) ov.hidden = true;
+}
+
+function setLoginError(msg) {
+  const el = document.getElementById('loginError');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.hidden = !msg;
+}
+
+async function submitLogin() {
+  const pinEl = document.getElementById('loginPin');
+  const btn = document.getElementById('loginBtn');
+  const pin = (pinEl && pinEl.value || '').trim();
+  if (!pin) { setLoginError('נא להזין קוד'); return; }
+  setLoginError('');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ pin })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.token) {
+      setLoginError(data.error || 'קוד שגוי');
+      return;
+    }
+    setToken(data.token);
+    hideLogin();
+    startData();
+  } catch {
+    setLoginError('שגיאת רשת. נסו שוב.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function wireLogin() {
+  const btn = document.getElementById('loginBtn');
+  const pin = document.getElementById('loginPin');
+  if (btn) btn.addEventListener('click', submitLogin);
+  if (pin) pin.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitLogin(); });
+}
+
+let dataStarted = false;
+function startData() {
+  if (dataStarted) return;
+  dataStarted = true;
+  loadOverview();
+  setInterval(loadOverview, 60_000);
+}
+
 function boot() {
   wireTabs();
+  wireLogin();
   document.getElementById('monthTag').textContent = currentMonthLabel();
-  loadOverview();
 
   const hash = (location.hash || '').replace('#', '');
   if (['overview', ...HOUSE_KEYS].includes(hash)) activateTab(hash);
 
-  setInterval(loadOverview, 60_000);
+  if (getToken()) {
+    startData(); // token verified server-side; a 401 will re-show the login
+  } else {
+    showLogin();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', boot);

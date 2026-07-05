@@ -3,6 +3,30 @@
 
 ## Unreleased
 
+### Security — auth brought to the ezone-staffing standard (July 5, 2026)
+- **PIN login + HMAC session tokens now required for all data access.**
+  New `lib/auth.js` (ported from ezone-staffing): HMAC-SHA256 tokens with
+  `managers:` payload prefix (staffing tokens are NOT valid here),
+  timing-safe PIN comparison, 7-day default expiry (`SESSION_DAYS`).
+- **`GET /api/sheets` is gated by `requireAuth`** (Bearer token). `/healthz`
+  and static assets remain open.
+- **`POST /api/login`**: per-IP rate limiting (8 attempts / 15 min → 429),
+  returns `{ token, expiresInDays }`.
+- **Fail-closed startup**: production refuses to start without
+  `APPS_SCRIPT_URL`, `APP_PIN`, and `SESSION_SECRET` (min 32 chars).
+  ⚠️ Set `APP_PIN` (≤6 chars — input maxlength is 6) and `SESSION_SECRET`
+  in Railway BEFORE merging, or the next deploy will crash-loop.
+- **`lib/` is no longer statically mounted** — only
+  `/lib/bonus-eligibility.js` is served explicitly; server-only
+  `lib/auth.js` is unreachable over HTTP (regression-tested).
+- Proxy hardening: query-param allowlist (`action`, `house`, `month`),
+  `x-powered-by` disabled, JSON body limit 16kb, explicit `0.0.0.0` bind.
+- Frontend: login overlay (PIN, maxlength 6, RTL-friendly), token stored in
+  `localStorage`, Bearer header on every `fetchJson`, automatic re-login on
+  401. Data polling starts only after auth.
+- Tests: +19 (auth unit + server integration: 401 gate, login flow, rate
+  limit, forged/expired/cross-app tokens, lib exposure). Suite: 55 passing.
+
 ### Docs
 - **`EZONE-ECOSYSTEM-STATUS.md` added at repo root** — the July 4 merged cross-app ecosystem status doc, distributed to the root of all six E-Zone repos so every project/session starts from the true state.
 

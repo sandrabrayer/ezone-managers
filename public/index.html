@@ -20,6 +20,17 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <div id="loginOverlay" class="login-overlay" hidden>
+    <div class="login-card" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+      <div class="login-brand">איזון · מנהלים</div>
+      <h2 id="loginTitle">כניסה</h2>
+      <p class="login-sub">הזינו קוד גישה</p>
+      <input id="loginPin" class="login-pin" type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="6" dir="ltr" aria-label="קוד גישה" />
+      <button id="loginBtn" class="login-btn" type="button">כניסה</button>
+      <div id="loginError" class="login-error" role="alert" hidden></div>
+    </div>
+  </div>
+
   <header class="top-bar">
     <div class="brand">
       <span class="brand-mark">איזון</span>
