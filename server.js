@@ -32,6 +32,9 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
 
 const app = express();
 app.disable('x-powered-by');
+// Behind Railway's proxy: without this, req.ip is the proxy's IP for ALL
+// users, so the login rate limit becomes one shared bucket for everyone.
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '16kb' }));
 
 // ---- static: public assets only; gate nothing here (index is the SPA shell,
