@@ -1271,6 +1271,9 @@ body::before {
   display: flex; align-items: center; justify-content: center;
   background: rgba(24, 6, 12, 0.92); backdrop-filter: blur(4px);
 }
+/* CRITICAL: display:flex above beats the UA [hidden]{display:none} rule, so
+   without this the overlay can NEVER be dismissed after a successful login. */
+.login-overlay[hidden] { display: none; }
 .login-card {
   width: min(320px, 88vw); padding: 28px 24px; text-align: center;
   background: var(--card, #2a0f1a); border: 1px solid rgba(255,255,255,0.10);

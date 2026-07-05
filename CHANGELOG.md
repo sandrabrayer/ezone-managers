@@ -3,6 +3,17 @@
 
 ## Unreleased
 
+### Fixed — login overlay never dismissed (July 5, 2026)
+- **`.login-overlay[hidden] { display: none; }` added.** The overlay's base
+  rule sets `display: flex`, which overrides the browser's built-in
+  `[hidden] { display: none }` — so after a SUCCESSFUL login the overlay
+  stayed on screen forever (data loaded behind the blur). Symptom: pressing
+  כניסה appeared to do nothing.
+- SW cache bumped `v2` → `v3` so the fixed stylesheet reaches installed
+  devices on next open.
+- New `test/ui-guards.test.js` (3 tests): the `[hidden]` CSS rule exists,
+  the overlay markup/JS contract holds, SW cache is ≥ v3. Suite: 58 passing.
+
 ### Security — auth brought to the ezone-staffing standard (July 5, 2026)
 
 ### Fixed (post-deploy hotfix, July 5, 2026)
