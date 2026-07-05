@@ -4,6 +4,16 @@
 ## Unreleased
 
 ### Security — auth brought to the ezone-staffing standard (July 5, 2026)
+
+### Fixed (post-deploy hotfix, July 5, 2026)
+- **Service worker cache bumped `v1` → `v2`** — the auth PR changed
+  index.html/app.js/styles.css but not the cache name, so installed clients
+  could serve a stale pre-auth shell (stale-while-revalidate). Bumping forces
+  a clean shell on next load.
+- **`trust proxy` enabled** — behind Railway, `req.ip` was the proxy IP for
+  every user, collapsing the per-IP login rate limit into one shared bucket
+  (8 attempts/15min for ALL users combined, easy accidental lockout).
+
 - **PIN login + HMAC session tokens now required for all data access.**
   New `lib/auth.js` (ported from ezone-staffing): HMAC-SHA256 tokens with
   `managers:` payload prefix (staffing tokens are NOT valid here),
