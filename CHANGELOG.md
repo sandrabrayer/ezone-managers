@@ -3,6 +3,21 @@
 
 ## Unreleased
 
+### Changed — top bar shows emblem + app name only (July 27, 2026)
+- **Dropped the "איזון" (E-ZONE) wordmark from the top bar.** The header now
+  reads as the app's own emblem + its Hebrew name — the app icon followed by
+  **מנהלים** — instead of the network wordmark plus a dim sub-label.
+- **Added the existing app emblem** (`/icons/icon-192.png`, straight from
+  `manifest.json`) beside the name at **30px desktop / 28px mobile**. No
+  recolor and no new icon set — the current gradient mark and palette are
+  untouched; the name uses the existing `--text` color. RTL-correct,
+  `white-space: nowrap`, and it does not crowd the tab nav below.
+- SW cache bumped `v3` → `v4` so the updated shell reaches installed devices
+  on next open.
+- `test/ui-guards.test.js`: new header guards (E-ZONE wordmark gone, emblem
+  `src` is a real manifest icon, name present, 30/28px sizing, no-wrap) and
+  the SW-version guard tightened to ≥ v4.
+
 ### Fixed — login overlay never dismissed (July 5, 2026)
 - **`.login-overlay[hidden] { display: none; }` added.** The overlay's base
   rule sets `display: flex`, which overrides the browser's built-in

@@ -79,22 +79,21 @@ body::before {
   background: rgba(45, 10, 20, 0.78);
   border-bottom: 1px solid var(--line);
 }
-.brand { display: flex; align-items: baseline; gap: 10px; }
-.brand-mark {
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-emblem {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: block;
+}
+.brand-name {
   font-family: 'Frank Ruhl Libre', serif;
   font-weight: 900;
-  font-size: 28px;
-  background: linear-gradient(135deg, var(--red), var(--pink));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  font-size: 22px;
+  color: var(--text);
   letter-spacing: 0.02em;
-}
-.brand-sub {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-dim);
-  letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 .month-tag {
   font-size: 13px;
@@ -104,6 +103,9 @@ body::before {
   border-radius: 999px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
+}
+@media (max-width: 480px) {
+  .brand-emblem { width: 28px; height: 28px; }
 }
 
 /* ===== Tabs ===== */
