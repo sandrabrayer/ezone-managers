@@ -3,7 +3,18 @@
 
 ## Unreleased
 
-### Added — CI + fully-mocked proxy tests (August 10, 2026)
+### Fixed — top monthly bonus tier corrected 3,500 → 3,000 ₪ (August 10, 2026)
+- **The highest monthly tier now pays 3,000 ₪, not 3,500 ₪**, for all four
+  houses (Ramot at 20, Ra'anana at 14, Efroni and Rehab at 13 avg patients).
+  The correct tier ladder is 0 / 2,000 / 2,500 / 3,000 ₪. Only the top-tier
+  AMOUNT changed — thresholds, the fixed threshold×30 treatment-days gate, and
+  the quarterly 5,000 ₪ stability bonus (≥ 2,000 ₪/month bar) are untouched.
+- Changed in `lib/bonus-eligibility.js` (`HOUSE_BONUS`, the single source of
+  truth — the frontend reads amounts from it, so no UI code changed) and in
+  `test/bonus-eligibility.test.js` (tier-3 assertions + quarterly sample
+  amounts). `EZONE-ECOSYSTEM-STATUS.md` updated to match; historical
+  changelog entries below intentionally keep the 3,500 figure they shipped
+  with.
 - **GitHub Actions workflow `.github/workflows/test.yml`** — runs `npm ci` +
   `npm test` (`node --test`) on every pull request and every push to `main`,
   across Node 18.x / 20.x / 22.x. No secrets are configured or needed: test

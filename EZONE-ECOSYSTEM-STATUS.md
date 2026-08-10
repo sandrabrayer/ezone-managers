@@ -62,7 +62,8 @@ outpatient was switched dashboard-hKjf9 → volta, orphaning a day of work).
   recurring two-systems-out-of-sync bug. Pending: strip the dead bonus code
   from the live "ezone dashboard" Apps Script.
 - Model: tier by average daily occupancy — Ramot 17/19/20, Ra'anana 10/12/14,
-  Efroni & Rehab 10/12/13 → 2,000/2,500/3,500₪. Treatment-days gate is FIXED
+  Efroni & Rehab 10/12/13 → 2,000/2,500/3,000₪ (top tier corrected from 3,500
+  to 3,000 on Aug 10, 2026). Treatment-days gate is FIXED
   per house: threshold × 30 (Ramot 510, others 300), independent of month
   length and tier.
 - Settled previous-month bonus ("בונוס לתשלום") is the headline: trophy
