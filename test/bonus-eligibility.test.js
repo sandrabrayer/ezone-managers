@@ -68,8 +68,8 @@ test('Ramot avg 19.0 → 2500 (tier 2)', () => {
   assert.equal(t.tier, 2);
 });
 
-test('Ramot avg 20.0 → 3500 (tier 3)', () => {
-  assert.equal(tierForPatients({ key: 'ramot', avgDaily: 20.0 }).amount, 3500);
+test('Ramot avg 20.0 → 3000 (tier 3)', () => {
+  assert.equal(tierForPatients({ key: 'ramot', avgDaily: 20.0 }).amount, 3000);
 });
 
 test('Ramot avg 16.9 → 0', () => {
@@ -77,11 +77,11 @@ test('Ramot avg 16.9 → 0', () => {
 });
 
 for (const key of ['efroni', 'rehab']) {
-  test(`${key}: avg 10→2000, 11.9→2000, 12→2500, 13→3500, 9.9→0`, () => {
+  test(`${key}: avg 10→2000, 11.9→2000, 12→2500, 13→3000, 9.9→0`, () => {
     assert.equal(tierForPatients({ key, avgDaily: 10 }).amount, 2000);
     assert.equal(tierForPatients({ key, avgDaily: 11.9 }).amount, 2000);
     assert.equal(tierForPatients({ key, avgDaily: 12 }).amount, 2500);
-    assert.equal(tierForPatients({ key, avgDaily: 13 }).amount, 3500);
+    assert.equal(tierForPatients({ key, avgDaily: 13 }).amount, 3000);
     assert.equal(tierForPatients({ key, avgDaily: 9.9 }).amount, 0);
   });
 }
@@ -132,9 +132,9 @@ test('gate does NOT grow with the tier: Ramot avg 19, days 510 → 2500', () => 
   assert.equal(r.target, 510);
 });
 
-test("Ra'anana avg 14, days 300 (= gate 10×30) → 3500", () => {
+test("Ra'anana avg 14, days 300 (= gate 10×30) → 3000", () => {
   const r = monthlyBonusAmount({ key: 'raanana', avgDaily: 14, treatmentDays: 300 }, resolveThreshold, DAYS_31);
-  assert.equal(r.amount, 3500);
+  assert.equal(r.amount, 3000);
 });
 
 test("Ra'anana avg 10, days 299 → gate fails, 0", () => {
@@ -198,10 +198,10 @@ test('Ramot avg 18 with 510 days (= gate 17×30) → tier-1 (2000) secured', () 
   assert.equal(f.target, 510);
 });
 
-test('Ramot avg 20 with 510 days → tier-3 (3500) secured', () => {
+test('Ramot avg 20 with 510 days → tier-3 (3000) secured', () => {
   const f = securedFloor({ key: 'ramot', avgDaily: 20 }, resolveThreshold, DAYS_30, 510);
   assert.equal(f.tier, 3);
-  assert.equal(f.amount, 3500);
+  assert.equal(f.amount, 3000);
 });
 
 test('securedFloor gate is month-length independent (31-day month, still 510)', () => {
@@ -217,10 +217,10 @@ test('securedFloor null house → all zeros', () => {
 });
 
 /* ── Ra'anana tier 3 at 14 patients ── */
-test("Ra'anana: 13→2500 (tier 2), 14→3500 (tier 3)", () => {
+test("Ra'anana: 13→2500 (tier 2), 14→3000 (tier 3)", () => {
   assert.equal(tierForPatients({ key: 'raanana', avgDaily: 13 }).amount, 2500);
   assert.equal(tierForPatients({ key: 'raanana', avgDaily: 13.9 }).amount, 2500);
-  assert.equal(tierForPatients({ key: 'raanana', avgDaily: 14 }).amount, 3500);
+  assert.equal(tierForPatients({ key: 'raanana', avgDaily: 14 }).amount, 3000);
 });
 
 /* ── Quarterly: anchored window + standing ── */
@@ -237,12 +237,12 @@ test('quarter windows anchored May 2026', () => {
 
 test('quarterly pays 5000 only when all 3 finished months earned >= 2000', () => {
   const win = ['2026-05', '2026-06', '2026-07'];
-  const full = quarterlyStatus(win, { '2026-05': 2000, '2026-06': 2500, '2026-07': 3500 });
+  const full = quarterlyStatus(win, { '2026-05': 2000, '2026-06': 2500, '2026-07': 3000 });
   assert.equal(full.monthsMet, 3);
   assert.equal(full.complete, true);
   assert.equal(full.earned, QUARTERLY_AMOUNT);
 
-  const oneMiss = quarterlyStatus(win, { '2026-05': 2000, '2026-06': 0, '2026-07': 3500 });
+  const oneMiss = quarterlyStatus(win, { '2026-05': 2000, '2026-06': 0, '2026-07': 3000 });
   assert.equal(oneMiss.monthsMet, 2);
   assert.equal(oneMiss.earned, 0);
 
@@ -252,6 +252,6 @@ test('quarterly pays 5000 only when all 3 finished months earned >= 2000', () =>
   assert.equal(midQuarter.complete, false);
   assert.equal(midQuarter.earned, 0);
 
-  const boundary = quarterlyStatus(win, { '2026-05': 1999, '2026-06': 2500, '2026-07': 3500 });
+  const boundary = quarterlyStatus(win, { '2026-05': 1999, '2026-06': 2500, '2026-07': 3000 });
   assert.equal(boundary.earned, 0);
 });

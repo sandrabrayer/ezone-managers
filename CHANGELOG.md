@@ -3,6 +3,17 @@
 
 ## Unreleased
 
+### Fixed — top monthly bonus tier corrected to 3,000 ₪ (August 10, 2026)
+- **The highest monthly bonus tier is 3,000 ₪, not 3,500 ₪.** The correct
+  monthly tiers are 0 / 2,000 / 2,500 / **3,000** ₪ for every house. The tier
+  amount had been encoded as 3,500 ₪ in `lib/bonus-eligibility.js` (Ramot 20,
+  Ra'anana 14, Efroni 13, Rehab 13) and asserted as such by the test suite —
+  both are now corrected. Tier *thresholds* (patient counts) and the fixed
+  treatment-days gate (threshold × 30) are unchanged.
+- The **quarterly stability bonus (5,000 ₪) is unaffected** — its logic and
+  the ≥ 2,000 ₪ monthly-qualification bar are unchanged.
+- Tests updated accordingly; the full suite passes.
+
 ### Added — CI + fully-mocked proxy tests (August 10, 2026)
 - **GitHub Actions workflow `.github/workflows/test.yml`** — runs `npm ci` +
   `npm test` (`node --test`) on every pull request and every push to `main`,
