@@ -66,12 +66,19 @@ test('server auth', async (t) => {
     assert.equal(r.status, 200);
     const { token } = JSON.parse(r.text);
     assert.ok(token && token.includes('.'));
-    // Gate passes (not 401); upstream is example.invalid so proxy returns 502.
-    const g = await request(server, 'GET', '/api/sheets?action=managersOverview', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    assert.notEqual(g.status, 401);
-    assert.equal(g.status, 502);
+    // Gate passes (not 401). Upstream fetch is MOCKED to fail so no real
+    // network I/O ever happens; the proxy maps the failure to 502.
+    const realFetch = global.fetch;
+    global.fetch = async () => { throw new Error('mocked upstream failure'); };
+    try {
+      const g = await request(server, 'GET', '/api/sheets?action=managersOverview', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.notEqual(g.status, 401);
+      assert.equal(g.status, 502);
+    } finally {
+      global.fetch = realFetch;
+    }
   });
 
   await t.test('login is rate-limited after 8 attempts per window', async () => {

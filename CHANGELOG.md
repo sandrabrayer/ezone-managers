@@ -3,6 +3,23 @@
 
 ## Unreleased
 
+### Added — CI + fully-mocked proxy tests (August 10, 2026)
+- **GitHub Actions workflow `.github/workflows/test.yml`** — runs `npm ci` +
+  `npm test` (`node --test`) on every pull request and every push to `main`,
+  across Node 18.x / 20.x / 22.x. No secrets are configured or needed: test
+  files set `NODE_ENV=test` with dummy env values.
+- **New `test/sheets-proxy.test.js` (6 tests)** — the `/api/sheets` proxy is
+  exercised against a MOCKED `global.fetch` (zero real network I/O): upstream
+  JSON passthrough + `Cache-Control: no-store`, query-param allowlist
+  (`action`/`house`/`month` forwarded, everything else dropped), upstream
+  non-200 passthrough, upstream failure → 502 `upstream_error`, upstream never
+  reached without a valid token, unknown `/api/*` → 404 JSON (not the SPA
+  shell).
+- **`test/server-auth.test.js` no longer touches the network** — the
+  correct-PIN gate test previously fetched `https://example.invalid` (a
+  guaranteed-unresolvable but still real DNS lookup); upstream fetch is now
+  mocked in-process. Suite: 67 passing.
+
 ### Changed — top bar shows emblem + app name only (July 27, 2026)
 - **Dropped the "איזון" (E-ZONE) wordmark from the top bar.** The header now
   reads as the app's own emblem + its Hebrew name — the app icon followed by
