@@ -15,6 +15,10 @@
   amounts). `EZONE-ECOSYSTEM-STATUS.md` updated to match; historical
   changelog entries below intentionally keep the 3,500 figure they shipped
   with.
+- **SW cache bumped `v4` → `v5`** — the service worker runtime-caches
+  `/lib/bonus-eligibility.js` (stale-while-revalidate), so without a bump
+  installed devices would show the old 3,500 ₪ figure for one more load.
+  The ui-guard version floor is tightened to ≥ v5.
 - **GitHub Actions workflow `.github/workflows/test.yml`** — runs `npm ci` +
   `npm test` (`node --test`) on every pull request and every push to `main`,
   across Node 18.x / 20.x / 22.x. No secrets are configured or needed: test

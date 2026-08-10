@@ -22,10 +22,10 @@ test('login overlay markup starts hidden and app.js controls it via the hidden p
   assert.ok(js.includes('ov.hidden = true'), 'hideLogin must set hidden');
 });
 
-test('SW cache version is v4+ (bumped whenever shell files change)', () => {
+test('SW cache version is v5+ (bumped whenever shell files change)', () => {
   const sw = pub('sw.js');
   const m = sw.match(/const CACHE = 'ezone-managers-v(\d+)'/);
-  assert.ok(m && Number(m[1]) >= 4);
+  assert.ok(m && Number(m[1]) >= 5);
 });
 
 test('top bar drops the "איזון" (E-ZONE) wordmark', () => {
