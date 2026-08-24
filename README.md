@@ -6,7 +6,7 @@ It reads data via the existing E-Zone Apps Script endpoints — it never writes 
 
 ## Endpoints consumed
 
-- `GET /api/sheets?action=managersOverview` — all 4 houses + bonus calculations
+- `GET /api/sheets?action=managersOverview` — all houses (currently 5) + bonus calculations
 - `GET /api/sheets?action=managersHouse&key=<houseKey>` — full detail for one house
 
 Both are proxied through `server.js` to the E-Zone Apps Script `/exec` endpoint.
