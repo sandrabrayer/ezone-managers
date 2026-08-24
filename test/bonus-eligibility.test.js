@@ -45,6 +45,7 @@ test('other houses threshold 10', () => {
   assert.equal(thresholdOf({ key: 'raanana' }), 10);
   assert.equal(thresholdOf({ key: 'efroni' }), 10);
   assert.equal(thresholdOf({ key: 'rehab' }), 10);
+  assert.equal(thresholdOf({ key: 'pardes' }), 10);
 });
 
 test('falls back to patientsNow when avgDaily absent', () => {
@@ -76,7 +77,7 @@ test('Ramot avg 16.9 → 0', () => {
   assert.equal(tierForPatients({ key: 'ramot', avgDaily: 16.9 }).amount, 0);
 });
 
-for (const key of ['efroni', 'rehab']) {
+for (const key of ['efroni', 'rehab', 'pardes']) {
   test(`${key}: avg 10→2000, 11.9→2000, 12→2500, 13→3000, 9.9→0`, () => {
     assert.equal(tierForPatients({ key, avgDaily: 10 }).amount, 2000);
     assert.equal(tierForPatients({ key, avgDaily: 11.9 }).amount, 2000);
@@ -97,6 +98,7 @@ test('gateTarget: Ramot 510, others 300 — independent of month', () => {
   assert.equal(gateTarget({ key: 'raanana' }), 300);
   assert.equal(gateTarget({ key: 'efroni' }), 300);
   assert.equal(gateTarget({ key: 'rehab' }), 300);
+  assert.equal(gateTarget({ key: 'pardes' }), 300);
 });
 
 test('legacy treatmentTarget still = tierPatients × daysInMonth', () => {

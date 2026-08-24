@@ -3,6 +3,30 @@
 
 ## Unreleased
 
+### Added — new house רעננה הפרדס (pardes) + Ra'anana manager change (August 24, 2026)
+- **New fifth house `pardes` (רעננה הפרדס, manager חן, תחלואה כפולה)** added to
+  every house enumeration: `HOUSE_KEYS` / `HOUSE_LABELS` in `public/app.js`,
+  the per-house bonus config `HOUSE_BONUS` in `lib/bonus-eligibility.js`, and
+  the tab + detail panel in `public/index.html`. Its bonus parameters are an
+  exact copy of Efroni's (threshold 10, capacity 13, tiers 10→2,000 /
+  12→2,500 / 13+→3,000 ₪, treatment-days gate 10×30=300) — per decision.
+  The house id `pardes` matches the canonical id already live in
+  ezone-coordinators and ezone-staffing.
+- **רעננה אשר (raanana) manager updated: עידו → שחר** (`HOUSE_LABELS`; the
+  live feed's `manager` field, when present, still takes precedence).
+- 4-house assumptions made count-agnostic: the "houses above eligibility" KPI
+  fallback denominator now uses `HOUSE_KEYS.length`, a fifth skeleton card was
+  added, and the README no longer says "all 4 houses".
+- **New `test/house-coverage.test.js` guard suite** — asserts every house
+  enumeration (labels, bonus config, tabs, panels) covers exactly
+  `HOUSE_KEYS`, that pardes' bonus config equals Efroni's, and the manager
+  rename landed. Existing per-house test loops extended to pardes.
+- SW cache bumped `v4` → `v5` so the updated shell (new tab/panel) reaches
+  installed devices on next open.
+- NOTE: the shared dashboard Apps Script must also return `pardes` in
+  `managersOverview` / `managersHouse` for live data to appear — that backend
+  lives outside this repo (see the PR description for post-merge steps).
+
 ### Fixed — top monthly bonus tier corrected to 3,000 ₪ (August 10, 2026)
 - **The highest monthly bonus tier is 3,000 ₪, not 3,500 ₪.** The correct
   monthly tiers are 0 / 2,000 / 2,500 / **3,000** ₪ for every house. The tier

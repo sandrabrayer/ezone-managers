@@ -5,17 +5,18 @@
      /api/sheets?action=managersHouse&house=<houseKey>
 */
 
-const HOUSE_KEYS = ['raanana', 'ramot', 'efroni', 'rehab'];
+const HOUSE_KEYS = ['raanana', 'ramot', 'efroni', 'rehab', 'pardes'];
 
 /* `threshold` = end-of-month patients needed to be eligible for ANY bonus
    (the agreed model: Ramot 18, others 10). This is NOT the internal
    equilibrium point (11/8/8/7) — that point is internal-only and must not
    gate the bonus. `capacity` is the physical bed count. */
 const HOUSE_LABELS = {
-  raanana: { name: 'רעננה אשר',     manager: 'עידו',  type: 'בית מאזן',     threshold: 10, capacity: 14 },
+  raanana: { name: 'רעננה אשר',     manager: 'שחר',   type: 'בית מאזן',     threshold: 10, capacity: 14 },
   ramot:   { name: 'רמות השבים',    manager: 'שחר',   type: 'בית מאזן',     threshold: 17, capacity: 20 },
   efroni:  { name: 'קיסריה עפרוני', manager: 'חנן',   type: 'תחלואה כפולה', threshold: 10, capacity: 13 },
-  rehab:   { name: 'קיסריה ריהאב',  manager: 'רנטה',  type: 'גמילה',        threshold: 10, capacity: 13 }
+  rehab:   { name: 'קיסריה ריהאב',  manager: 'רנטה',  type: 'גמילה',        threshold: 10, capacity: 13 },
+  pardes:  { name: 'רעננה הפרדס',   manager: 'חן',    type: 'תחלואה כפולה', threshold: 10, capacity: 13 }
 };
 
 /* Bonus-eligibility threshold for a house (end-of-month patient count).
@@ -443,7 +444,7 @@ function renderOverview(data) {
   const daysInMonth = daysInMonthFromLabel(data.month);
   const dayOfMonth = Math.min(daysInMonth, new Date().getDate());
 
-  setKpi('kpiHousesAbove', `${housesAbove}/${houses.length || 4}`);
+  setKpi('kpiHousesAbove', `${housesAbove}/${houses.length || HOUSE_KEYS.length}`);
   setKpi('kpiActive',      fmtInt(totalActive));
   const bonusLabelEl = document.getElementById('kpiBonusLabel');
   if (bonusLabelEl && prevMonthLabel) bonusLabelEl.textContent = `בונוסים לתשלום — ${prevMonthLabel}`;
