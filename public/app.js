@@ -13,7 +13,7 @@ const HOUSE_KEYS = ['raanana', 'ramot', 'efroni', 'rehab', 'pardes'];
    gate the bonus. `capacity` is the physical bed count. */
 const HOUSE_LABELS = {
   raanana: { name: 'רעננה אשר',     manager: 'שחר',   type: 'בית מאזן',     threshold: 10, capacity: 14 },
-  ramot:   { name: 'רמות השבים',    manager: 'שחר',   type: 'בית מאזן',     threshold: 17, capacity: 20 },
+  ramot:   { name: 'רמות השבים',    manager: 'אורן',  type: 'בית מאזן',     threshold: 17, capacity: 20 },
   efroni:  { name: 'קיסריה עפרוני', manager: 'חנן',   type: 'תחלואה כפולה', threshold: 10, capacity: 13 },
   rehab:   { name: 'קיסריה ריהאב',  manager: 'רנטה',  type: 'גמילה',        threshold: 10, capacity: 13 },
   pardes:  { name: 'רעננה הפרדס',   manager: 'חן',    type: 'תחלואה כפולה', threshold: 10, capacity: 13 }
