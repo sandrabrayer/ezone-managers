@@ -36,9 +36,8 @@ test('top bar drops the "איזון" (E-ZONE) wordmark', () => {
     'the E-ZONE wordmark must not appear in the top bar — header is emblem + app name only');
 });
 
-test('top bar shows the app emblem image next to the Hebrew app name', () => {
+test('top bar shows the shared E-ZONE emblem next to the Hebrew app name', () => {
   const html = pub('index.html');
-  const manifest = JSON.parse(pub('manifest.json'));
   const header = html.match(/<header class="top-bar">[\s\S]*?<\/header>/)[0];
 
   const img = header.match(/<img[^>]*class="brand-emblem"[^>]*>/);
@@ -46,9 +45,13 @@ test('top bar shows the app emblem image next to the Hebrew app name', () => {
 
   const src = img[0].match(/src="([^"]+)"/);
   assert.ok(src, 'brand-emblem must have a src');
-  const iconSrcs = manifest.icons.map((i) => i.src);
-  assert.ok(iconSrcs.includes(src[1]),
-    `brand-emblem src (${src && src[1]}) must be one of the manifest icons (${iconSrcs.join(', ')})`);
+  // Header branding rollout: the header carries the amber E-ZONE emblem shared
+  // across the ecosystem (copied from ezone-coordinators), NOT this app's own
+  // PWA icon — the manifest icons stay app-specific.
+  assert.equal(src[1], '/icons/ezone-emblem-192.png',
+    `brand-emblem src (${src && src[1]}) must be the shared amber E-ZONE emblem`);
+  assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', 'icons', 'ezone-emblem-192.png')),
+    'the shared emblem asset must be committed at public/icons/ezone-emblem-192.png');
 
   assert.match(header, /class="brand-name">מנהלים</,
     'top bar must show the app Hebrew name "מנהלים"');

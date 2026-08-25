@@ -3,6 +3,22 @@
 
 ## Unreleased
 
+### Changed — Ramot manager rename + amber E-ZONE header emblem (August 25, 2026)
+- **רמות השבים (ramot) manager updated: שחר → אורן** (`HOUSE_LABELS` in
+  `public/app.js`; the live feed's `manager` field, when present, still takes
+  precedence). Ra'anana's manager is a different שחר and is unchanged. The
+  manager-name guard in `test/house-coverage.test.js` now asserts all three
+  hardcoded names (raanana שחר, ramot אורן, pardes חן).
+- **Header emblem swapped to the amber E-ZONE mark** used by ezone-coordinators
+  (part of the header branding rollout): the top-bar `.brand-emblem` now loads
+  the new `public/icons/ezone-emblem-192.png` (copied verbatim from
+  ezone-coordinators' `icon-v2-192.png` — amber #ffb020 glyph on warm dark
+  #140d03, rounded-square mask) instead of the app's own `icon-192.png`. Only
+  the header emblem changes — this app's color scheme, PWA icons, favicon and
+  manifest are untouched.
+- SW cache bumped `v5` → `v6` so the updated shell reaches installed devices
+  on next open.
+
 ### Added — new house רעננה הפרדס (pardes) + Ra'anana manager change (August 24, 2026)
 - **New fifth house `pardes` (רעננה הפרדס, manager חן, תחלואה כפולה)** added to
   every house enumeration: `HOUSE_KEYS` / `HOUSE_LABELS` in `public/app.js`,

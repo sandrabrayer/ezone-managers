@@ -53,7 +53,7 @@ test('pardes bonus parameters are copied from efroni exactly', () => {
   assert.deepEqual(HOUSE_BONUS.pardes, HOUSE_BONUS.efroni);
 });
 
-test("managers: raanana is שחר, pardes is חן", () => {
+test("managers: raanana is שחר, ramot is אורן, pardes is חן", () => {
   const labels = appJs.match(/const HOUSE_LABELS = \{([\s\S]*?)\n\};/)[1];
   const managerOf = (key) => {
     const row = labels.match(new RegExp(`${key}:\\s*\\{[^}]*manager:\\s*'([^']+)'`));
@@ -61,6 +61,7 @@ test("managers: raanana is שחר, pardes is חן", () => {
     return row[1];
   };
   assert.equal(managerOf('raanana'), 'שחר');
+  assert.equal(managerOf('ramot'), 'אורן');
   assert.equal(managerOf('pardes'), 'חן');
   assert.doesNotMatch(labels, /עידו/, 'the outgoing raanana manager must be gone');
 });
