@@ -1,4 +1,4 @@
-# E-ZONE Ecosystem Status — updated July 4, 2026
+# E-ZONE Ecosystem Status — updated July 4, 2026 (Managers house roster refreshed September 5, 2026)
 
 Add this file to the knowledge of EVERY E-Zone app Project (all six), replacing
 the July 3 version, so any future chat/session starts from the true state.
@@ -62,7 +62,7 @@ outpatient was switched dashboard-hKjf9 → volta, orphaning a day of work).
   recurring two-systems-out-of-sync bug. Pending: strip the dead bonus code
   from the live "ezone dashboard" Apps Script.
 - Model: tier by average daily occupancy — Ramot 17/19/20, Ra'anana 10/12/14,
-  Efroni & Rehab 10/12/13 → 2,000/2,500/3,000₪. Treatment-days gate is FIXED
+  Efroni, Rehab & Pardes 10/12/13 → 2,000/2,500/3,000₪. Treatment-days gate is FIXED
   per house: threshold × 30 (Ramot 510, others 300), independent of month
   length and tier.
 - Settled previous-month bonus ("בונוס לתשלום") is the headline: trophy
@@ -76,6 +76,31 @@ outpatient was switched dashboard-hKjf9 → volta, orphaning a day of work).
   (text-mute 0.72, small fonts 12–13px). Tests: 36 via `node --test`.
 - Efroni house-id checked: data-entry app and backend both use 'arfoni'
   consistently — no mismatch.
+
+## Managers: house roster (5 houses, current as of September 5, 2026)
+
+The Managers app (`ezone-managers`) covers FIVE houses. Hardcoded fallbacks
+live in `HOUSE_LABELS` (`public/app.js`) and `HOUSE_BONUS`
+(`lib/bonus-eligibility.js`); the live feed's `manager` field, when present,
+still takes precedence over the hardcoded name. `test/house-coverage.test.js`
+and `test/ecosystem-status-doc.test.js` fail CI if any enumeration (or this
+table) drifts.
+
+| Key | House | Manager | Type | Eligibility threshold | Capacity |
+|---|---|---|---|---|---|
+| raanana | רעננה אשר | שחר | בית מאזן | 10 | 14 |
+| ramot | רמות השבים | אורן | בית מאזן | 17 | 20 |
+| efroni | קיסריה עפרוני | חנן | תחלואה כפולה | 10 | 13 |
+| rehab | קיסריה ריהאב | רנטה | גמילה | 10 | 13 |
+| pardes | רעננה הפרדס | חן | תחלואה כפולה | 10 | 13 |
+
+- רעננה הפרדס (`pardes`) was added August 24, 2026 with Efroni's bonus
+  parameters; the shared dashboard Apps Script must return `pardes` in
+  `managersOverview` / `managersHouse` for its live data to appear.
+- Manager history: raanana עידו → שחר (Aug 24, 2026); ramot שחר → אורן
+  (Aug 25, 2026). Ra'anana's שחר and Ramot's former שחר are different people.
+- Efroni's backend house-id is `arfoni` (data-entry app and backend agree);
+  the frontend key is `efroni`.
 
 ## Apps Script topology (July 4)
 
