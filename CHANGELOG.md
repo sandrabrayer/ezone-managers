@@ -3,6 +3,18 @@
 
 ## Unreleased
 
+### Changed — ecosystem status doc: five-house roster + current managers (September 5, 2026)
+- **`EZONE-ECOSYSTEM-STATUS.md` now carries a "Managers: house roster" section**
+  listing all FIVE houses with their current managers — רעננה אשר שחר, רמות
+  השבים אורן, קיסריה עפרוני חנן, קיסריה ריהאב רנטה, רעננה הפרדס חן — plus
+  type, eligibility threshold and capacity, the pardes addition note, the
+  manager-rename history and the `arfoni`/`efroni` id note. The bonus-model
+  line now reads "Efroni, Rehab & Pardes 10/12/13". Header date annotated.
+- **New `test/ecosystem-status-doc.test.js` guard** — asserts the doc roster
+  covers exactly `HOUSE_KEYS`, that every house name and manager matches
+  `HOUSE_LABELS` in `public/app.js` verbatim, and that the five expected
+  manager names are present. No code or UI change.
+
 ### Changed — Ramot manager rename + amber E-ZONE header emblem (August 25, 2026)
 - **רמות השבים (ramot) manager updated: שחר → אורן** (`HOUSE_LABELS` in
   `public/app.js`; the live feed's `manager` field, when present, still takes
