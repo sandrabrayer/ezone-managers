@@ -3,6 +3,30 @@
 
 ## Unreleased
 
+### Added — hardened `@claude` workflow: owner-only trigger, minimal permissions
+
+`.github/workflows/claude.yml` — the `@claude` agent on issues and pull
+requests, copied byte-for-byte from `ezone-helpdesk` with no adaptation.
+
+- **Owner-only trigger** — the job's `if:` gates on
+  `github.actor == 'sandrabrayer'`, `&&`-ed *in front of* the `@claude`
+  mention checks, so no other account can start a run. E-ZONE staff reach
+  the helpdesk through its own intake, never through GitHub. A non-owner
+  `@claude` mention produces no run at all — that is the intended outcome,
+  not a bug; do not "fix" it by loosening the `if:`.
+- **Minimal permissions**, declared once at workflow level and nothing more:
+  `contents: write`, `pull-requests: write`, `issues: write`,
+  `id-token: write`, `actions: read`.
+- **Cost cap** — `claude_args: '--max-turns 15'`, so a runaway conversation
+  stops on its own.
+- **Secret** — referenced only as `${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}`,
+  which is already set on this repo. No value is hard-coded and no other
+  secret is named in the file.
+
+Workflow file only — no application code, no frontend asset (no SW bump), no
+new dependencies, no new env vars. The full contract and the rationale live in
+`ezone-helpdesk`: `docs/github-actions.md`.
+
 ### Changed — ecosystem status doc: five-house roster + current managers (September 5, 2026)
 - **`EZONE-ECOSYSTEM-STATUS.md` now carries a "Managers: house roster" section**
   listing all FIVE houses with their current managers — רעננה אשר שחר, רמות
