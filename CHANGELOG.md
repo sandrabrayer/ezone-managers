@@ -3,6 +3,50 @@
 
 ## Unreleased
 
+### Fixed — bonus month labelling: settled vs running month, single days-so-far, stray "2500" (September 8, 2026)
+
+Frontend only (`public/`), no Apps Script / server / endpoint changes. Full
+write-up: `docs/bonus-month-labelling.md`.
+
+- **Every bonus figure now names its month, in two separated blocks** —
+  `בונוס אוגוסט 2026 — סופי (לתשלום)` (final state only: `זכאי · מדרגה X · Y ₪`
+  or `לא זכאי · המכסה לא הושלמה (441/510)`) and
+  `ספטמבר 2026 — חודש נוכחי (בתהליך)` (actual days-so-far from the 1st, e.g.
+  `102/510 ימי טיפול`, plus a separately labelled `צפי לסוף החודש`
+  projection). A settled month never says `בדרך` / `בתהליך` / `חסרים`.
+- **Hero banners lead with the settled previous month** — overview: winners
+  chips or `אוגוסט 2026: אף בית לא עמד בסף`; house page: that house's final
+  August result. Running-month progress moved to a secondary line that always
+  carries the month name and `בתהליך`. KPI labels name their month too.
+- **Stray "2500" under the manager name removed.** The card rendered the
+  feed's `type` field verbatim; the house type now comes from the hardcoded
+  roster only, and feed manager/name strings pass through
+  `BonusView.safeLabel` (numeric/amount-like values are dropped).
+- **Tier badges** — a tier is shown as achieved only when settled-and-met or
+  locked in. Mid-month the card, hero, tier track, next-tier card and
+  breakdown show `מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12.8` instead
+  of `בדרך למדרגה 3`. The tier track no longer lights stops from
+  `patientsNow`.
+- **One days-so-far figure** — `BonusView.daysSoFar` (daily chart summed to
+  today; else the feed figure capped at elapsed × capacity) is computed once
+  per render in `monthlyStatus` and reused by the KPI, hero, progress bar and
+  house card. Previously the hero used the front-dated feed value (366) while
+  the KPI summed the chart (102). Opening a house tab re-renders the overview
+  so its card shares the detail's figure.
+- New pure module **`public/bonus-view.js`** (labelling / wording / days
+  so far; UMD, Node-testable). `app.js` reads the clock only through
+  `now_()` (`state.now` override for tests); date keys are local, not UTC.
+- Removed dead helpers `monthlyBonusOf`, `totalBonusOf`, `securedTierTarget`,
+  `monthlyTargetOf`.
+- **Tests: 79 → 113.** New `test/bonus-view.test.js` (22) and
+  `test/app-render.test.js` (12 — real `app.js` rendered in a `vm` sandbox
+  with a minimal fake DOM: no backend bonus figure reaches the DOM, settled
+  wording sweep, actual vs projection, KPI = hero = bar = card, tier badge
+  rules, script order / SW shell guards).
+- SW cache bumped `v6` → `v7`; `/bonus-view.js` added to the shell.
+- Docs: `docs/bonus-month-labelling.md` (new), README tests section,
+  `EZONE-ECOSYSTEM-STATUS.md` Managers section.
+
 ### Added — hardened `@claude` workflow: owner-only trigger, minimal permissions
 
 `.github/workflows/claude.yml` — the `@claude` agent on issues and pull
