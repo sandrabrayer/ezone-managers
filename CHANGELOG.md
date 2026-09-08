@@ -3,6 +3,30 @@
 
 ## Unreleased
 
+### Fixed — overview cards use the chart-based days-so-far on first load (September 8, 2026)
+
+Follow-up to PR #19. Frontend only, no backend changes.
+
+- **Overview cards no longer show the capped feed figure** (e.g. Ramot
+  160/510) while the detail tab shows the chart-based number (102/510).
+  `loadOverview` now fetches every house's daily chart **once per month**
+  (in parallel with the finished-month overviews) and caches it in
+  `state.chartsByMonth[YYYY-MM][houseKey]`; the 60-second refresh reuses the
+  cache and makes no chart requests. Older months are dropped from the cache
+  on month change; a failed chart fetch leaves the house uncached so the next
+  refresh retries it (the card falls back to the capped feed figure until
+  then).
+- **Card = detail tab by construction**: `cacheHouseDetail_` writes the same
+  house-detail payload to `state.details` (what the tab renders) and to the
+  per-month chart cache (what the cards read via `daysSoFarOf_`). Opening a
+  tab writes through the same cache.
+- Tests 113 → 117 (`test/app-render.test.js`): overview card = detail tab
+  KPI/bar for the fixture month; a cached chart for another month is never
+  used; `loadOverview` against a stubbed feed makes one chart request per
+  house and zero on refresh, with every card chart-based; a failed chart
+  fetch is retried on the next refresh without refetching the others.
+- SW cache bumped `v7` → `v8`. Docs: `docs/bonus-month-labelling.md`.
+
 ### Fixed — bonus month labelling: settled vs running month, single days-so-far, stray "2500" (September 8, 2026)
 
 Frontend only (`public/`), no Apps Script / server / endpoint changes. Full
