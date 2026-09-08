@@ -39,6 +39,7 @@ function resolveCapacity(h) {
 const HEBREW_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
 const state = {
+  now: null,            // Date override (tests); null → real clock via now_()
   overview: null,
   housesById: {},
   details: {},
@@ -48,6 +49,11 @@ const state = {
 /* ============================================================
    Utilities
    ============================================================ */
+
+/* Clock — the only place `new Date()` is read for month/day logic. */
+function now_() {
+  return state.now instanceof Date ? state.now : new Date();
+}
 
 function fmtCurrency(n) {
   const num = Number(n) || 0;
@@ -70,22 +76,22 @@ function fmtMonthLabel(yearMonth) {
   return `${HEBREW_MONTHS[idx]} ${m[1]}`;
 }
 
-function daysInMonthFromLabel(yearMonth, fallback = new Date()) {
+function daysInMonthFromLabel(yearMonth, fallback = now_()) {
   const m = String(yearMonth || '').match(/^(\d{4})-(\d{1,2})/);
   if (!m) return daysInCurrentMonth(fallback);
   const year = parseInt(m[1], 10);
   const month = parseInt(m[2], 10);
   return new Date(year, month, 0).getDate();
 }
-function daysInCurrentMonth(d = new Date()) {
+function daysInCurrentMonth(d = now_()) {
   return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 }
-function currentMonthLabel(d = new Date()) {
+function currentMonthLabel(d = now_()) {
   return `${HEBREW_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 /* Current month as YYYY-MM (local), for "is this the in-progress month?" checks. */
-function currentMonthYM_(d = new Date()) {
+function currentMonthYM_(d = now_()) {
   const m = d.getMonth() + 1;
   return `${d.getFullYear()}-${m < 10 ? '0' + m : m}`;
 }
@@ -93,55 +99,53 @@ function currentMonthYM_(d = new Date()) {
 /* The month before a YYYY-MM label. */
 function prevMonthYM_(ym) {
   const m = /^(\d{4})-(\d{2})/.exec(String(ym || ''));
-  const d = m ? new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 2, 1) : new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+  const d = m ? new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 2, 1) : new Date(now_().getFullYear(), now_().getMonth() - 1, 1);
   return currentMonthYM_(d);
 }
 
-/* Trophy banner announcing WHO earned WHAT for the month that finished —
- * per manager, computed locally. Quarterly 5,000 is added when earned. */
+/* Overview hero — HEADLINE is the SETTLED previous month (winners, or
+ * "<month>: אף בית לא עמד בסף"). The running month is a SECONDARY line,
+ * always named and marked "בתהליך". All amounts are computed locally. */
 function renderWinnersBanner_(houses) {
   const el = document.getElementById('winnersBanner');
   if (!el) return;
+  const BV = window.BonusView;
   const po = state.prevOverview;
-  if (!po) { el.hidden = true; return; }
-  const label = fmtMonthLabel(po.month);
+  const nowYM = state.overview?.month || currentMonthYM_();
+  const prevYM = po ? po.month : prevMonthYM_(nowYM);
+  const dim = daysInMonthFromLabel(nowYM);
+  const dayOfMonth = Math.min(dim, now_().getDate());
 
   const rows = houses.map(h => {
     const p = prevMonthSettled_(h.key);
     const q = quarterlyLocal_(h.key);
-    const manager = (h.manager || '').trim();
     return {
-      name: HOUSE_LABELS[h.key]?.name || h.name || h.key,
-      manager,
+      name: HOUSE_LABELS[h.key]?.name || BV.safeLabel(h.name) || h.key,
+      manager: BV.safeLabel(h.manager) || HOUSE_LABELS[h.key]?.manager || '',
       amount: p ? p.amount : 0,
       tier: p ? p.tier : 0,
       quarterly: q.earned
     };
   });
-  const winners = rows.filter(r => r.amount > 0 || r.quarterly > 0);
+  const view = BV.winnersBannerView(prevYM, rows, { ym: nowYM, dayOfMonth, daysInMonth: dim });
 
-  if (!winners.length) {
-    el.innerHTML = `<div class="wb-head"><span class="wb-trophy">🏆</span>
-      <span class="wb-title">בונוסים לתשלום — ${label}</span></div>
-      <div class="wb-none">אף בית לא הגיע לזכאות החודש — היעד הבא: ${fmtMonthLabel(currentMonthYM_())}</div>`;
-    el.hidden = false;
-    return;
+  const head = `<div class="wb-head"><span class="wb-trophy">🏆</span>
+      <span class="wb-title">${view.title}</span></div>`;
+  let body;
+  if (!po) {
+    body = `<div class="wb-none">${BV.monthLabel(prevYM)}: הנתונים לא זמינים</div>`;
+  } else if (!view.winners.length) {
+    body = `<div class="wb-none">${view.noneText}</div>`;
+  } else {
+    body = `<div class="wb-chips">${view.winners.map(r => `
+      <div class="wb-chip">
+        <span class="wb-house">${r.name}</span>
+        <span class="wb-manager">${r.manager ? 'מנהל/ת: ' + r.manager : ''}</span>
+        <span class="wb-amt">${fmtCurrency(r.total)}</span>
+        <span class="wb-detail">${r.text}</span>
+      </div>`).join('')}</div>`;
   }
-
-  const chips = winners.map(r => `
-    <div class="wb-chip">
-      <span class="wb-house">${r.name}</span>
-      <span class="wb-manager">${r.manager ? 'מנהל/ת: ' + r.manager : ''}</span>
-      <span class="wb-amt">${fmtCurrency(r.amount + r.quarterly)}</span>
-      <span class="wb-detail">${r.amount > 0 ? `מדרגה ${r.tier}` : ''}${r.quarterly > 0 ? ` · כולל בונוס רבעוני ${fmtCurrency(r.quarterly)}` : ''}</span>
-    </div>`).join('');
-
-  el.innerHTML = `
-    <div class="wb-head">
-      <span class="wb-trophy">🏆</span>
-      <span class="wb-title">בונוסים לתשלום — ${label}</span>
-    </div>
-    <div class="wb-chips">${chips}</div>`;
+  el.innerHTML = `${head}${body}<div class="wb-current">⏳ ${view.currentLine}</div>`;
   el.hidden = false;
 }
 
@@ -172,47 +176,51 @@ function quarterlyLocal_(key) {
   return window.BonusEligibility.quarterlyStatus(win, settled);
 }
 
-/* Settled bonus for a house in LAST month, computed locally with the
- * canonical rules from the fetched prev-month overview. Returns
- * { month, amount, tier, gatePassed, avgDaily, treatmentDays } or null when
- * the prev-month feed is unavailable. */
+/* Settled bonus for a house in LAST month — the canonical settledMonthView
+ * computed locally from the fetched prev-month overview (raw avgDaily /
+ * treatmentDays only). Returns null when that feed is unavailable. */
 function prevMonthSettled_(key) {
   const po = state.prevOverview;
   const ph = po && po.byKey ? po.byKey[key] : null;
   if (!ph) return null;
-  const daysInPrev = daysInMonthFromLabel(po.month);
-  const r = window.BonusEligibility.monthlyBonusAmount(
-    { key, avgDaily: Number(ph.avgDaily) || 0, treatmentDays: Number(ph.treatmentDays) || 0 },
-    resolveThreshold, daysInPrev
+  const v = window.BonusView.settledMonthView(
+    { key, ym: po.month, avgDaily: Number(ph.avgDaily) || 0, treatmentDays: Number(ph.treatmentDays) || 0 },
+    resolveThreshold
   );
-  return {
-    month: po.month,
-    amount: r.amount,
-    tier: r.tier,
-    gatePassed: r.gatePassed,
-    minRequired: r.minRequired,
-    avgDaily: Number(ph.avgDaily) || 0,
-    treatmentDays: Number(ph.treatmentDays) || 0
-  };
+  return { ...v, minRequired: v.gate };
 }
 
-/* Render the "settled previous month + in-progress current month" split
- * beneath the bonus KPI. Reads the prevMonth / currentMonth blocks the Apps
- * Script now sends. Falls back gracefully (renders nothing) if they're absent
- * — e.g. an overview-only payload or an old feed.
- *
- * The current-month projection from the feed (paceAvgDaily / projectedBonus)
- * can over-shoot early in the month when patient stays are dated for the whole
- * month up front: treatmentDaysSoFar then exceeds days-elapsed × patients. To
- * keep the projection honest we recompute the pace as treatmentDaysSoFar capped
- * at (daysElapsed × capacity) is NOT something we can know here, so instead we
- * present the projection as "if the current daily occupancy holds" using the
- * settled avgDaily of the month so far = treatmentDaysSoFar / daysInMonth, which
- * never overshoots. */
+/* Settled previous month for a house — prefers the prev-month overview feed,
+ * falling back to the raw prevMonth block a house-detail payload may carry.
+ * Either way the amount is computed locally; backend bonus fields are never
+ * read. */
+function settledPrevFor_(h) {
+  const fromOverview = prevMonthSettled_(h?.key);
+  if (fromOverview) return fromOverview;
+  const pm = h && h.prevMonth;
+  if (!pm || !pm.month) return null;
+  const dim = daysInMonthFromLabel(pm.month);
+  const td = Number.isFinite(pm.treatmentDays)
+    ? pm.treatmentDays
+    : Math.round((Number(pm.avgDaily) || 0) * dim);
+  const v = window.BonusView.settledMonthView(
+    { key: h.key, ym: pm.month, avgDaily: Number(pm.avgDaily) || 0, treatmentDays: td },
+    resolveThreshold
+  );
+  return { ...v, minRequired: v.gate };
+}
+
+/* Two clearly separated month blocks beneath the bonus KPI:
+ *   "בונוס <קודם> — סופי (לתשלום)"  final state only
+ *   "<נוכחי> — חודש נוכחי (בתהליך)" actual days-so-far + labelled projection
+ * Both are computed locally (BonusView); the feed's own bonus fields are
+ * never rendered. */
 function renderMonthSplit_(panel, bonusEl, h) {
-  const prev = h && h.prevMonth;
-  const cur  = h && h.currentMonth;
-  if (!prev && !cur) return;
+  const BV = window.BonusView;
+  const status = monthlyStatus(h);
+  const prev = settledPrevFor_(h);
+  const cur = status.view;
+  const viewingYM = h?.month || state.overview?.month || currentMonthYM_();
 
   let box = panel.querySelector('[data-month-split]');
   if (!box) {
@@ -223,51 +231,30 @@ function renderMonthSplit_(panel, bonusEl, h) {
   }
 
   const parts = [];
-
   if (prev) {
-    const label = fmtMonthLabel(prev.month);
-    // Recompute the finished month LOCALLY with the canonical rules (tier by
-    // avg occupancy + fixed threshold×30 gate) so the amount never depends on
-    // the backend's bonus formula. The feed supplies the raw data only.
-    const prevDaysInMonth = daysInMonthFromLabel(prev.month);
-    const prevTreatmentDays = Number.isFinite(prev.treatmentDays)
-      ? prev.treatmentDays
-      : Math.round((Number(prev.avgDaily) || 0) * prevDaysInMonth);
-    const settledPrev = window.BonusEligibility.monthlyBonusAmount(
-      { key: h.key, avgDaily: Number(prev.avgDaily) || 0, treatmentDays: prevTreatmentDays },
-      resolveThreshold, prevDaysInMonth
-    );
-    const paid = settledPrev.amount;
-    const gate = settledPrev.minRequired;
-    const quota = settledPrev.gatePassed || paid > 0
-      ? ''
-      : ` · מכסת ימי הטיפול לא הושלמה (${fmtInt(prevTreatmentDays)}/${fmtInt(gate)})`;
     parts.push(
       `<div class="ms-row ms-prev ms-headline">
-         <span class="ms-tag">בונוס לתשלום — ${label} (סופי)</span>
-         <span class="ms-amt ${paid > 0 ? 'gold' : 'zero'}">${fmtCurrency(paid)}</span>
-         <span class="ms-sub">ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום${quota}</span>
+         <span class="ms-tag">${prev.title}</span>
+         <span class="ms-amt ${prev.amount > 0 ? 'gold' : 'zero'}">${fmtCurrency(prev.amount)}</span>
+         <span class="ms-sub">${prev.statusText} · ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום</span>
+       </div>`
+    );
+  } else {
+    parts.push(
+      `<div class="ms-row ms-prev ms-headline">
+         <span class="ms-tag">בונוס ${BV.monthLabel(prevMonthYM_(viewingYM))} — סופי (לתשלום)</span>
+         <span class="ms-amt zero">—</span>
+         <span class="ms-sub">הנתונים לא זמינים</span>
        </div>`
     );
   }
 
   if (cur) {
-    const label = fmtMonthLabel(cur.month);
-    // Honest projection: use avg occupancy over the FULL month so far
-    // (treatmentDaysSoFar / daysInMonth) rather than the feed's pace, which
-    // overshoots when stays are dated for the whole month up front. This
-    // never projects above what occupancy actually supports.
-    const days = Number(cur.daysInMonth) || 30;
-    const avgSoFar = days > 0 ? (Number(cur.treatmentDaysSoFar) || 0) / days : 0;
-    const t = window.BonusEligibility.tierForPatients(
-      { key: h.key, avgDaily: avgSoFar }, () => 0
-    );
-    const proj = (t && t.amount) ? t.amount : 0;
     parts.push(
       `<div class="ms-row ms-cur">
-         <span class="ms-tag">${label} — מתחיל ב-0 ₪</span>
-         <span class="ms-amt zero">0 ₪</span>
-         <span class="ms-sub">תחזית אם הקצב יישמר: ${fmtCurrency(proj)} · ${fmtInt(cur.treatmentDaysSoFar)} ימי טיפול עד כה</span>
+         <span class="ms-tag">${cur.title}</span>
+         <span class="ms-amt ${cur.securedAmount > 0 ? 'gold' : 'zero'}">${fmtCurrency(cur.securedAmount)}</span>
+         <span class="ms-sub">${cur.actualLabel}: <b>${cur.actualText}</b><br>${cur.projectionLabel}: ${cur.projectionText}<br>${cur.badge.text}</span>
        </div>`
     );
   }
@@ -324,12 +311,6 @@ function setStatus(text) {
 function treatmentNightsOf(h) {
   if (h?.bonus && Number.isFinite(h.bonus.treatmentNights)) return h.bonus.treatmentNights;
   return h?.treatmentDays ?? 0;
-}
-
-/* Treatment-days target for display: the fixed house gate —
-   eligibility threshold × 30 (Ramot 510, others 300). */
-function monthlyTargetOf(h) {
-  return window.BonusEligibility.gateTarget(h, resolveThreshold);
 }
 
 function continuityCounts(b) {
@@ -422,13 +403,16 @@ async function loadOverview() {
 }
 
 function renderOverview(data) {
+  const BV = window.BonusView;
   const houses = Array.isArray(data.houses) ? data.houses : [];
   const totals = data.totals || {};
+  const nowYM = data.month || currentMonthYM_();
+  const nowLabel = BV.monthLabel(nowYM);
 
-  document.getElementById('monthTag').textContent = fmtMonthLabel(data.month);
+  document.getElementById('monthTag').textContent = nowLabel;
 
-  // Count houses whose bonus is actually secured (locked this month or a
-  // finished month that earned), not merely occupancy-eligible mid-month.
+  // Houses whose CURRENT-month bonus is already secured (locked in), or a
+  // finished month that earned — never merely occupancy-eligible mid-month.
   const housesAbove = houses.filter(h => {
     const s = monthlyStatus(h);
     return s.state === 'locked' || (s.state === 'finished' && s.amount > 0);
@@ -436,19 +420,20 @@ function renderOverview(data) {
   const totalActive = totals.activePatients ?? houses.reduce((s, h) => s + (h.patientsNow ?? 0), 0);
   // Headline money KPI: the SETTLED bonuses to pay for the month that
   // finished, computed locally per house from last month's raw figures.
-  const prevMonthLabel = state.prevOverview ? fmtMonthLabel(state.prevOverview.month) : '';
+  const prevYM = state.prevOverview ? state.prevOverview.month : prevMonthYM_(nowYM);
   const prevTotal = houses.reduce((s, h) => {
     const p = prevMonthSettled_(h.key);
     return s + (p ? p.amount : 0);
   }, 0);
-  const daysInMonth = daysInMonthFromLabel(data.month);
-  const dayOfMonth = Math.min(daysInMonth, new Date().getDate());
+  const daysInMonth = daysInMonthFromLabel(nowYM);
+  const dayOfMonth = Math.min(daysInMonth, now_().getDate());
 
+  setKpiLabel('kpiHousesAboveLabel', `בתים עם בונוס מובטח — ${nowLabel} (בתהליך)`);
   setKpi('kpiHousesAbove', `${housesAbove}/${houses.length || HOUSE_KEYS.length}`);
   setKpi('kpiActive',      fmtInt(totalActive));
-  const bonusLabelEl = document.getElementById('kpiBonusLabel');
-  if (bonusLabelEl && prevMonthLabel) bonusLabelEl.textContent = `בונוסים לתשלום — ${prevMonthLabel}`;
+  setKpiLabel('kpiBonusLabel', `בונוס ${BV.monthLabel(prevYM)} — סופי (לתשלום)`);
   setKpi('kpiBonus',       state.prevOverview ? fmtCurrency(prevTotal) : '—');
+  setKpiLabel('kpiDaysLabel', `יום בחודש — ${nowLabel}`);
   setKpi('kpiDaysLeft',    `${fmtInt(dayOfMonth)} מתוך ${fmtInt(daysInMonth)}`);
   renderWinnersBanner_(houses);
 
@@ -461,6 +446,11 @@ function renderOverview(data) {
     return;
   }
   houses.forEach(h => grid.appendChild(buildHouseCard(h)));
+}
+
+function setKpiLabel(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
 }
 
 function setKpi(id, value) {
@@ -524,6 +514,33 @@ function monthlyBonusResult(h) {
   return window.BonusEligibility.monthlyBonusAmount(h, resolveThreshold, monthDaysOf(h));
 }
 
+/* SINGLE source of truth for "treatment-days so far this month".
+ * Used by the KPI, the hero banner, the progress bar and the house card so
+ * they can never disagree. Prefers the house's daily chart (summed up to
+ * today), then the feed's treatmentDaysSoFar capped at elapsed × capacity
+ * (front-dated stays inflate the raw figure), then treatmentDays. */
+function daysSoFarOf_(h) {
+  const key = h?.key;
+  const monthYM = h?.month || state.overview?.month || currentMonthYM_();
+  const isCurrent = monthYM === currentMonthYM_();
+  const daysInMonth = daysInMonthFromLabel(monthYM);
+  const elapsed = isCurrent ? Math.max(1, Math.min(daysInMonth, now_().getDate())) : daysInMonth;
+  const detail = key ? state.details[key] : null;
+  const chart = (h && Array.isArray(h.dailyChart) && h.dailyChart.length)
+    ? h.dailyChart
+    : (detail && Array.isArray(detail.dailyChart) && detail.dailyChart.length) ? detail.dailyChart : null;
+  const cur = h?.currentMonth || {};
+  return window.BonusView.daysSoFar({
+    dailyChart: chart,
+    todayKey: window.BonusView.dateKey(now_()),
+    isCurrentMonth: isCurrent,
+    treatmentDaysSoFar: Number.isFinite(cur.treatmentDaysSoFar) ? cur.treatmentDaysSoFar : undefined,
+    treatmentDays: treatmentNightsOf(h),
+    elapsedDays: elapsed,
+    capacity: resolveCapacity(h)
+  });
+}
+
 /**
  * Current-month-aware monthly status. The raw monthlyBonusResult treats the
  * month as finished (uses full-month avgDaily/treatmentDays), which would
@@ -531,18 +548,20 @@ function monthlyBonusResult(h) {
  *
  *   - If the month being viewed is NOT the current calendar month, it's a
  *     finished month → use the settled result as-is (earned/0).
- *   - If it IS the current (unfinished) month:
- *       • LOCKED  — treatment-days SO FAR already met the fixed house gate
- *                   (threshold × 30). The bonus can no longer be lost,
- *                   so show it as guaranteed (gold).
- *       • PROJECTION — not yet locked. Show 0 as the amount (nothing earned
- *                   yet) plus the tier they're heading toward and the gap in
- *                   treatment-days needed to guarantee it.
+ *   - If it IS the current (unfinished) month, build a BonusView
+ *     currentMonthView from the single days-so-far figure:
+ *       • LOCKED  — days SO FAR already met the fixed house gate
+ *                   (threshold × 30) and the average supports a tier.
+ *       • PROJECTION — not yet locked. amount is 0 (nothing earned yet);
+ *                   the projection is carried SEPARATELY (projectedTier /
+ *                   projectedAmount / view.projectionText).
  *
- * Returns: { state:'finished'|'locked'|'projection',
- *            amount,            // shekels to count toward the total (0 if projection)
- *            projectedTier, projectedAmount,
- *            daysSoFar, target, minRequired, gapDays }
+ * The backend's lockedIn / projectedBonus / qualifies flags are ignored.
+ *
+ * Returns: { state:'finished'|'locked'|'projection', amount, projectedTier,
+ *            projectedAmount, securedTier, securedAmount, hasUpside,
+ *            daysSoFar, target, minRequired, gapDays, avgSoFar, view }
+ *   view = BonusView.currentMonthView (null for finished months)
  */
 function monthlyStatus(h) {
   const settled = monthlyBonusResult(h);
@@ -561,72 +580,37 @@ function monthlyStatus(h) {
       daysSoFar: settled.treatmentDays || treatmentNightsOf(h),
       target: settled.target,
       minRequired: settled.minRequired,
-      gapDays: 0
+      gapDays: 0,
+      avgSoFar: Number(h?.avgDaily) || 0,
+      view: null
     };
   }
 
-  // Current month — work from days accrued SO FAR. The feed's raw data
-  // (treatmentDaysSoFar / daysInMonth) is used, but ALL bonus math is computed
-  // locally by lib/bonus-eligibility.js so the frontend never depends on the
-  // backend's bonus rules staying in sync. The backend's lockedIn /
-  // projectedBonus flags are deliberately ignored.
   const cur = h.currentMonth || {};
   const daysInMonth = Number(cur.daysInMonth) || monthDaysOf(h);
-  const daysSoFar = Number.isFinite(cur.treatmentDaysSoFar)
-    ? cur.treatmentDaysSoFar
-    : treatmentNightsOf(h);
-
-  // Highest tier already SECURED: days-so-far met the fixed house gate
-  // (threshold × 30) and occupancy supports the tier. A secured floor can
-  // never be lost.
-  const floor = window.BonusEligibility.securedFloor(h, resolveThreshold, daysInMonth, daysSoFar);
-
-  // Local computation:
-  // avg-so-far = daysSoFar / elapsed days, projected over the full month.
-  const todayDate = new Date().getDate();
-  const elapsed = Math.max(1, Math.min(daysInMonth, todayDate));
-  // Cap the so-far average at the house capacity: front-dated stays can make
-  // daysSoFar/elapsed exceed what beds physically allow, which would project an
-  // impossibly high tier. Capacity is the real ceiling.
-  const capacity = resolveCapacity(h) || Infinity;
-  const avgSoFar = Math.min(capacity, daysSoFar / elapsed);
-  const projTier = window.BonusEligibility.tierForPatients(
-    { key: h.key, avgDaily: avgSoFar }, resolveThreshold
+  const elapsed = Math.max(1, Math.min(daysInMonth, now_().getDate()));
+  const daysSoFar = daysSoFarOf_(h);
+  const view = window.BonusView.currentMonthView(
+    { key: h.key, ym: viewingMonth, daysSoFar, elapsedDays: elapsed, daysInMonth, capacity: resolveCapacity(h) },
+    resolveThreshold
   );
-  const projectedAmount = (projTier && projTier.amount) || 0;
-  const projectedTier = projTier ? projTier.tier : 0;
-
-  // The gate is FIXED per house: eligibility threshold × 30 (Ramot 510,
-  // others 300), regardless of month length or the tier reached.
-  const target = window.BonusEligibility.gateTarget(h, resolveThreshold);
-  const minRequired = target;
-  // Locked once the fixed gate is met and a tier is supported by occupancy.
-  const locked = floor.tier > 0;
-  const amount = floor.tier > 0 ? floor.amount : 0;
-  const hasUpside = projectedTier > floor.tier && projectedAmount > floor.amount;
-  // Gap = treatment-days still needed to reach the fixed gate.
-  const gapDays = Math.max(0, target - daysSoFar);
+  const locked = view.state === 'locked';
 
   return {
-    state: locked ? 'locked' : 'projection',
-    amount,                                  // only count secured/locked bonuses in totals
-    projectedTier,
-    projectedAmount,
-    securedTier: floor.tier,
-    securedAmount: floor.amount,
-    hasUpside,
+    state: view.state,
+    amount: locked ? view.securedAmount : 0,  // only secured bonuses count toward totals
+    projectedTier: view.projectedTier,
+    projectedAmount: view.projectedAmount,
+    securedTier: view.securedTier,
+    securedAmount: view.securedAmount,
+    hasUpside: view.projectedTier > view.securedTier && view.projectedAmount > view.securedAmount,
     daysSoFar,
-    target,
-    minRequired,
-    gapDays
+    target: view.gate,
+    minRequired: view.gate,
+    gapDays: view.gapDays,
+    avgSoFar: view.avgSoFar,
+    view
   };
-}
-
-/** Treatment-days target for the panel's "X / Y days" lines. Under the fixed
-    gate model this is always the house gate: eligibility threshold × 30
-    (Ramot 510, others 300) — the same for every tier and every month. */
-function securedTierTarget(h, status) {
-  return window.BonusEligibility.gateTarget(h, resolveThreshold);
 }
 
 /** Quarterly amount that may be counted in a total: computed LOCALLY —
@@ -638,76 +622,94 @@ function quarterlyEarnedAmount(h) {
   return quarterlyLocal_(h.key).earned;
 }
 
-function monthlyBonusOf(h) {
-  return monthlyBonusResult(h).amount;
-}
-
-function totalBonusOf(h) {
-  const monthly = monthlyStatus(h).amount;       // locked/finished only; 0 if mid-month projection
-  const cont = continuityCounts(h?.bonus || {}).total || 0;
-  const quart = quarterlyEarnedAmount(h);         // 0 until quarter complete & all months met
-  return monthly + cont + quart;
-}
-
 function buildHouseCard(h) {
+  const BV = window.BonusView;
   const key = h.key;
   const labels = HOUSE_LABELS[key] || {};
-  const name = h.name || labels.name || key;
-  const manager = h.manager || labels.manager || '';
-  const type = h.type || labels.type || '';
+  const name = labels.name || BV.safeLabel(h.name) || key;
+  // The feed's manager name takes precedence when it is a real name; a numeric
+  // or empty value falls back to the hardcoded roster.
+  const manager = BV.safeLabel(h.manager) || labels.manager || '';
+  // House type comes from the hardcoded roster ONLY. The feed's `type` field
+  // is never rendered — a backend figure leaking through it is how a stray
+  // "2500" ended up under the manager name.
+  const type = labels.type || '';
   const occ = Number.isFinite(h.patientsNow) ? h.patientsNow : 0;
   const cap = resolveCapacity(h);
   const threshold = resolveThreshold(h);
 
-  const monthlyResult = monthlyBonusResult(h);
-  const status = monthlyStatus(h);
-  const target = window.BonusEligibility.gateTarget(h, resolveThreshold);
-  const tier = { tier: status.projectedTier, amount: status.projectedAmount };
+  const status = monthlyStatus(h);   // days-so-far computed ONCE here
+  const cur = status.view;           // null when the overview month is finished
   const cont = continuityCounts(h.bonus || {});
   const quartly = quarterlyEarnedAmount(h);
-  // Only LOCKED/finished monthly bonuses and an actually-earned quarterly are
-  // counted. A mid-month projection contributes 0 to the displayed total.
-  const totalBonus = status.amount + (cont.total || 0) + (quartly || 0);
-  // Secured = bonus can no longer be lost (locked this month, or a finished
-  // month that earned). Projection = on track but not yet guaranteed.
   const secured = status.state === 'locked' || (status.state === 'finished' && status.amount > 0);
-  const isProjection = status.state === 'projection' && status.projectedAmount > 0;
-  const showGateNote = status.state === 'projection';
+  const isProjection = status.state === 'projection';
+  const nowYM = h.month || state.overview?.month || currentMonthYM_();
+  const nowLabel = BV.monthLabel(nowYM);
 
   const card = document.createElement('div');
   // Green only when secured; projection and not-eligible are both "below".
   card.className = `house-card ${secured ? 'above' : 'below'}${isProjection ? ' projection' : ''}`;
   card.setAttribute('role', 'button');
   card.setAttribute('tabindex', '0');
+  card.setAttribute('data-house-card', key);
 
   const denominator = cap || Math.max(occ, threshold) || 1;
   const fillPct = Math.min(100, (occ / denominator) * 100);
   const bepPct  = Math.min(100, (threshold / denominator) * 100);
 
-  // Current-month figures count from the 1st: show days ACCRUED SO FAR against
-  // the fixed gate, never the front-dated full-month total.
-  const daysSoFar = status.daysSoFar;
-  const gapDays = status.gapDays;
-  const bonusDisplay = totalBonus > 0 ? fmtCurrency(totalBonus) : '0 ₪';
-  const bonusClass = totalBonus > 0 ? '' : 'zero';
-
-  // Settled bonus for the month that finished — the number that actually pays.
+  // ── Block 1: settled previous month (final state only) ──
   const prev = prevMonthSettled_(key);
-  const prevRow = prev
-    ? `<div class="hc-prev-bonus ${prev.amount > 0 ? 'earned' : 'not-earned'}">
-         <span class="hc-prev-label">בונוס ${fmtMonthLabel(prev.month)} (לתשלום)</span>
-         <span class="hc-prev-amt">${fmtCurrency(prev.amount)}</span>
-         <span class="hc-prev-sub">${prev.amount > 0
-           ? `מדרגה ${prev.tier} · ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום`
-           : (prev.gatePassed
-               ? `ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום — מתחת לסף הזכאות`
-               : `${fmtInt(prev.treatmentDays)}/${fmtInt(prev.minRequired)} ימי טיפול — המכסה לא הושלמה`)}</span>
+  const settledBlock = prev
+    ? `<div class="hc-month hc-settled ${prev.amount > 0 ? 'earned' : 'not-earned'}" data-month-block="settled">
+         <div class="hc-month-head">
+           <span class="hc-month-title">${prev.title}</span>
+           <span class="hc-month-amt">${fmtCurrency(prev.amount)}</span>
+         </div>
+         <div class="hc-month-line" data-settled-status>${prev.statusText}</div>
+         <div class="hc-month-line dim">ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום · ${fmtInt(prev.treatmentDays)}/${fmtInt(prev.gate)} ימי טיפול</div>
        </div>`
+    : `<div class="hc-month hc-settled not-earned" data-month-block="settled">
+         <div class="hc-month-head">
+           <span class="hc-month-title">בונוס ${BV.monthLabel(prevMonthYM_(nowYM))} — סופי (לתשלום)</span>
+           <span class="hc-month-amt">—</span>
+         </div>
+         <div class="hc-month-line dim">הנתונים לא זמינים</div>
+       </div>`;
+
+  // ── Block 2: running month — ACTUAL days-so-far, then a labelled projection ──
+  const extras = [];
+  if (cont.total > 0) extras.push(`הפניות ${fmtCurrency(cont.total)}`);
+  if (quartly > 0) extras.push(`רבעוני ${fmtCurrency(quartly)}`);
+  const currentBlock = cur
+    ? `<div class="hc-month hc-current ${cur.state}" data-month-block="current">
+         <div class="hc-month-head">
+           <span class="hc-month-title">${cur.title}</span>
+           <span class="hc-month-amt ${cur.securedAmount > 0 ? 'gold' : 'zero'}">${fmtCurrency(cur.securedAmount)}</span>
+         </div>
+         <div class="hc-month-line" data-current-actual>${cur.actualLabel}: <b>${cur.actualText}</b></div>
+         <div class="hc-month-line" data-current-projection>${cur.projectionLabel}: ${cur.projectionText}</div>
+         <div class="hc-month-line hc-tier-line" data-tier-line>${cur.badge.text}</div>
+         ${extras.length ? `<div class="hc-month-line dim">${extras.join(' · ')}</div>` : ''}
+       </div>`
+    : `<div class="hc-month hc-current finished" data-month-block="current">
+         <div class="hc-month-head">
+           <span class="hc-month-title">בונוס ${nowLabel} — סופי (לתשלום)</span>
+           <span class="hc-month-amt ${status.amount > 0 ? 'gold' : 'zero'}">${fmtCurrency(status.amount)}</span>
+         </div>
+         <div class="hc-month-line">${status.amount > 0 ? `זכאי · מדרגה ${status.securedTier} · ${fmtCurrency(status.amount)}` : 'לא זכאי'}</div>
+       </div>`;
+
+  // Tier pill ONLY for a secured tier (locked this month / finished & met).
+  const tierBadge = secured && status.securedTier > 0
+    ? `<span class="tier-pill t${status.securedTier}">מדרגה ${status.securedTier} ✓</span>`
     : '';
 
-  const tierBadge = tier.tier > 0
-    ? `<span class="tier-pill t${tier.tier}">מדרגה ${tier.tier}</span>`
-    : '';
+  const headBadge = secured
+    ? `<div class="qualify-badge">✓ מובטח · ${nowLabel}</div>`
+    : isProjection
+      ? `<div class="progress-badge">⏳ ${nowLabel} בתהליך</div>`
+      : `<div class="warn-badge">⚠ לא זכאי · ${nowLabel}</div>`;
 
   card.innerHTML = `
     ${secured ? '<div class="trophy" aria-label="זכאי לבונוס">🏆</div>' : ''}
@@ -718,18 +720,15 @@ function buildHouseCard(h) {
         <div class="hc-manager">מנהל/ת: ${manager}</div>
         ${type ? `<div class="hc-type">${type}</div>` : ''}
       </div>
-      ${secured
-        ? `<div class="qualify-badge">✓ זכאי לבונוס</div>`
-        : isProjection
-          ? `<div class="progress-badge">⏳ בתהליך</div>`
-          : `<div class="warn-badge">⚠ לא זכאי</div>`}
+      ${headBadge}
     </div>
 
-    ${prevRow}
+    ${settledBlock}
+    ${currentBlock}
 
     <div class="hc-stats">
       <div class="hc-occ">${occ}<small> / ${cap || '—'}</small></div>
-      <div class="hc-bep">זכאות לבונוס: <b>${threshold || '—'}</b></div>
+      <div class="hc-bep">זכאות לבונוס: <b>${threshold || '—'}</b> מטופלים/יום בממוצע</div>
     </div>
 
     <div class="bep-bar">
@@ -738,20 +737,10 @@ function buildHouseCard(h) {
     </div>
 
     <div class="hc-nights">
-      <span class="hc-nights-label">ימי טיפול מתחילת החודש</span>
-      <span class="hc-nights-value">${fmtInt(daysSoFar)} / ${fmtInt(target)}</span>
+      <span class="hc-nights-label">ימי טיפול מתחילת החודש (${nowLabel})</span>
+      <span class="hc-nights-value" data-card-days>${fmtInt(status.daysSoFar)} / ${fmtInt(status.target)}</span>
       ${tierBadge}
     </div>
-
-    <div class="hc-bonus">
-      <div class="hc-bonus-label">${status.state === 'projection' ? 'החודש הנוכחי (בתהליך)' : status.state === 'locked' ? 'החודש הנוכחי ✓ מובטח' : 'החודש הנוכחי'}</div>
-      <div class="hc-bonus-value ${bonusClass}">${bonusDisplay}</div>
-    </div>
-    ${status.state === 'projection'
-      ? (status.projectedAmount > 0
-          ? `<div class="hc-bonus-fallback-note">בדרך למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)}) · ${fmtInt(daysSoFar)}/${fmtInt(status.target)} ימי טיפול · חסרים עוד ${fmtInt(gapDays)} עד סוף החודש</div>`
-          : `<div class="hc-bonus-fallback-note">עדיין לא בטווח זכאות · ${fmtInt(daysSoFar)} ימי טיפול מתחילת החודש</div>`)
-      : ''}
   `;
 
   const go = () => activateTab(key);
@@ -788,6 +777,7 @@ async function loadHouseDetail(key) {
     const data = await fetchJson(`/api/sheets?action=managersHouse&house=${encodeURIComponent(key)}`);
     state.details[key] = data;
     renderHouseDetail(key, data);
+    if (state.overview) renderOverview(state.overview); // card now shares the detail's days-so-far
   } catch (err) {
     console.error(err);
     showHouseError(panel, err);
@@ -808,35 +798,33 @@ function showHouseError(panel, err) {
 function renderHouseDetail(key, data) {
   const panel = document.getElementById(`panel-${key}`);
   if (!panel) return;
+  const BV = window.BonusView;
 
   const o = state.housesById[key] || {};
   const merged = { ...o, ...data, key, bonus: { ...(o.bonus || {}), ...(data.bonus || {}) } };
   const labels = HOUSE_LABELS[key] || {};
-  const name = data.name || o.name || labels.name || key;
-  const manager = data.manager || o.manager || labels.manager || '';
+  const name = labels.name || BV.safeLabel(data.name) || BV.safeLabel(o.name) || key;
+  const manager = BV.safeLabel(data.manager) || BV.safeLabel(o.manager) || labels.manager || '';
   const threshold = resolveThreshold(merged);
   const occ = Number.isFinite(merged.patientsNow) ? merged.patientsNow : 0;
 
   const monthlyResult = monthlyBonusResult(merged);
+  // ONE status object per render: its daysSoFar is THE days-so-far figure
+  // for the hero, the KPI, the progress bar and the breakdown below.
   const status = monthlyStatus(merged);
-  const viewingCurrentMonth = (data.month || merged.month || state.overview?.month || '') === currentMonthYM_();
-  // Anchor the target to the SECURED tier (falls back to settled target).
-  const target = securedTierTarget(merged, status);
-  // For the current month every "X / Y days" line must use the days-so-far
-  // basis (status.daysSoFar), not treatmentNightsOf's full-month front-dated
-  // count. Finished months keep the settled treatment-nights total.
-  const nights = viewingCurrentMonth ? status.daysSoFar : treatmentNightsOf(merged);
+  const cur = status.view;              // null for a finished month
+  const viewingYM = data.month || merged.month || state.overview?.month || currentMonthYM_();
+  const viewingLabel = BV.monthLabel(viewingYM);
+  const target = status.target;
+  const nights = status.daysSoFar;
   const tier = { tier: status.projectedTier, amount: status.projectedAmount };
   const eligible = status.projectedAmount > 0;
-  // "paid" now means actually secured: a finished month that earned, or a
+  // "paid" means actually secured: a finished month that earned, or a
   // current month already locked in (days-so-far >= the fixed gate).
   const paid = (status.state === 'finished' && status.amount > 0) || status.state === 'locked';
-  const isProjection = status.state === 'projection';
   const above = eligible;
 
-  // Compatibility config for the detail-page visualizations. Under Model A the
-  // payable amount is the single matched patient-count tier; `base` carries
-  // that amount so downstream renders show the correct figure. Tier patient
+  // Compatibility config for the detail-page visualizations. Tier patient
   // counts come from the canonical per-house table. Quarterly is unchanged.
   const houseCfg = (window.BonusEligibility.HOUSE_BONUS || {})[key] || null;
   const tierTable = (houseCfg && Array.isArray(houseCfg.tiers)) ? houseCfg.tiers.slice() : [];
@@ -850,111 +838,72 @@ function renderHouseDetail(key, data) {
   const entries = activity.filter(a => a.kind === 'entry');
   const exits   = activity.filter(a => a.kind === 'exit');
 
-  const totalDaysMonth = daysInMonthFromLabel(data.month);
-  const today = new Date();
+  const totalDaysMonth = daysInMonthFromLabel(viewingYM);
+  const today = now_();
+  // Projection (end-of-month days if the current average holds) — a SEPARATE
+  // figure from the actual days-so-far, always labelled "צפי לסוף החודש".
+  const projection = cur ? cur.projectedDays : nights;
 
-  // Treatment-days SO FAR — count only days that have actually elapsed this
-  // month. The raw `nights` (treatmentDays) counts every day a patient's stay
-  // covers, including days still in the future when stays are dated for the
-  // whole month up front. Summing the daily chart up to today gives the honest
-  // accrued-so-far figure (e.g. 18 patients × 3 elapsed days = 54, not 540).
-  const isCurrentMonth = (data.month || '') === currentMonthYM_();
-  const elapsedDays = isCurrentMonth
-    ? Math.max(1, Math.min(totalDaysMonth, today.getDate()))
-    : totalDaysMonth;
-  const todayKey0 = today.toISOString().slice(0, 10);
-  let nightsSoFar = nights;
-  if (Array.isArray(data.dailyChart) && data.dailyChart.length) {
-    nightsSoFar = data.dailyChart.reduce((sum, p) => {
-      const d = p && p.date ? String(p.date) : '';
-      if (isCurrentMonth && d > todayKey0) return sum; // skip future days
-      return sum + (Number(p && p.count) || 0);
-    }, 0);
-  }
-
-  // Pace = avg daily occupancy over the days elapsed so far.
-  const dailyAvg = elapsedDays > 0 ? nightsSoFar / elapsedDays : 0;
-  // Projection: if the current daily occupancy holds for the rest of the
-  // month, the month ends at ~ dailyAvg × totalDaysMonth.
-  const projection = Math.round(dailyAvg * totalDaysMonth);
-
-  // Status banner
+  // ── Hero banner: headline = SETTLED previous month; running month on a
+  //    secondary line, always named and marked "בתהליך". ──
+  const prev = settledPrevFor_(merged);
+  const hero = BV.houseHeroView({
+    name, manager, settled: prev, prevYm: prevMonthYM_(viewingYM), current: cur
+  });
   const banner = panel.querySelector('[data-status-banner]');
-  const isLocked   = status.state === 'locked' || (status.state === 'finished' && status.amount > 0);
-  const isProject  = status.state === 'projection';
-  banner.className = 'status-banner ' + (isLocked ? 'above' : 'below');
-  if (isLocked) {
-    // Guaranteed (finished-and-earned, or current month already locked in).
-    // Title shows the SECURED tier (the guaranteed floor); the upside toward a
-    // higher projected tier is appended when there is one.
-    const lockNote = status.state === 'locked' ? ' (מובטח)' : '';
-    const securedTierLabel = status.securedTier || status.projectedTier;
-    const upsideNote = status.hasUpside
-      ? ` · בדרך למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)})`
-      : '';
-    banner.innerHTML = `<div class="big-emoji">🏆</div>
-       <div>
-         <div class="sb-title">${name} — זכאי לבונוס מדרגה ${securedTierLabel}${lockNote}</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · ${fmtInt(status.daysSoFar)} ימי טיפול · ${fmtCurrency(status.amount)}${upsideNote}</div>
-       </div>`;
-  } else if (isProject && status.projectedAmount > 0) {
-    // On track for a tier but not yet secured.
-    banner.innerHTML = `<div class="big-emoji">⏳</div>
-       <div>
-         <div class="sb-title">${name} — בדרך למדרגה ${status.projectedTier} (עדיין לא הושג)</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · ${fmtInt(status.daysSoFar)}/${fmtInt(status.target)} ימי טיפול · חסרים ${fmtInt(status.gapDays)} למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)})</div>
-       </div>`;
-  } else {
-    banner.innerHTML = `<div class="big-emoji">⚠️</div>
-       <div>
-         <div class="sb-title">${name} — לא זכאי לבונוס החודש</div>
-         <div class="sb-sub">מנהל/ת: ${manager} · ${fmtInt(occ)} מטופלים · נדרשים ${fmtInt(threshold)} לזכאות</div>
-       </div>`;
-  }
+  banner.className = 'status-banner ' + hero.tone;
+  banner.innerHTML = `<div class="big-emoji">${hero.emoji}</div>
+     <div>
+       <div class="sb-name">${name}</div>
+       <div class="sb-title" data-hero-headline>${hero.headline}</div>
+       <div class="sb-sub">${hero.sub}</div>
+       ${cur ? `<div class="sb-current" data-hero-current>⏳ ${hero.secondary}</div>` : ''}
+     </div>`;
 
-  // KPI stats
+  // KPI stats — every label names its month.
   setStat(panel, 'entries', fmtInt(entries.length || data.entriesMonth || 0));
   setStat(panel, 'exits',   fmtInt(exits.length || data.exitsMonth || 0));
-  setStat(panel, 'treatmentDays', fmtInt(nightsSoFar));
+  setStatLabel(panel, 'treatmentDays', cur ? `ימי טיפול עד כה — ${viewingLabel} (בתהליך)` : `ימי טיפול — ${viewingLabel}`);
+  setStat(panel, 'treatmentDays', fmtInt(nights));
 
   const cont = continuityCounts(merged.bonus || {});
   const quartly = quarterlyEarnedAmount(merged);
   // Only secured monthly (locked/finished) + actually-earned quarterly.
   const totalBonus = status.amount + (cont.total || 0) + (quartly || 0);
-  const showGateNote = isProjection;
 
   const bonusEl = panel.querySelector('[data-stat="bonus"]');
+  setStatLabel(panel, 'bonus', cur ? `מובטח עד כה — ${viewingLabel} (בתהליך)` : `בונוס ${viewingLabel} — סופי`);
   bonusEl.classList.remove('is-skeleton');
   bonusEl.textContent = fmtCurrency(totalBonus);
   bonusEl.classList.toggle('gold', totalBonus > 0);
 
-  // Show a caveat next to the bonus KPI when the house is eligible by patient
-  // count but the monthly amount is withheld because treatment-days are below
-  // the fixed gate (threshold × 30).
+  // Caveat next to the running-month bonus KPI: the projection (labelled) and
+  // the next-tier line — never a tier presented as achieved.
   let fallbackEl = panel.querySelector('[data-bonus-fallback-note]');
-  if (showGateNote) {
+  if (cur && status.state === 'projection') {
     if (!fallbackEl) {
       fallbackEl = document.createElement('div');
       fallbackEl.setAttribute('data-bonus-fallback-note', '');
       fallbackEl.className = 'bonus-fallback-note';
       bonusEl.parentNode.appendChild(fallbackEl);
     }
-    fallbackEl.textContent = status.projectedAmount > 0
-      ? `בדרך למדרגה ${status.projectedTier} (${fmtCurrency(status.projectedAmount)}) · ${fmtInt(status.daysSoFar)}/${fmtInt(status.target)} ימי טיפול · חסרים ${fmtInt(status.gapDays)}`
-      : `עדיין לא בטווח זכאות · ${fmtInt(status.daysSoFar)} ימי טיפול עד כה`;
+    fallbackEl.textContent = `${cur.projectionLabel}: ${cur.projectionText} · ${cur.badge.text}`;
   } else if (fallbackEl) {
     fallbackEl.remove();
   }
 
-  // ── Settled previous month + in-progress current month ────────────────
-  // The feed now sends prevMonth (final) and currentMonth (starts at 0 + a
-  // projection). We show both so the headline reads as "for <prev month>,
-  // settled" and the current month is clearly in-progress, not final.
+  // ── Settled previous month + in-progress current month (two blocks) ──
   renderMonthSplit_(panel, bonusEl, merged);
 
-  // Target bar (treatment-days so far vs target)
-  const denom = Math.max(nightsSoFar, target, projection, 1);
-  const fillPct = Math.min(100, (nightsSoFar / denom) * 100);
+  // Target bar (treatment-days so far vs the fixed gate)
+  const chartTitle = panel.querySelector('[data-chart-title]');
+  if (chartTitle) {
+    chartTitle.textContent = cur
+      ? `ימי טיפול — ${viewingLabel} (בתהליך, נספר מה-1 בחודש)`
+      : `ימי טיפול — ${viewingLabel} (סופי)`;
+  }
+  const denom = Math.max(nights, target, projection, 1);
+  const fillPct = Math.min(100, (nights / denom) * 100);
   const bepPct  = Math.min(100, (target / denom) * 100);
   const bar = panel.querySelector('[data-bep-bar]');
   bar.classList.toggle('above', paid);
@@ -962,7 +911,7 @@ function renderHouseDetail(key, data) {
   const marker = panel.querySelector('[data-bep-marker]');
   marker.style.right = bepPct + '%';
   panel.querySelector('[data-bep-marker-label]').textContent = `יעד ${fmtInt(target)}`;
-  setStat(panel, 'daysSoFar',    fmtInt(nightsSoFar));
+  setStat(panel, 'daysSoFar',    fmtInt(nights));
   setStat(panel, 'daysTarget',   fmtInt(target));
   setStat(panel, 'daysProjection', fmtInt(projection));
 
@@ -971,27 +920,32 @@ function renderHouseDetail(key, data) {
   // "Missing for next tier" card (right after status banner)
   const daysLeftInMonth = Math.max(0, totalDaysMonth - today.getDate());
   const chartData = Array.isArray(data.dailyChart) ? data.dailyChart : [];
-  const todayKey2 = today.toISOString().slice(0, 10);
+  const todayKey2 = BV.dateKey(today);
   const pastCounts = chartData
     .filter(p => (p.date || '') <= todayKey2)
     .map(p => Number(p.count) || 0);
   const recentDailyAvg = pastCounts.length
     ? pastCounts.slice(-5).reduce((s, n) => s + n, 0) / Math.min(5, pastCounts.length)
     : (Number(merged.patientsNow) || 0);
-  renderNextTierCard(panel, { cfg, target, nights, tier: tier.tier, occ, monthlyResult, status }, daysLeftInMonth, recentDailyAvg, merged.patientsNow);
+  renderNextTierCard(panel, { key, cfg, target, nights, tier: tier.tier, occ, monthlyResult, status }, daysLeftInMonth, recentDailyAvg, merged.patientsNow);
 
   // Tier progress visualization
-  renderTierTrack(panel, { cfg, target, nights, tier: tier.tier, occ, monthlyResult });
+  renderTierTrack(panel, { key, cfg, target, nights, tier: tier.tier, occ, monthlyResult, status });
 
   // Quarterly progress
   renderQuarterlyTrack(panel, merged, cfg, target);
 
-  // Bonus breakdown (educational) — tier amounts use the new 80%-gate / floor rule
+  // Bonus breakdown (educational)
   renderBreakdown(panel, merged, { above, tier: tier.tier, cfg, target, nights, occ, cont, quartly, totalBonus, monthlyResult, status });
 
   // Logs
   renderEntries(panel.querySelector('[data-log="entries"]'), entries);
   renderExits(panel.querySelector('[data-log="exits"]'), exits);
+}
+
+function setStatLabel(panel, name, text) {
+  const el = panel.querySelector(`[data-stat-label="${name}"]`);
+  if (el) el.textContent = text;
 }
 
 function setStat(panel, name, value) {
@@ -1011,8 +965,8 @@ function renderDailySpark(panel, chart, bep, capacity) {
   const maxV = capacity > 0
     ? capacity
     : Math.max(bep || 0, ...chart.map(p => p.count || 0), 1);
-  const today = new Date();
-  const todayKey = today.toISOString().slice(0, 10);
+  const today = now_();
+  const todayKey = window.BonusView.dateKey(today);
   const bepPct = Math.min(100, (bep / maxV) * 100);
 
   host.innerHTML = `
@@ -1109,8 +1063,12 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
   // finished-and-earned). Mid-month projection must not say "paid".
   if (secured && st.amount > 0) {
     statusEl.textContent = '🏆 הבונוס החודשי מובטח החודש!';
-  } else if (st.state === 'projection' && st.projectedAmount > 0) {
-    statusEl.textContent = `⏳ בדרך למדרגה ${st.projectedTier} — ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול · חסרים ${fmtInt(st.gapDays)}`;
+  } else if (st.state === 'projection' && st.view) {
+    // Running month: name the month, the ACTUAL days so far and the NEXT tier.
+    const v = st.view;
+    statusEl.textContent = `⏳ ${v.title} · ${v.actualText} · ${v.badge.text}`;
+  } else if (st.state === 'projection') {
+    statusEl.textContent = `⏳ בתהליך · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`;
   } else {
     statusEl.textContent = `⚠️ עדיין לא זכאי · נדרשים ${fmtInt((next && next.patients) || 0)} מטופלים`;
   }
@@ -1134,17 +1092,17 @@ function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patient
 function renderTierTrack(panel, ctx) {
   const track = panel.querySelector('[data-tier-track]');
   if (!track) return;
+  const BV = window.BonusView;
 
   // Patient-count tiers ascending: [{patients, amount}].
   const tiersAsc = (ctx.cfg.tierTable || []).slice().sort((a, b) => a.patients - b.patients);
-  const occ = Number.isFinite(ctx.occ) ? ctx.occ : 0;
   const p1 = tiersAsc[0]?.patients ?? 0;
   const p2 = tiersAsc[1]?.patients ?? p1;
   const p3 = tiersAsc[2]?.patients ?? p2;
 
   const STOP_POS = { 1: 20, 2: 50, 3: 80 };
 
-  // Map current patient count → track %.
+  // Map an average daily occupancy → track %.
   const fillFor = p => {
     if (p <= 0 || p1 <= 0) return 0;
     if (p <= p1) return (p / p1) * STOP_POS[1];
@@ -1153,20 +1111,27 @@ function renderTierTrack(panel, ctx) {
     return 100;
   };
 
-  // Which tier the current occupancy has reached (by count).
-  const reachedTier = occ >= p3 ? 3 : occ >= p2 ? 2 : occ >= p1 ? 1 : 0;
+  // A tier is "reached" ONLY when it is secured: locked in this month, or a
+  // finished month that earned it. Mid-month occupancy alone never lights a
+  // tier — it only moves the fill and the "next tier" line.
+  const st = ctx.status || {};
+  const secured = st.state === 'locked' || (st.state === 'finished' && st.amount > 0);
+  const securedTier = secured ? (st.securedTier || 0) : 0;
+  const avg = st.view ? st.view.avgSoFar : (Number(st.avgSoFar) || (Number.isFinite(ctx.occ) ? ctx.occ : 0));
+  const badge = st.view ? st.view.badge : BV.tierBadgeView({ key: ctx.key, achievedTier: securedTier, achievedAmount: st.amount, avgDaily: avg });
+  const nextIdx = badge.achieved ? 0 : (badge.nextTier || 0);
 
   const stops = track.querySelectorAll('[data-tier-stop]');
   stops.forEach(stop => {
     const idx = parseInt(stop.getAttribute('data-tier-stop'), 10);
     stop.style.left = STOP_POS[idx] + '%';
-    stop.classList.toggle('reached', reachedTier >= idx);
-    stop.classList.toggle('active',  reachedTier === idx);
+    stop.classList.toggle('reached', securedTier >= idx);
+    stop.classList.toggle('active',  securedTier === idx || (securedTier === 0 && nextIdx === idx));
   });
 
-  panel.querySelector('[data-ts-nights="1"]').textContent = `${fmtInt(p1)} מטופלים`;
-  panel.querySelector('[data-ts-nights="2"]').textContent = `${fmtInt(p2)} מטופלים`;
-  panel.querySelector('[data-ts-nights="3"]').textContent = `${fmtInt(p3)} מטופלים`;
+  panel.querySelector('[data-ts-nights="1"]').textContent = `${fmtInt(p1)} מטופלים/יום`;
+  panel.querySelector('[data-ts-nights="2"]').textContent = `${fmtInt(p2)} מטופלים/יום`;
+  panel.querySelector('[data-ts-nights="3"]').textContent = `${fmtInt(p3)} מטופלים/יום`;
 
   const ta1 = panel.querySelector('[data-ts-amount="1"]');
   const ta2 = panel.querySelector('[data-ts-amount="2"]');
@@ -1175,22 +1140,18 @@ function renderTierTrack(panel, ctx) {
   if (ta2) ta2.textContent = fmtCurrency(tiersAsc[1]?.amount || 0);
   if (ta3) ta3.textContent = fmtCurrency(tiersAsc[2]?.amount || 0);
 
-  panel.querySelector('[data-tier-fill]').style.width = fillFor(occ) + '%';
+  panel.querySelector('[data-tier-fill]').style.width = fillFor(avg) + '%';
 
   const cur = panel.querySelector('[data-tier-current]');
-  if (reachedTier === 0) {
-    const need = Math.max(0, p1 - occ);
-    cur.className = 'tier-current zero';
-    cur.textContent = `${fmtInt(occ)} מטופלים · חסרים ${fmtInt(need)} למדרגה הראשונה (${fmtInt(p1)})`;
-  } else if (reachedTier === 3) {
+  if (securedTier >= 3) {
     cur.className = 'tier-current gold max';
-    cur.textContent = `${fmtInt(occ)} מטופלים · מדרגה 3 המקסימלית הושגה!`;
-  } else {
-    const nextP = reachedTier === 1 ? p2 : p3;
-    const nextAmt = reachedTier === 1 ? (tiersAsc[1]?.amount || 0) : (tiersAsc[2]?.amount || 0);
-    const need = Math.max(0, nextP - occ);
+    cur.textContent = `מדרגה 3 המקסימלית מובטחת ✓ · ממוצע ${fmtNum1_(avg)} מטופלים/יום`;
+  } else if (securedTier > 0) {
     cur.className = 'tier-current gold';
-    cur.textContent = `${fmtInt(occ)} מטופלים · חסרים ${fmtInt(need)} למדרגה ${reachedTier + 1} (${fmtCurrency(nextAmt)})`;
+    cur.textContent = `מדרגה ${securedTier} מובטחת ✓ · ${BV.tierBadgeView({ key: ctx.key, avgDaily: avg }).text}`;
+  } else {
+    cur.className = 'tier-current zero';
+    cur.textContent = badge.text;
   }
 }
 
@@ -1264,8 +1225,10 @@ function renderBreakdown(panel, data, ctx) {
     } else if (securedHere) {
       formula = `${fmtCurrency(row.amount)} ✓ מובטח · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`;
     } else {
-      // current month, on track for this tier but not yet locked
-      formula = `בדרך לכאן — ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול · חסרים ${fmtInt(st.gapDays)}`;
+      // current month, projected toward this tier but not yet locked
+      formula = st.view
+        ? `${st.view.label} בתהליך · ${st.view.actualLabel}: ${st.view.actualText} · ${st.view.projectionLabel}: ${st.view.projectionText}`
+        : `בתהליך · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`;
     }
     return {
       label: `בונוס מדרגה ${tierNum} (${fmtInt(row.patients)} מטופלים)`,
@@ -1312,7 +1275,7 @@ function renderBreakdown(panel, data, ctx) {
 
   // The monthly bonus is the SINGLE-best tier reached — dim lower tier rows
   // when a higher tier wins so the visual matches "highest reached" semantics.
-  const effectiveTier = mr.eligible ? mr.tier : 0;
+  const effectiveTier = secured ? (st.securedTier || 0) : 0;
   items.forEach((item, idx) => {
     const li = document.createElement('li');
     if (item.zero) li.classList.add('zero');

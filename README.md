@@ -30,7 +30,9 @@ Required env vars (fail-closed — the server refuses to start without them):
 | `SESSION_DAYS` | Optional, token lifetime in days (default 7) |
 
 Server-only `lib/auth.js` is never served over HTTP; only
-`/lib/bonus-eligibility.js` is exposed to the browser.
+`/lib/bonus-eligibility.js` is exposed to the browser. The bonus VIEW module
+(`public/bonus-view.js` — month labelling, wording, days-so-far) lives in
+`public/` and is served by the static mount; see `docs/bonus-month-labelling.md`.
 
 ## Local
 
@@ -53,8 +55,12 @@ server auth integration — 401 gates, login flow, rate limiting, forged/expired
 tokens, `lib/auth.js` never served (`test/server-auth.test.js`) — the
 `/api/sheets` proxy against a mocked upstream (`test/sheets-proxy.test.js`),
 the canonical bonus rules — tiers, fixed threshold×30 gate, secured floor,
-quarterly 5,000 ₪ (`test/bonus-eligibility.test.js`) — and static UI guards
-(`test/ui-guards.test.js`).
+quarterly 5,000 ₪ (`test/bonus-eligibility.test.js`) — the bonus VIEW rules
+(month labelling, settled vs running wording, projection vs actual, tier
+badge, single days-so-far: `test/bonus-view.test.js`), the real `app.js`
+render paths in a `vm` sandbox with a minimal fake DOM (`test/app-render.test.js`
+— no backend bonus figure reaches the DOM, KPI = hero = bar = card), and
+static UI guards (`test/ui-guards.test.js`).
 
 **Tests never call the live Apps Script backend**: all upstream HTTP is mocked
 in-process and all secrets are dummy values set inside the test files.

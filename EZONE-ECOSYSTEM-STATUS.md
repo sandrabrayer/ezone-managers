@@ -1,4 +1,4 @@
-# E-ZONE Ecosystem Status — updated July 4, 2026 (Managers house roster refreshed September 5, 2026)
+# E-ZONE Ecosystem Status — updated July 4, 2026 (Managers house roster refreshed September 5, 2026; Managers bonus month labelling September 8, 2026)
 
 Add this file to the knowledge of EVERY E-Zone app Project (all six), replacing
 the July 3 version, so any future chat/session starts from the true state.
@@ -76,6 +76,32 @@ outpatient was switched dashboard-hKjf9 → volta, orphaning a day of work).
   (text-mute 0.72, small fonts 12–13px). Tests: 36 via `node --test`.
 - Efroni house-id checked: data-entry app and backend both use 'arfoni'
   consistently — no mismatch.
+
+## Managers: bonus month labelling (September 8, 2026)
+
+- **Settled vs running month are now two labelled blocks everywhere**
+  (`בונוס אוגוסט 2026 — סופי (לתשלום)` / `ספטמבר 2026 — חודש נוכחי (בתהליך)`).
+  A settled month shows a final state only (`זכאי · מדרגה X · Y ₪` or
+  `לא זכאי · המכסה לא הושלמה (441/510)`) — never `בדרך`/`בתהליך`/`חסרים`.
+  Hero banners lead with the settled month; running-month progress is a
+  secondary line with the month name and `בתהליך`.
+- **Running month = ACTUAL days-so-far from the 1st + a separately labelled
+  `צפי לסוף החודש` projection.** A tier is shown as achieved only when
+  settled-and-met or locked in; otherwise `מדרגה הבאה: N (P מטופלים/יום) ·
+  ממוצע נוכחי X`.
+- **Single days-so-far figure**: `public/bonus-view.js` → `daysSoFar` (daily
+  chart summed to today; else the feed's `treatmentDaysSoFar` capped at
+  elapsed × capacity) feeds the KPI, hero, progress bar and house card. The
+  feed's raw `treatmentDaysSoFar` is front-dated (366 vs 102 on 8 Sep) and is
+  no longer shown as-is.
+- **Stray "2500" under the manager name**: the card rendered the feed's
+  `type` field verbatim. House type now comes from `HOUSE_LABELS` only; feed
+  manager/name strings pass through `BonusView.safeLabel`. Tests assert no
+  backend bonus field reaches the DOM (`test/app-render.test.js`).
+- New module `public/bonus-view.js` (labelling only; math stays in
+  `lib/bonus-eligibility.js`). Tests: 113 via `node --test`. SW cache v7.
+  Details: `docs/bonus-month-labelling.md`. Still pending: strip the dead
+  bonus code from the live dashboard Apps Script (unchanged by this work).
 
 ## Managers: house roster (5 houses, current as of September 5, 2026)
 

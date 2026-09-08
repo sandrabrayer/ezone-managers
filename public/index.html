@@ -54,7 +54,7 @@
     <section class="panel is-active" id="panel-overview" role="tabpanel">
       <div class="kpis" id="networkKpis">
         <div class="kpi kpi-green">
-          <div class="kpi-label">בתים מעל זכאות לבונוס</div>
+          <div class="kpi-label" id="kpiHousesAboveLabel">בתים עם בונוס מובטח (חודש נוכחי)</div>
           <div class="kpi-value is-skeleton" id="kpiHousesAbove">&nbsp;</div>
         </div>
         <div class="kpi kpi-pink">
@@ -62,11 +62,11 @@
           <div class="kpi-value is-skeleton" id="kpiActive">&nbsp;</div>
         </div>
         <div class="kpi kpi-gold">
-          <div class="kpi-label" id="kpiBonusLabel">בונוסים לתשלום (חודש קודם)</div>
+          <div class="kpi-label" id="kpiBonusLabel">בונוס חודש קודם — סופי (לתשלום)</div>
           <div class="kpi-value gold is-skeleton" id="kpiBonus">&nbsp;</div>
         </div>
         <div class="kpi kpi-orange">
-          <div class="kpi-label">יום בחודש</div>
+          <div class="kpi-label" id="kpiDaysLabel">יום בחודש</div>
           <div class="kpi-value is-skeleton" id="kpiDaysLeft">&nbsp;</div>
         </div>
       </div>
@@ -125,20 +125,20 @@
       <div class="kpis">
         <div class="kpi"><div class="kpi-label">כניסות החודש</div><div class="kpi-value" data-stat="entries">—</div></div>
         <div class="kpi"><div class="kpi-label">יציאות החודש</div><div class="kpi-value" data-stat="exits">—</div></div>
-        <div class="kpi"><div class="kpi-label">ימי טיפול</div><div class="kpi-value" data-stat="treatmentDays">—</div></div>
-        <div class="kpi"><div class="kpi-label">בונוס נוכחי</div><div class="kpi-value gold" data-stat="bonus">—</div></div>
+        <div class="kpi"><div class="kpi-label" data-stat-label="treatmentDays">ימי טיפול עד כה</div><div class="kpi-value" data-stat="treatmentDays">—</div></div>
+        <div class="kpi"><div class="kpi-label" data-stat-label="bonus">מובטח עד כה (חודש נוכחי)</div><div class="kpi-value gold" data-stat="bonus">—</div></div>
       </div>
 
       <div class="card chart-card">
-        <div class="card-title">ימי טיפול החודש (מתחיל מחדש כל חודש)</div>
+        <div class="card-title" data-chart-title>ימי טיפול החודש (נספר מה-1 בחודש)</div>
         <div class="bep-bar" data-bep-bar>
           <div class="bep-fill" data-bep-fill></div>
           <div class="bep-marker" data-bep-marker><span>★</span><em data-bep-marker-label></em></div>
         </div>
         <div class="bep-legend">
-          <span>נצברו החודש: <b data-stat="daysSoFar">—</b></span>
+          <span>ימי טיפול עד כה: <b data-stat="daysSoFar">—</b></span>
           <span>יעד (זכאות לבונוס): <b data-stat="daysTarget">—</b></span>
-          <span>תחזית לסוף חודש: <b data-stat="daysProjection">—</b></span>
+          <span>צפי לסוף החודש: <b data-stat="daysProjection">—</b></span>
         </div>
 
         <div class="card-subtitle">תפוסה יומית — מספר מטופלים בכל יום בחודש</div>
@@ -193,6 +193,7 @@
   </template>
 
   <script src="/lib/bonus-eligibility.js"></script>
+  <script src="/bonus-view.js"></script>
   <script src="/app.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
