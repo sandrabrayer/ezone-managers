@@ -2,7 +2,8 @@
 
 _Shipped September 8, 2026. Frontend only: `public/bonus-view.js`,
 `public/app.js`, `public/index.html`, `public/styles.css`, `public/sw.js`.
-No Apps Script, server or endpoint changes._
+No Apps Script, server or endpoint changes. Overview chart prefetch added the
+same day as a follow-up (SW v8)._
 
 ## Why
 
@@ -46,9 +47,24 @@ Three separate causes:
    at elapsed days × capacity** for the running month (a house cannot accrue
    more days than beds × days). Finished months are never capped.
 
-On the overview, a house card uses rule 2 until its detail tab has been
-opened; once `state.details[key]` holds the chart, the overview re-renders so
-the card shows the same chart-based figure as the detail page.
+### Overview cards read the same chart as the detail tab
+
+`loadOverview` fetches every house's daily chart **once per month** (in
+parallel with the finished-month overview fetches) through
+`ensureHouseCharts_`, and `cacheHouseDetail_` stores the payload in two
+places: `state.details[key]` (what the detail tab renders) and
+`state.chartsByMonth[YYYY-MM][key]` (what `daysSoFarOf_` reads for the
+cards). Because card and tab read the same payload, they cannot disagree.
+
+- The 60-second overview refresh is a cache hit for every house: it reloads
+  the overview feed but makes **no** chart requests.
+- The cache is keyed by month; other months are dropped when the running
+  month changes, so a stale chart is never summed into a new month.
+- A failed chart fetch leaves that house uncached: its card falls back to
+  rule 2 (capped feed figure) and the next refresh retries the fetch. The
+  other houses are not refetched.
+- Opening a house tab still fetches the detail (activity, entries, exits)
+  and writes through the same cache, then re-renders the overview.
 
 ## Module layout
 
@@ -65,12 +81,15 @@ the card shows the same chart-based figure as the detail page.
 - `test/bonus-view.test.js` (22) — month labels, settled wording (incl. the
   forbidden-word sweep), actual vs projection separation, tier badge rules,
   `daysSoFar` (chart vs capped feed), winners banner, house hero, `safeLabel`.
-- `test/app-render.test.js` (12) — loads the real `app.js` in a `vm` sandbox
+- `test/app-render.test.js` (16) — loads the real `app.js` in a `vm` sandbox
   with a minimal fake DOM (no jsdom dependency) and asserts on rendered
   output: no backend figure reaches the DOM (fixture carries
   `projectedBonus`/`bep`/`type` = 2577), settled and running blocks are
   labelled and separated, KPI = hero = bar = card = 102 for the fixture
-  month, no tier pill mid-month, script order / SW shell / cache v7.
+  month, no tier pill mid-month, overview card = detail tab from the shared
+  per-month chart cache, `loadOverview` makes one chart request per house
+  and none on refresh (stubbed feed), failed chart fetches are retried,
+  script order / SW shell / cache v8.
 
 Run: `npm test` (`node --test`, no network, no secrets).
 

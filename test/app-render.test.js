@@ -70,7 +70,7 @@ function makeEl(tag) {
   return el;
 }
 
-function makeSandbox() {
+function makeSandbox(fetchImpl) {
   const byId = new Map();
   const document = {
     getElementById: (id) => { if (!byId.has(id)) byId.set(id, makeEl('div')); return byId.get(id); },
@@ -81,7 +81,8 @@ function makeSandbox() {
   const sandbox = {
     document, console, localStorage: { getItem: () => '', setItem: () => {}, removeItem: () => {} },
     location: { hash: '' }, history: { replaceState: () => {} },
-    setInterval: () => 0, setTimeout: () => 0, fetch: () => Promise.reject(new Error('no network in tests'))
+    setInterval: () => 0, setTimeout: () => 0,
+    fetch: fetchImpl || (() => Promise.reject(new Error('no network in tests')))
   };
   sandbox.window = sandbox;
   sandbox.self = sandbox;
@@ -124,8 +125,8 @@ const STATE = {
   quarterWindow: ['2026-08', '2026-09', '2026-10']
 };
 
-function setup() {
-  const s = makeSandbox();
+function setup(fetchImpl) {
+  const s = makeSandbox(fetchImpl);
   vm.runInContext(`state.now = ${TODAY_EXPR}; Object.assign(state, ${JSON.stringify(STATE)}); state.housesById.ramot = state.overview.houses[0];`, s.ctx);
   return s;
 }
@@ -269,6 +270,98 @@ test('house detail: no backend bonus figure reaches any rendered text', () => {
   assert.doesNotMatch(all, /18[.,]3/, 'backend paceAvgDaily / full-month avgDaily must not drive the running month');
 });
 
+/* ── overview card = detail tab (shared per-month chart cache) ── */
+test('overview card and detail tab show the SAME days-so-far once the chart is cached (102, not the capped 160)', () => {
+  const { ctx, byId } = setup();
+  // What loadOverview does per house: cache the detail payload for the month.
+  vm.runInContext(`cacheHouseDetail_('ramot', ${JSON.stringify(RAMOT_DETAIL)}, '2026-09')`, ctx);
+  const card = call(ctx, 'buildHouseCard', RAMOT_OVERVIEW).innerHTML; // overview payload: NO dailyChart
+  const cardDays = /data-card-days>(\d+) \/ 510</.exec(card)[1];
+  const cardBlock = /data-current-actual>ימי טיפול עד כה: <b>(\d+)\/510/.exec(card)[1];
+  call(ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', ctx));
+  const panel = byId.get('panel-ramot');
+  const tabKpi = panel.querySelector('[data-stat="treatmentDays"]').textContent;
+  const tabBar = panel.querySelector('[data-stat="daysSoFar"]').textContent;
+  assert.equal(cardDays, '102');
+  assert.equal(cardBlock, '102');
+  assert.equal(tabKpi, cardDays, 'overview card must equal the detail tab KPI');
+  assert.equal(tabBar, cardDays, 'overview card must equal the detail tab progress bar');
+});
+
+test('cached chart is per MONTH: a chart for another month is never used for the running month', () => {
+  const { ctx } = setup();
+  vm.runInContext(`cacheHouseDetail_('ramot', ${JSON.stringify({ ...RAMOT_DETAIL, month: '2026-08' })}, '2026-08')`, ctx);
+  const card = call(ctx, 'buildHouseCard', RAMOT_OVERVIEW).innerHTML;
+  assert.equal(/data-card-days>(\d+) \/ 510</.exec(card)[1], '160', 'falls back to the capped feed figure');
+});
+
+function stubFeed() {
+  const calls = [];
+  const HOUSES = ['raanana', 'ramot', 'efroni', 'rehab', 'pardes'];
+  const overviewHouse = (key) => ({ ...RAMOT_OVERVIEW, key, capacity: key === 'ramot' ? 20 : 13 });
+  const fetchImpl = async (url) => {
+    const u = new URL(url, 'http://x');
+    const action = u.searchParams.get('action'), month = u.searchParams.get('month'), house = u.searchParams.get('house');
+    calls.push({ action, month, house });
+    let body;
+    if (action === 'managersOverview' && !month) body = { ok: true, month: '2026-09', houses: HOUSES.map(overviewHouse), totals: { activePatients: 57 } };
+    else if (action === 'managersOverview') body = { ok: true, month, houses: HOUSES.map((key) => ({ key, avgDaily: 14.7, treatmentDays: 441 })) };
+    else if (action === 'managersHouse') body = { ok: true, ...overviewHouse(house), month: '2026-09', dailyChart: CHART, activity: [] };
+    else body = { ok: false, error: 'unknown' };
+    return { status: 200, ok: true, text: async () => JSON.stringify(body) };
+  };
+  return { calls, fetchImpl };
+}
+
+test('loadOverview fetches every house chart ONCE; the 60-second refresh reuses the per-month cache; cards show the chart figure', async () => {
+  const { calls, fetchImpl } = stubFeed();
+  const { ctx, byId } = setup(fetchImpl);
+  vm.runInContext('state.overview = null; state.prevOverview = null; state.monthOverviews = {}; state.chartsByMonth = {}; state.details = {};', ctx);
+  const loadOverview = vm.runInContext('loadOverview', ctx);
+
+  await loadOverview();
+  const houseCalls = () => calls.filter((c) => c.action === 'managersHouse').map((c) => c.house).sort();
+  assert.deepEqual(houseCalls(), ['efroni', 'pardes', 'raanana', 'ramot', 'rehab'], 'one chart request per house on first load');
+  const cards = byId.get('houseGrid').children;
+  assert.equal(cards.length, 5);
+  const ramotCard = cards.find((c) => c.getAttribute('data-house-card') === 'ramot');
+  assert.equal(/data-card-days>(\d+) \/ 510</.exec(ramotCard.innerHTML)[1], '102',
+    'card uses the chart-based days-so-far without any tab having been opened');
+  for (const c of cards) assert.match(c.innerHTML, /data-card-days>102 \/ (510|300)</, 'every card is chart-based');
+
+  const before = calls.length;
+  await loadOverview(); // the 60-second refresh
+  const after = calls.slice(before);
+  assert.equal(after.filter((c) => c.action === 'managersHouse').length, 0, 'refresh must not refetch cached charts');
+  assert.ok(after.some((c) => c.action === 'managersOverview' && !c.month), 'refresh still reloads the overview');
+  const cards2 = byId.get('houseGrid').children;
+  assert.equal(/data-card-days>(\d+) \/ 510</.exec(cards2.find((c) => c.getAttribute('data-house-card') === 'ramot').innerHTML)[1], '102');
+
+  // Detail tab after the refresh reads the very same cached payload.
+  const renderHouseDetail = vm.runInContext('renderHouseDetail', ctx);
+  renderHouseDetail('ramot', vm.runInContext('state.details.ramot', ctx));
+  assert.equal(byId.get('panel-ramot').querySelector('[data-stat="treatmentDays"]').textContent, '102');
+});
+
+test('a failed chart fetch leaves the house uncached so the next refresh retries it', async () => {
+  const { calls, fetchImpl } = stubFeed();
+  let failRamot = true;
+  const flaky = async (url) => {
+    if (failRamot && /managersHouse/.test(url) && /house=ramot/.test(url)) { calls.push({ action: 'managersHouse', house: 'ramot', failed: true }); throw new Error('boom'); }
+    return fetchImpl(url);
+  };
+  const { ctx } = setup(flaky);
+  vm.runInContext('state.overview = null; state.prevOverview = null; state.monthOverviews = {}; state.chartsByMonth = {}; state.details = {};', ctx);
+  const loadOverview = vm.runInContext('loadOverview', ctx);
+  await loadOverview();
+  assert.equal(vm.runInContext("Object.keys(state.chartsByMonth['2026-09']).sort().join(',')", ctx), 'efroni,pardes,raanana,rehab');
+  failRamot = false;
+  await loadOverview();
+  assert.equal(calls.filter((c) => c.action === 'managersHouse' && c.house === 'ramot').length, 2, 'ramot retried exactly once');
+  assert.equal(calls.filter((c) => c.action === 'managersHouse' && c.house !== 'ramot').length, 4, 'the other houses were not refetched');
+  assert.ok(vm.runInContext("Array.isArray(state.chartsByMonth['2026-09'].ramot)", ctx));
+});
+
 /* ── static guards ────────────────────────────────────────── */
 test('index.html loads bonus-view.js after bonus-eligibility.js and before app.js; SW caches it; SW cache is v7+', () => {
   const html = pub('index.html');
@@ -277,7 +370,7 @@ test('index.html loads bonus-view.js after bonus-eligibility.js and before app.j
   const sw = pub('sw.js');
   assert.match(sw, /'\/bonus-view\.js'/, 'SW shell must include /bonus-view.js');
   const m = sw.match(/const CACHE = 'ezone-managers-v(\d+)'/);
-  assert.ok(m && Number(m[1]) >= 7, 'SW cache must be bumped to v7+ for the relabelled shell');
+  assert.ok(m && Number(m[1]) >= 8, 'SW cache must be bumped to v8+ (chart prefetch shell)');
 });
 
 test('app.js never renders the feed\'s `type` field and takes labels through safeLabel', () => {

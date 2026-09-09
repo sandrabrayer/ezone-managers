@@ -43,7 +43,12 @@ const state = {
   overview: null,
   housesById: {},
   details: {},
-  loadingDetails: {}
+  loadingDetails: {},
+  /* Daily charts per month: { 'YYYY-MM': { houseKey: dailyChart[] } }.
+   * Filled ONCE per month on overview load (all houses, in parallel) and
+   * reused by the 60-second refresh, so every overview card computes the same
+   * chart-based days-so-far as its detail tab. */
+  chartsByMonth: {}
 };
 
 /* ============================================================
@@ -375,7 +380,11 @@ async function loadOverview() {
     const qWindow = window.BonusEligibility.quarterWindowFor(nowYM) || [];
     const finishedMonths = [...new Set([prevYM, ...qWindow.filter(m => m < nowYM)])];
     state.monthOverviews = {};
-    await Promise.all(finishedMonths.map(async ym => {
+    const houseKeys = houses.map(h => h && h.key).filter(Boolean);
+    await Promise.all([
+      // Daily charts for the running month — fetched once per month, cached.
+      ensureHouseCharts_(nowYM, houseKeys.length ? houseKeys : HOUSE_KEYS),
+      ...finishedMonths.map(async ym => {
       try {
         const md = await fetchJson(`/api/sheets?action=managersOverview&month=${encodeURIComponent(ym)}`);
         const byKey = {};
@@ -386,7 +395,8 @@ async function loadOverview() {
       } catch (e) {
         console.error(`overview for ${ym} failed`, e);
       }
-    }));
+    })
+    ]);
     state.quarterWindow = qWindow;
     state.prevOverview = state.monthOverviews[prevYM]
       ? { month: prevYM, byKey: state.monthOverviews[prevYM] }
@@ -400,6 +410,42 @@ async function loadOverview() {
       `<div class="loading error">שגיאה בטעינת נתונים: ${err.message}</div>`;
     setStatus('שגיאה בטעינה');
   }
+}
+
+/* Store a house-detail payload in both caches: state.details (what the
+ * detail tab renders) and state.chartsByMonth (what the overview cards read
+ * for days-so-far). Because both read the SAME payload, a card and its tab
+ * can never show different days-so-far numbers. */
+function cacheHouseDetail_(key, data, fallbackYM) {
+  if (!key || !data) return;
+  state.details[key] = data;
+  const ym = data.month || fallbackYM || currentMonthYM_();
+  if (!state.chartsByMonth[ym]) state.chartsByMonth[ym] = {};
+  state.chartsByMonth[ym][key] = Array.isArray(data.dailyChart) ? data.dailyChart : [];
+}
+
+/* Fetch the daily chart of every house that is not yet cached for `ym`.
+ * Runs once per month: on later overview refreshes every house is a cache
+ * hit and no request is made. Older months are dropped so the cache never
+ * serves a stale month; a failed fetch leaves the house uncached, so the next
+ * refresh retries it (the card falls back to the capped feed figure until
+ * then). */
+async function ensureHouseCharts_(ym, keys) {
+  Object.keys(state.chartsByMonth).forEach(m => { if (m !== ym) delete state.chartsByMonth[m]; });
+  if (!state.chartsByMonth[ym]) state.chartsByMonth[ym] = {};
+  const cached = state.chartsByMonth[ym];
+  const missing = (keys || []).filter(k => k && !cached[k] && !state.loadingDetails[k]);
+  await Promise.all(missing.map(async key => {
+    state.loadingDetails[key] = true;
+    try {
+      const data = await fetchJson(`/api/sheets?action=managersHouse&house=${encodeURIComponent(key)}`);
+      cacheHouseDetail_(key, data, ym);
+    } catch (e) {
+      console.error(`daily chart for ${key} failed`, e);
+    } finally {
+      state.loadingDetails[key] = false;
+    }
+  }));
 }
 
 function renderOverview(data) {
@@ -525,10 +571,15 @@ function daysSoFarOf_(h) {
   const isCurrent = monthYM === currentMonthYM_();
   const daysInMonth = daysInMonthFromLabel(monthYM);
   const elapsed = isCurrent ? Math.max(1, Math.min(daysInMonth, now_().getDate())) : daysInMonth;
+  // Chart lookup order: the payload itself (detail tab) → the per-month cache
+  // filled on overview load (cards) → the detail cache when its month matches.
+  const cachedChart = key ? (state.chartsByMonth[monthYM] || {})[key] : null;
   const detail = key ? state.details[key] : null;
+  const detailChart = detail && (!detail.month || detail.month === monthYM) ? detail.dailyChart : null;
   const chart = (h && Array.isArray(h.dailyChart) && h.dailyChart.length)
     ? h.dailyChart
-    : (detail && Array.isArray(detail.dailyChart) && detail.dailyChart.length) ? detail.dailyChart : null;
+    : (Array.isArray(cachedChart) && cachedChart.length) ? cachedChart
+    : (Array.isArray(detailChart) && detailChart.length) ? detailChart : null;
   const cur = h?.currentMonth || {};
   return window.BonusView.daysSoFar({
     dailyChart: chart,
@@ -775,9 +826,9 @@ async function loadHouseDetail(key) {
   state.loadingDetails[key] = true;
   try {
     const data = await fetchJson(`/api/sheets?action=managersHouse&house=${encodeURIComponent(key)}`);
-    state.details[key] = data;
+    cacheHouseDetail_(key, data, state.overview?.month);
     renderHouseDetail(key, data);
-    if (state.overview) renderOverview(state.overview); // card now shares the detail's days-so-far
+    if (state.overview) renderOverview(state.overview); // card re-reads the same cached chart
   } catch (err) {
     console.error(err);
     showHouseError(panel, err);
