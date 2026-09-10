@@ -1342,3 +1342,45 @@ body::before {
 }
 .login-btn:disabled { opacity: 0.6; cursor: default; }
 .login-error { margin-top: 10px; font-size: 13px; color: #ff8a9e; }
+
+/* ===== Occupancy history (house-detail month picker) ===== */
+.history-card { margin-top: 0; margin-bottom: 16px; }
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.history-head .card-title { margin-bottom: 0; }
+.month-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.month-picker select {
+  font: inherit;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--card-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  padding: 8px 12px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.month-picker select:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+.history-view {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+}
+.history-view[hidden] { display: none; }
+.history-month-title { font-size: 15px; font-weight: 800; margin-bottom: 8px; }
+.history-figures { margin-bottom: 8px; }
+.history-status { font-size: 13px; color: var(--text-dim); margin-bottom: 12px; }
+.history-empty { font-size: 13px; color: var(--text-mute); padding: 10px 0; }
+.daily-spark-wrap [data-history-spark] { flex: 1; min-width: 0; }

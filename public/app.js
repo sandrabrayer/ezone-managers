@@ -38,6 +38,13 @@ function resolveCapacity(h) {
 
 const HEBREW_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 
+/* Occupancy-history picker (house-detail tab): months offered = the current
+   month back HISTORY_LOOKBACK_MONTHS months, never earlier than
+   HISTORY_FLOOR_YM — the bonus model's quarterly anchor (May 2026, see
+   BonusEligibility.quarterWindowFor); there is no bonus-era data before it. */
+const HISTORY_LOOKBACK_MONTHS = 12;
+const HISTORY_FLOOR_YM = '2026-05';
+
 const state = {
   now: null,            // Date override (tests); null → real clock via now_()
   overview: null,
@@ -48,7 +55,17 @@ const state = {
    * Filled ONCE per month on overview load (all houses, in parallel) and
    * reused by the 60-second refresh, so every overview card computes the same
    * chart-based days-so-far as its detail tab. */
-  chartsByMonth: {}
+  chartsByMonth: {},
+  /* Occupancy history (house-detail month picker) — DISPLAY ONLY. Its own
+   * caches, never read by the bonus / KPI / hero / house-card code, so the
+   * selected month can never leak into a bonus figure.
+   *   historyMonth[houseKey]        = selected 'YYYY-MM' (null = current month)
+   *   historyByMonth['YYYY-MM'][key] = { ok:true, avgDaily, treatmentDays,
+   *                                      dailyChart|null } | { ok:false, error }
+   *   loadingHistory['key:YYYY-MM']  = in-flight promise */
+  historyMonth: {},
+  historyByMonth: {},
+  loadingHistory: {}
 };
 
 /* ============================================================
@@ -273,6 +290,12 @@ function fmtNum1_(v) {
   return (Math.round(n * 10) / 10).toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
 }
 
+/* Escape a string for insertion into innerHTML (error messages may echo
+ * upstream text). */
+function escapeHtml_(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 /* ---- session token (HMAC session issued by /api/login) ---- */
 const TOKEN_KEY = 'ezm_session_token';
 
@@ -385,17 +408,12 @@ async function loadOverview() {
       // Daily charts for the running month — fetched once per month, cached.
       ensureHouseCharts_(nowYM, houseKeys.length ? houseKeys : HOUSE_KEYS),
       ...finishedMonths.map(async ym => {
-      try {
-        const md = await fetchJson(`/api/sheets?action=managersOverview&month=${encodeURIComponent(ym)}`);
-        const byKey = {};
-        (Array.isArray(md.houses) ? md.houses : []).forEach(ph => {
-          if (ph && ph.key) byKey[ph.key] = ph;
-        });
-        state.monthOverviews[ym] = byKey;
-      } catch (e) {
-        console.error(`overview for ${ym} failed`, e);
-      }
-    })
+        try {
+          state.monthOverviews[ym] = await fetchMonthOverview_(ym);
+        } catch (e) {
+          console.error(`overview for ${ym} failed`, e);
+        }
+      })
     ]);
     state.quarterWindow = qWindow;
     state.prevOverview = state.monthOverviews[prevYM]
@@ -410,6 +428,19 @@ async function loadOverview() {
       `<div class="loading error">שגיאה בטעינת נתונים: ${err.message}</div>`;
     setStatus('שגיאה בטעינה');
   }
+}
+
+/* One month's overview — `managersOverview&month=YYYY-MM` — keyed by house.
+ * The ONLY fetch path for a past month's figures: shared by the bonus code
+ * (settled months of the quarter window, above) and the occupancy-history
+ * picker (below), so there is one place to change if the endpoint moves. */
+async function fetchMonthOverview_(ym) {
+  const md = await fetchJson(`/api/sheets?action=managersOverview&month=${encodeURIComponent(ym)}`);
+  const byKey = {};
+  (Array.isArray(md.houses) ? md.houses : []).forEach(ph => {
+    if (ph && ph.key) byKey[ph.key] = ph;
+  });
+  return byKey;
 }
 
 /* Store a house-detail payload in both caches: state.details (what the
@@ -992,6 +1023,12 @@ function renderHouseDetail(key, data) {
   // Logs
   renderEntries(panel.querySelector('[data-log="entries"]'), entries);
   renderExits(panel.querySelector('[data-log="exits"]'), exits);
+
+  // ── Occupancy history picker — display-only, rendered LAST from its own
+  //    cache so nothing above (hero, KPIs, month split, tiers, breakdown)
+  //    depends on the selected month. ──
+  renderHistoryPicker_(panel, key);
+  renderHistoryView_(panel, key);
 }
 
 function setStatLabel(panel, name, text) {
@@ -1007,7 +1044,16 @@ function setStat(panel, name, value) {
 }
 
 function renderDailySpark(panel, chart, bep, capacity) {
-  const host = panel.querySelector('[data-daily-spark]');
+  renderDailySparkInto_(
+    panel.querySelector('[data-daily-spark]'),
+    panel.querySelector('[data-daily-spark-legend-line]'),
+    chart, bep, capacity
+  );
+}
+
+/* Daily occupancy bars into an explicit host (running-month chart card and
+ * the occupancy-history view each have their own host + legend line). */
+function renderDailySparkInto_(host, legendLine, chart, bep, capacity) {
   if (!host) return;
   if (!chart.length) { host.innerHTML = ''; return; }
 
@@ -1039,9 +1085,212 @@ function renderDailySpark(panel, chart, bep, capacity) {
     </div>
   `;
 
-  const legendLine = panel.querySelector('[data-daily-spark-legend-line]');
   if (legendLine) {
     legendLine.textContent = `הקו הכתום = זכאות לבונוס (${fmtInt(bep)} מטופלים)`;
+  }
+}
+
+/* ============================================================
+   Occupancy history (house-detail month picker)
+   Display-only. Reads/writes ONLY state.historyMonth / state.historyByMonth /
+   state.loadingHistory and never touches state.overview, state.monthOverviews,
+   state.prevOverview, state.details or state.chartsByMonth — so the bonus
+   KPIs, hero banner, month split and house cards are unaffected by whatever
+   month is selected here (asserted in test/app-render.test.js). All bonus
+   math stays in lib/bonus-eligibility.js; a past month is labelled with the
+   settled convention from BonusView (final state, never "בתהליך").
+   ============================================================ */
+
+function isValidYM_(ym) {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(ym || ''));
+}
+
+/* The month the live overview is on (what "current" means for the picker). */
+function historyNowYM_() {
+  return state.overview?.month || currentMonthYM_();
+}
+
+/* Months offered by the picker, newest first: the current month back
+ * HISTORY_LOOKBACK_MONTHS months, floored at HISTORY_FLOOR_YM. */
+function historyMonths_(nowYM = historyNowYM_()) {
+  const p = window.BonusView.ymParts(nowYM);
+  if (!p) return [];
+  const out = [];
+  for (let i = 0; i < HISTORY_LOOKBACK_MONTHS; i++) {
+    const ym = currentMonthYM_(new Date(p.year, p.month - 1 - i, 1));
+    if (ym < HISTORY_FLOOR_YM) break;
+    out.push(ym);
+  }
+  return out;
+}
+
+/* Option label: the running month carries the running convention, every
+ * other month the settled one. */
+function historyOptionLabel_(ym, nowYM) {
+  const label = window.BonusView.monthLabel(ym);
+  return ym === nowYM ? `${label} — חודש נוכחי (בתהליך)` : `${label} — סופי`;
+}
+
+/* Fill the <select> (once per month set — an open picker is never reset),
+ * restore the house's selection and wire the change handler once. */
+function renderHistoryPicker_(panel, key) {
+  const sel = panel.querySelector('[data-history-month]');
+  if (!sel) return;
+  const nowYM = historyNowYM_();
+  const months = historyMonths_(nowYM);
+  const chosen = state.historyMonth[key];
+  if (chosen && !months.includes(chosen)) state.historyMonth[key] = null; // out of range → current
+  const selected = state.historyMonth[key] || nowYM;
+  const sig = months.join(',');
+  if (sel.getAttribute('data-months') !== sig) {
+    sel.innerHTML = months
+      .map(ym => `<option value="${ym}">${historyOptionLabel_(ym, nowYM)}</option>`)
+      .join('');
+    sel.setAttribute('data-months', sig);
+  }
+  sel.value = selected;
+  if (!sel.getAttribute('data-wired')) {
+    sel.setAttribute('data-wired', '1');
+    sel.addEventListener('change', () => { selectHistoryMonth_(key, sel.value); });
+  }
+}
+
+function historyEntry_(key, ym) {
+  return (state.historyByMonth[ym] || {})[key] || null;
+}
+
+/* Picker change: validate the value (never trust the DOM), record the
+ * selection for this house, fetch the month if it is not cached (a failed
+ * month is retried on re-select) and re-render the history view only. */
+async function selectHistoryMonth_(key, ym) {
+  const nowYM = historyNowYM_();
+  const target = isValidYM_(ym) ? String(ym) : nowYM;
+  state.historyMonth[key] = target === nowYM ? null : target;
+  const panel = document.getElementById(`panel-${key}`);
+  if (!panel) return;
+  renderHistoryPicker_(panel, key); // the <select> always mirrors state (invalid → current month)
+  renderHistoryView_(panel, key);   // current month → hidden; else cached / loading
+  const entry = state.historyMonth[key] ? historyEntry_(key, target) : null;
+  if (state.historyMonth[key] && (!entry || !entry.ok)) {
+    await loadHistoryMonth_(key, target);
+    renderHistoryView_(panel, key);
+  }
+}
+
+/* Fetch one past month for one house, FAIL-CLOSED:
+ *   1. `managersOverview&month=YYYY-MM` via fetchMonthOverview_ (the existing
+ *      per-month path) → the house's settled avgDaily / treatmentDays. A
+ *      month the bonus code already loaded (state.monthOverviews) is reused
+ *      read-only, without a second request.
+ *   2. The daily chart: from that payload when the backend includes one;
+ *      otherwise ONE `managersHouse&house=…&month=…` attempt whose response
+ *      is accepted only when its `month` equals the requested month — a
+ *      current-month payload is never shown under a past month's label.
+ *      No usable chart → an explicit "no daily data" note.
+ * Any error is cached as { ok:false, error } so the view shows an explicit
+ * error state — never blank, never a stale month. */
+async function loadHistoryMonth_(key, ym) {
+  const slot = `${key}:${ym}`;
+  if (state.loadingHistory[slot]) return state.loadingHistory[slot];
+  const run = (async () => {
+    let entry;
+    try {
+      const byKey = (state.monthOverviews || {})[ym] || await fetchMonthOverview_(ym);
+      const ph = byKey[key];
+      if (!ph) throw new Error(`אין נתונים לבית זה עבור ${window.BonusView.monthLabel(ym)}`);
+      let chart = monthChart_(ph.dailyChart, ym);
+      if (!chart) {
+        try {
+          const hd = await fetchJson(`/api/sheets?action=managersHouse&house=${encodeURIComponent(key)}&month=${encodeURIComponent(ym)}`);
+          if (hd && hd.month === ym) chart = monthChart_(hd.dailyChart, ym);
+        } catch (e) {
+          console.error(`daily chart for ${key} ${ym} failed`, e);
+        }
+      }
+      entry = {
+        ok: true,
+        avgDaily: Number(ph.avgDaily) || 0,
+        treatmentDays: Number(ph.treatmentDays) || 0,
+        dailyChart: chart
+      };
+    } catch (e) {
+      console.error(`history ${key} ${ym} failed`, e);
+      entry = { ok: false, error: (e && e.message) || 'שגיאה' };
+    }
+    if (!state.historyByMonth[ym]) state.historyByMonth[ym] = {};
+    state.historyByMonth[ym][key] = entry;
+    return entry;
+  })();
+  state.loadingHistory[slot] = run;
+  try { return await run; } finally { delete state.loadingHistory[slot]; }
+}
+
+/* The chart points that belong to `ym` (well-formed YYYY-MM-DD dates only).
+ * Null when the chart is missing or has no point in that month. */
+function monthChart_(chart, ym) {
+  if (!Array.isArray(chart)) return null;
+  const pts = chart.filter(p =>
+    p && typeof p.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.date) && p.date.slice(0, 7) === ym
+  );
+  return pts.length ? pts : null;
+}
+
+/* Render the selected month into [data-history-view]. The current month
+ * hides the view (the live blocks below already show it). A past month is
+ * always labelled "(סופי)" with the settled wording from BonusView. */
+function renderHistoryView_(panel, key) {
+  const view = panel.querySelector('[data-history-view]');
+  if (!view) return;
+  const BV = window.BonusView;
+  const ym = state.historyMonth[key];
+  if (!ym || ym === historyNowYM_()) {
+    view.hidden = true;
+    view.innerHTML = '';
+    return;
+  }
+  view.hidden = false;
+  const label = BV.monthLabel(ym);
+  const entry = historyEntry_(key, ym);
+  if (!entry) {
+    view.innerHTML = `<div class="loading" data-history-state="loading">טוען תפוסה — ${label}…</div>`;
+    return;
+  }
+  if (!entry.ok) {
+    view.innerHTML = `<div class="loading error" data-history-state="error">שגיאה בטעינת ${label}: ${escapeHtml_(entry.error)}</div>`;
+    return;
+  }
+  const h = state.housesById[key] || { key };
+  const threshold = resolveThreshold(h);
+  const capacity = resolveCapacity(h);
+  const settled = BV.settledMonthView(
+    { key, ym, avgDaily: entry.avgDaily, treatmentDays: entry.treatmentDays },
+    resolveThreshold
+  );
+  const chart = entry.dailyChart;
+  view.innerHTML = `
+    <div class="history-month-title" data-history-title>תפוסה יומית — ${label} (סופי)</div>
+    <div class="bep-legend history-figures" data-history-figures>
+      <span>ימי טיפול — ${label}: <b data-history-days>${fmtInt(settled.treatmentDays)} / ${fmtInt(settled.gate)}</b></span>
+      <span>ממוצע יומי: <b>${fmtNum1_(settled.avgDaily)} מטופלים/יום</b></span>
+    </div>
+    <div class="history-status" data-history-status>${settled.statusText}</div>
+    ${chart ? `
+    <div class="daily-spark-wrap">
+      <div class="daily-spark-y-label">מטופלים</div>
+      <div data-history-spark></div>
+    </div>
+    <ul class="daily-spark-legend">
+      <li><span class="dsl-mark dsl-line"></span><span data-history-legend-line>הקו הכתום = זכאות לבונוס</span></li>
+      <li><span class="dsl-mark dsl-bar"></span><span>העמודות = מספר מטופלים בפועל בכל יום</span></li>
+    </ul>`
+    : `<div class="history-empty" data-history-state="no-chart">אין נתוני תפוסה יומית ל${label} — מוצגים סיכומי החודש בלבד</div>`}
+  `;
+  if (chart) {
+    renderDailySparkInto_(
+      view.querySelector('[data-history-spark]'),
+      view.querySelector('[data-history-legend-line]'),
+      chart, threshold, capacity
+    );
   }
 }
 
