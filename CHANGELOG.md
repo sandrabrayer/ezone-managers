@@ -3,6 +3,21 @@
 
 ## Unreleased
 
+### Added — CLAUDE.md standing rules for Code sessions (September 10, 2026)
+
+Docs only. `CLAUDE.md` at the repo root records the working rules every
+Claude Code session must follow: read `EZONE-ECOSYSTEM-STATUS.md` and
+`docs/` first; verify the Railway-deployed branch is `main`; read-only
+investigation first; fresh branch off `main`, one PR at a time targeting
+`main`, never push to `main`, never merge; explicit-path `git add` and a
+diff review before every commit; every PR carries a CHANGELOG entry, tests
+(`node --test`), docs updates and a SW cache bump when `public/` changes;
+no new endpoints or secrets without approval and no Apps Script changes;
+no PR subscriptions or check-ins after opening a PR; bonus math only in
+`lib/bonus-eligibility.js`, bonus wording only in `public/bonus-view.js`,
+backend bonus fields ignored. No code changes, no SW bump (nothing under
+`public/` changed), tests unchanged at 136.
+
 ### Added — bonus history: month picker on the overview and every house tab (September 10, 2026)
 
 Frontend only (`public/`), no Apps Script / server / endpoint changes. Full
