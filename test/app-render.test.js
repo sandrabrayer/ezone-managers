@@ -567,3 +567,338 @@ test('index.html: the house-detail template carries the month picker and history
   assert.doesNotMatch(hist, /state\.(overview|monthOverviews|prevOverview|details|chartsByMonth|quarterWindow)\s*(=|\[[^\]]*\]\s*=)/, 'history code must not assign bonus state');
   assert.match(js, /historyByMonth/);
 });
+
+/* ── bonus history month picker (overview + house tabs) ──── */
+/* Stub feed: the live overview/house payloads as in stubFeed(), plus
+ * per-month `managersOverview&month=` rows — Ramot: May tier 1 (18.4 / 540),
+ * June nothing (14.7 / 441), July tier 2 (19.2 / 560), August nothing; the
+ * other houses tier 1 every month. Every row also carries BACKEND_JUNK. */
+const MONTH_ROWS = {
+  ramot: {
+    '2026-05': { avgDaily: 18.4, treatmentDays: 540 },
+    '2026-06': { avgDaily: 14.7, treatmentDays: 441 },
+    '2026-07': { avgDaily: 19.2, treatmentDays: 560 },
+    '2026-08': { avgDaily: 14.7, treatmentDays: 441 }
+  },
+  other: { avgDaily: 11.5, treatmentDays: 350 }
+};
+function bonusHistoryFeed({ failMonth = null } = {}) {
+  const calls = [];
+  const HOUSES = ['raanana', 'ramot', 'efroni', 'rehab', 'pardes'];
+  const overviewHouse = (key) => ({ ...RAMOT_OVERVIEW, key, capacity: key === 'ramot' ? 20 : 13 });
+  const fetchImpl = async (url) => {
+    const u = new URL(url, 'http://x');
+    const action = u.searchParams.get('action'), month = u.searchParams.get('month'), house = u.searchParams.get('house');
+    calls.push({ action, month, house });
+    if (failMonth && month === failMonth) throw new Error('upstream down');
+    let body;
+    if (action === 'managersOverview' && !month) body = { ok: true, month: '2026-09', houses: HOUSES.map(overviewHouse), totals: { activePatients: 57 } };
+    else if (action === 'managersOverview') {
+      body = { ok: true, month, houses: HOUSES.map((key) => ({
+        key, manager: key === 'ramot' ? 'אורן' : undefined,
+        ...(key === 'ramot' ? MONTH_ROWS.ramot[month] || MONTH_ROWS.other : MONTH_ROWS.other),
+        ...BACKEND_JUNK
+      })) };
+    } else if (action === 'managersHouse') body = { ok: true, ...overviewHouse(house), month: '2026-09', dailyChart: CHART, activity: [] };
+    else body = { ok: false, error: 'unexpected call' };
+    return { status: 200, ok: true, text: async () => JSON.stringify(body) };
+  };
+  return { calls, fetchImpl };
+}
+const monthCalls = (calls) => calls.filter((c) => c.action === 'managersOverview' && c.month).map((c) => c.month).sort();
+const FORBIDDEN_HISTORY = [...FORBIDDEN, 'צפי', 'ממוצע נוכחי', 'מובטח'];
+
+/* Full page snapshot: everything the overview and the Ramot tab render. */
+function pageSnapshot(ctx, byId, panel) {
+  const id = (k) => byId.get(k);
+  return {
+    monthTag: id('monthTag').textContent,
+    kpis: ['kpiHousesAboveLabel', 'kpiHousesAbove', 'kpiActiveLabel', 'kpiActive', 'kpiBonusLabel', 'kpiBonus', 'kpiDaysLabel', 'kpiDaysLeft', 'sparkSub']
+      .map((k) => id(k).textContent),
+    banner: id('winnersBanner').innerHTML,
+    spark: id('networkSpark').innerHTML,
+    cards: id('houseGrid').children.map((c) => [c.className, c.innerHTML]),
+    backHidden: id('bonusMonthBackOverview').hidden,
+    detail: bonusSnapshot(ctx, panel),
+    detailExtras: ['[data-stat="entries"]', '[data-stat="daysTarget"]', '[data-stat-label="daysSoFar"]', '[data-stat-label="daysProjection"]', '[data-quarterly-note]', '[data-quarterly-target]']
+      .map((s) => panel.querySelector(s).textContent),
+    nextTierHidden: panel.querySelector('[data-next-tier-card]').hidden,
+    quarterlyMonthsHidden: panel.querySelector('[data-quarterly-months]').hidden,
+    breakdown: panel.querySelector('[data-breakdown]').children.map((li) => li.innerHTML)
+  };
+}
+
+/* Boot like the app: loadOverview against the stub, then open the Ramot tab. */
+async function bootWithHistory(opts) {
+  const { calls, fetchImpl } = bonusHistoryFeed(opts);
+  const s = setup(fetchImpl);
+  vm.runInContext('state.overview = null; state.prevOverview = null; state.monthOverviews = {}; state.chartsByMonth = {}; state.details = {};', s.ctx);
+  await vm.runInContext('loadOverview', s.ctx)();
+  call(s.ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', s.ctx));
+  calls.length = 0;
+  return { ...s, calls, panel: s.byId.get('panel-ramot') };
+}
+const options = (sel) => [...sel.innerHTML.matchAll(/<option value="(\d{4}-\d{2})">([^<]*)<\/option>/g)].map((m) => [m[1], m[2]]);
+
+test('bonus picker: overview and house tab list the running month plus every finished month back to May 2026, default = running month', async () => {
+  const { ctx, byId, panel } = await bootWithHistory();
+  const overviewSel = byId.get('bonusMonthOverview');
+  const houseSel = panel.querySelector('[data-bonus-month]');
+  for (const sel of [overviewSel, houseSel]) {
+    const opts = options(sel);
+    assert.deepEqual(opts.map((o) => o[0]), ['2026-09', '2026-08', '2026-07', '2026-06', '2026-05'], 'running month + every finished month since the quarterly anchor, newest first');
+    assert.equal(opts[0][1], 'ספטמבר 2026 — חודש נוכחי (בתהליך)');
+    assert.equal(opts[2][1], 'יולי 2026 — סופי');
+    assert.equal(opts[4][1], 'מאי 2026 — סופי');
+    assert.equal(sel.value, '2026-09', 'defaults to the running month');
+    assert.equal(sel._listeners.change.length, 1, 'wired once');
+  }
+  assert.equal(byId.get('bonusMonthBackOverview').hidden, true, 'no back link on the running month');
+  assert.equal(panel.querySelector('[data-bonus-month-back]').hidden, true);
+  assert.equal(byId.get('bonusMonthBackOverview')._listeners.click.length, 1);
+  // Re-renders never re-wire or rebuild the options.
+  call(ctx, 'renderOverview', vm.runInContext('state.overview', ctx));
+  call(ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', ctx));
+  assert.equal(overviewSel._listeners.change.length, 1);
+  assert.equal(houseSel._listeners.change.length, 1);
+  // A year later the list is 17 months long — every finished month is offered, no cap.
+  vm.runInContext('state.now = new Date(2027, 8, 8, 12); state.overview.month = "2027-09";', ctx);
+  const later = call(ctx, 'bonusMonths_');
+  assert.equal(later.length, 17);
+  assert.equal(later[0], '2027-09');
+  assert.equal(later[16], '2026-05');
+});
+
+test('bonus picker: a finished month renders the overview and the house tab SETTLED — tier, amount, gate result, quarterly window — with no running-month wording', async () => {
+  const { ctx, byId, panel, calls } = await bootWithHistory();
+
+  await call(ctx, 'selectBonusMonth_', 'ramot' && '2026-07');
+
+  // Data: the selected month + the finished months of its window, via the existing month fetch only.
+  assert.deepEqual(monthCalls(calls), ['2026-05', '2026-06', '2026-07']);
+  assert.equal(calls.filter((c) => c.action === 'managersHouse').length, 0, 'no house requests');
+  assert.equal(calls.length, 3);
+
+  // Overview.
+  assert.equal(byId.get('monthTag').textContent, 'יולי 2026 — סופי');
+  assert.equal(byId.get('kpiHousesAboveLabel').textContent, 'בתים זכאים לבונוס — יולי 2026 (סופי)');
+  assert.equal(byId.get('kpiHousesAbove').textContent, '5/5');
+  assert.equal(byId.get('kpiActiveLabel').textContent, 'ממוצע מטופלים/יום — יולי 2026 (סופי)');
+  assert.equal(byId.get('kpiActive').textContent, '65.2', '19.2 + 4 × 11.5');
+  assert.equal(byId.get('kpiBonusLabel').textContent, 'בונוס יולי 2026 — סופי (לתשלום)');
+  assert.equal(byId.get('kpiBonus').textContent, '10,500 ₪', '2,500 + 4 × 2,000');
+  assert.equal(byId.get('kpiDaysLabel').textContent, 'ימים בחודש — יולי 2026 (סופי)');
+  assert.equal(byId.get('kpiDaysLeft').textContent, '31 מתוך 31', 'finished month: days-so-far = the full month');
+  const banner = byId.get('winnersBanner').innerHTML;
+  assert.match(banner, /wb-title">בונוסים לתשלום — יולי 2026 \(סופי\)</);
+  assert.match(banner, /wb-house">רמות השבים<[\s\S]*?wb-amt">2,500 ₪<[\s\S]*?wb-detail">זכאי · מדרגה 2 · 2,500 ₪</);
+  assert.doesNotMatch(banner, /ספטמבר|יום \d+ מתוך/, 'no running-month line');
+  assert.equal(byId.get('bonusMonthBackOverview').hidden, false, '"חזרה לחודש נוכחי" is offered');
+  assert.equal(byId.get('bonusMonthOverview').value, '2026-07');
+  const spark = byId.get('networkSpark').innerHTML;
+  assert.match(spark, /data-house="ramot"[\s\S]*?spark-num">19\.2\/20</, 'network chart shows the month average');
+  const cards = byId.get('houseGrid').children;
+  assert.equal(cards.length, 5);
+  const ramot = cards.find((c) => c.getAttribute('data-house-card') === 'ramot');
+  assert.match(ramot.className, /house-card above settled/);
+  assert.match(ramot.innerHTML, /qualify-badge">✓ זכאי · יולי 2026</);
+  assert.match(ramot.innerHTML, /hc-month-title">יולי 2026 — סופי</);
+  assert.match(ramot.innerHTML, /data-settled-status>זכאי · מדרגה 2 · 2,500 ₪</);
+  assert.match(ramot.innerHTML, /ממוצע 19\.2 מטופלים\/יום · 560\/510 ימי טיפול · המכסה הושלמה/);
+  assert.match(ramot.innerHTML, /tier-pill t2">מדרגה 2 ✓</);
+  assert.match(ramot.innerHTML, /ימי טיפול — יולי 2026 \(סופי\)[\s\S]*data-card-days>560 \/ 510</);
+  assert.doesNotMatch(ramot.innerHTML, /data-month-block="current"/, 'no running block on a finished month');
+  assert.match(ramot.innerHTML, /מנהל\/ת: אורן/);
+
+  // House tab.
+  const hero = panel.querySelector('[data-status-banner]');
+  assert.equal(hero.className, 'status-banner above');
+  assert.equal(/data-hero-headline>([^<]*)</.exec(hero.innerHTML)[1], 'יולי 2026 — סופי: זכאי · מדרגה 2 · 2,500 ₪');
+  assert.doesNotMatch(hero.innerHTML, /data-hero-current/, 'no running-month line');
+  assert.equal(panel.querySelector('[data-stat-label="treatmentDays"]').textContent, 'ימי טיפול — יולי 2026 (סופי)');
+  assert.equal(panel.querySelector('[data-stat="treatmentDays"]').textContent, '560', 'days-so-far of a finished month = full-month total');
+  assert.equal(panel.querySelector('[data-stat-label="bonus"]').textContent, 'בונוס יולי 2026 — סופי');
+  assert.equal(panel.querySelector('[data-stat="bonus"]').textContent, '2,500 ₪');
+  assert.equal(panel.querySelector('[data-stat="entries"]').textContent, '—');
+  const split = panel.querySelector('[data-month-split]').innerHTML;
+  assert.match(split, /ms-tag">יולי 2026 — סופי<[\s\S]*?ms-amt gold">2,500 ₪<[\s\S]*?זכאי · מדרגה 2 · 2,500 ₪ · ממוצע 19\.2 מטופלים\/יום · 560\/510 ימי טיפול · המכסה הושלמה/);
+  assert.equal((split.match(/ms-row/g) || []).length, 1, 'one settled row, no running row');
+  assert.equal(panel.querySelector('[data-chart-title]').textContent, 'ימי טיפול — יולי 2026 (סופי)');
+  assert.equal(panel.querySelector('[data-stat-label="daysSoFar"]').textContent, 'ימי טיפול בחודש');
+  assert.equal(panel.querySelector('[data-stat="daysSoFar"]').textContent, '560');
+  assert.equal(panel.querySelector('[data-stat="daysTarget"]').textContent, '510');
+  assert.equal(panel.querySelector('[data-stat-label="daysProjection"]').textContent, 'המכסה');
+  assert.equal(panel.querySelector('[data-stat="daysProjection"]').textContent, 'הושלמה');
+  assert.equal(panel.querySelector('[data-bep-fill]').style.width, '100%');
+  assert.match(panel.querySelector('[data-daily-spark]').innerHTML, /data-bonus-history-state="no-chart">אין נתוני תפוסה יומית ליולי 2026/);
+  assert.equal(panel.querySelector('[data-next-tier-card]').hidden, true, 'the "missing for next tier" card is hidden on a finished month');
+  assert.equal(panel.querySelector('[data-tier-current]').textContent, 'מדרגה 2 הושגה ✓ · יולי 2026 (סופי) · ממוצע 19.2 מטופלים/יום');
+  assert.equal(panel.querySelector('[data-tier-current]').className, 'tier-current gold');
+  // Quarterly block anchored to the SELECTED month's window (May–Jul 2026), with the qualifying months marked.
+  assert.equal(panel.querySelector('[data-quarterly-target]').textContent, '2 מתוך 3 חודשים שעמדו בסף · 3,333 ₪ תאורטי');
+  assert.match(panel.querySelector('[data-quarterly-note]').textContent, /^נצברו 2\/3 חודשים עבור בונוס יציבות 5,000 ₪ · יחושב בסוף הרבעון \(מאי 2026 · יוני 2026 · יולי 2026\)$/);
+  const qm = panel.querySelector('[data-quarterly-months]');
+  assert.equal(qm.hidden, false);
+  assert.equal(qm.textContent, 'מאי 2026 ✓ · יוני 2026 ✗ · יולי 2026 ✓');
+  const bk = panel.querySelector('[data-breakdown]').children.map((li) => [li.className, li.innerHTML]);
+  assert.equal(bk.length, 5);
+  assert.match(bk[1][1], /בונוס מדרגה 2 \(19 מטופלים\)[\s\S]*2,500 ₪ ✓ הושג · 560\/510 ימי טיפול/);
+  assert.match(bk[1][0], /gold/);
+  assert.match(bk[3][1], /2\/3 חודשים שעמדו בסף · יחושב בסוף הרבעון \(מאי 2026 · יוני 2026 · יולי 2026\)/);
+  assert.match(bk[4][1], /אין נתוני הפניות ליולי 2026/);
+  assert.equal(panel.querySelector('[data-stat="bonusTotal"]').textContent, '2,500 ₪');
+  assert.match(panel.querySelector('[data-log="entries"]').innerHTML, /log-empty/);
+
+  // Nothing rendered for the selected month says בתהליך / בדרך / חסרים / צפי / ממוצע נוכחי / מובטח,
+  // and no backend bonus figure leaks. (The pickers' own option lists are the only place the
+  // running month's label may appear.)
+  const texts = [];
+  const PICKERS = ['[data-bonus-month]', '[data-history-month]'];
+  const walk = (el) => {
+    texts.push(el.innerHTML, el.textContent);
+    el.children.forEach(walk);
+    el._sub.forEach((sub, sel) => { if (!PICKERS.includes(sel)) walk(sub); });
+  };
+  byId.forEach((el, id) => { if (id !== 'bonusMonthOverview') walk(el); });
+  const all = texts.join('\n');
+  for (const w of FORBIDDEN_HISTORY) {
+    const hit = texts.find((t) => t.includes(w));
+    assert.ok(!hit, `a picked finished month must never say "${w}" — found in: ${String(hit).slice(0, 200)}`);
+  }
+  assert.doesNotMatch(all, /2577|2,577|18[.,]3|ספטמבר 2026/, 'no backend figure and no running month on the page');
+});
+
+test('bonus picker: a month without a tier renders "לא זכאי" with the gate result, and its quarterly standing is as of that month', async () => {
+  const { ctx, byId, panel } = await bootWithHistory();
+  await call(ctx, 'selectBonusMonth_', '2026-06');
+  const ramot = byId.get('houseGrid').children.find((c) => c.getAttribute('data-house-card') === 'ramot');
+  assert.match(ramot.className, /house-card below settled/);
+  assert.match(ramot.innerHTML, /warn-badge">⚠ לא זכאי · יוני 2026</);
+  assert.match(ramot.innerHTML, /data-settled-status>לא זכאי · המכסה לא הושלמה \(441\/510\)</);
+  assert.match(ramot.innerHTML, /441\/510 ימי טיפול · המכסה לא הושלמה/);
+  assert.doesNotMatch(ramot.innerHTML, /tier-pill|trophy/);
+  assert.equal(/data-hero-headline>([^<]*)</.exec(panel.querySelector('[data-status-banner]').innerHTML)[1], 'יוני 2026 — סופי: לא זכאי · המכסה לא הושלמה (441/510)');
+  assert.equal(panel.querySelector('[data-stat="daysProjection"]').textContent, 'לא הושלמה');
+  assert.equal(panel.querySelector('[data-tier-current]').textContent, 'לא הושגה מדרגה · יוני 2026 (סופי) · ממוצע 14.7 מטופלים/יום (סף 17)');
+  assert.equal(panel.querySelector('[data-quarterly-months]').textContent, 'מאי 2026 ✓ · יוני 2026 ✗ · יולי 2026 (לאחר החודש שנבחר)', 'July had not happened yet as of June');
+  assert.equal(panel.querySelector('[data-quarterly-target]').textContent, '1 מתוך 3 חודשים שעמדו בסף · 1,667 ₪ תאורטי');
+  assert.equal(byId.get('kpiBonus').textContent, '8,000 ₪', 'four tier-1 houses, Ramot nothing');
+  assert.equal(byId.get('kpiHousesAbove').textContent, '4/5');
+  assert.equal(byId.get('kpiDaysLeft').textContent, '30 מתוך 30');
+});
+
+test('bonus picker: the running month is byte-for-byte unchanged after picking a finished month and returning', async () => {
+  const { ctx, byId, panel, calls } = await bootWithHistory();
+  const before = pageSnapshot(ctx, byId, panel);
+  const stateBefore = vm.runInContext('JSON.stringify({ o: state.overview, m: state.monthOverviews, p: state.prevOverview, c: state.chartsByMonth, d: state.details, q: state.quarterWindow })', ctx);
+  assert.equal(before.nextTierHidden, false);
+  assert.equal(before.quarterlyMonthsHidden, true);
+  assert.match(before.detail.kpiDaysLabel, /ספטמבר 2026 \(בתהליך\)/);
+  assert.equal(before.detail.kpiDays, '102');
+  assert.equal(before.kpis[0], 'בתים עם בונוס מובטח — ספטמבר 2026 (בתהליך)');
+  assert.equal(before.kpis[2], 'מטופלים פעילים');
+
+  await call(ctx, 'selectBonusMonth_', '2026-07');
+  assert.notEqual(byId.get('kpiBonus').textContent, before.kpis[5]);
+  assert.equal(vm.runInContext('JSON.stringify({ o: state.overview, m: state.monthOverviews, p: state.prevOverview, c: state.chartsByMonth, d: state.details, q: state.quarterWindow })', ctx), stateBefore,
+    'the live bonus state is never written by the picker');
+
+  // Back via the link (the running month clears the selection).
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  assert.equal(vm.runInContext('state.bonusMonth', ctx), null);
+  assert.deepEqual(pageSnapshot(ctx, byId, panel), before, 'overview + house tab identical to before the pick');
+  assert.equal(byId.get('bonusMonthOverview').value, '2026-09');
+  assert.equal(panel.querySelector('[data-bonus-month]').value, '2026-09');
+  assert.equal(monthCalls(calls).length, 3, 'returning to the running month fetches nothing');
+
+  // The 60-second refresh in history mode keeps showing the selected month.
+  await call(ctx, 'selectBonusMonth_', '2026-07');
+  await vm.runInContext('loadOverview', ctx)();
+  assert.equal(byId.get('monthTag').textContent, 'יולי 2026 — סופי');
+  assert.equal(byId.get('kpiBonus').textContent, '10,500 ₪');
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  assert.deepEqual(pageSnapshot(ctx, byId, panel), before);
+});
+
+test('bonus picker: months are cached in memory — re-selecting, a month of the same window, and last month cost no request', async () => {
+  const { ctx, byId, calls } = await bootWithHistory();
+  await call(ctx, 'selectBonusMonth_', '2026-07');
+  assert.deepEqual(monthCalls(calls), ['2026-05', '2026-06', '2026-07']);
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  await call(ctx, 'selectBonusMonth_', '2026-07');
+  assert.equal(calls.length, 3, 're-selecting July is a cache hit');
+  await call(ctx, 'selectBonusMonth_', '2026-06');
+  await call(ctx, 'selectBonusMonth_', '2026-05');
+  assert.equal(calls.length, 3, 'June and May were loaded with July');
+  assert.equal(byId.get('monthTag').textContent, 'מאי 2026 — סופי');
+  await call(ctx, 'selectBonusMonth_', '2026-08'); // already in state.monthOverviews (last month)
+  assert.equal(calls.length, 3, 'last month is reused from the bonus code\'s own cache');
+  assert.equal(byId.get('kpiBonusLabel').textContent, 'בונוס אוגוסט 2026 — סופי (לתשלום)');
+  assert.equal(byId.get('kpiBonus').textContent, '8,000 ₪');
+  // The cache survives the 60-second refresh (which resets monthOverviews).
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  await vm.runInContext('loadOverview', ctx)();
+  calls.length = 0;
+  await call(ctx, 'selectBonusMonth_', '2026-07');
+  assert.equal(calls.length, 0, 'no refetch after a refresh');
+  assert.equal(byId.get('kpiBonus').textContent, '10,500 ₪');
+  assert.equal(vm.runInContext('Object.keys(state.bonusHistory).sort().join(",")', ctx), '2026-05,2026-06,2026-07,2026-08');
+});
+
+test('bonus picker: a failed month shows an explicit error state (no stale figures), is retried on re-select, and invalid values fall back to the running month', async () => {
+  const { ctx, byId, panel, calls } = await bootWithHistory({ failMonth: '2026-07' });
+  await call(ctx, 'selectBonusMonth_', '2026-07');
+  assert.match(byId.get('houseGrid').innerHTML, /data-bonus-history-state="error">שגיאה בטעינת יולי 2026: upstream down/);
+  assert.equal(byId.get('houseGrid').children.length, 0);
+  assert.equal(byId.get('kpiBonus').textContent, '—');
+  assert.equal(byId.get('kpiBonusLabel').textContent, 'בונוס יולי 2026 — סופי (לתשלום)');
+  const hero = panel.querySelector('[data-status-banner]').innerHTML;
+  assert.match(hero, /data-bonus-history-state="error">שגיאה בטעינת יולי 2026: upstream down/);
+  assert.equal(panel.querySelector('[data-stat="treatmentDays"]').textContent, '—');
+  assert.equal(panel.querySelector('[data-stat-label="treatmentDays"]').textContent, 'ימי טיפול — יולי 2026 (סופי)');
+  assert.equal(panel.querySelector('[data-month-split]').innerHTML, '');
+  assert.equal(panel.querySelector('[data-breakdown]').children.length, 0);
+  assert.doesNotMatch(hero + byId.get('houseGrid').innerHTML, /102|160|ספטמבר/, 'no running-month figure under the July label');
+  const n = calls.length;
+  await call(ctx, 'selectBonusMonth_', '2026-07');
+  assert.ok(monthCalls(calls.slice(n)).includes('2026-07'), 'the failed month is retried');
+  assert.ok(!monthCalls(calls.slice(n)).includes('2026-05'), 'the months that loaded are not refetched');
+
+  calls.length = 0;
+  for (const bad of ['2026-13', '2026-04', '2027-01', 'javascript:alert(1)', '', null]) {
+    await call(ctx, 'selectBonusMonth_', bad);
+    assert.equal(vm.runInContext('state.bonusMonth', ctx), null, `"${bad}" must fall back to the running month`);
+  }
+  assert.equal(calls.length, 0);
+  assert.equal(byId.get('monthTag').textContent, 'ספטמבר 2026');
+});
+
+test('bonus picker: the occupancy-history picker on the house tab still works independently while a bonus month is selected', async () => {
+  const { ctx, panel } = await bootWithHistory();
+  await call(ctx, 'selectBonusMonth_', '2026-07');
+  const bonusHero = /data-hero-headline>([^<]*)</.exec(panel.querySelector('[data-status-banner]').innerHTML)[1];
+  await call(ctx, 'selectHistoryMonth_', 'ramot', '2026-05'); // occupancy view for May, bonus view stays July
+  assert.match(panel.querySelector('[data-history-view]').innerHTML, /תפוסה יומית — מאי 2026 \(סופי\)/);
+  assert.equal(/data-hero-headline>([^<]*)</.exec(panel.querySelector('[data-status-banner]').innerHTML)[1], bonusHero);
+  assert.equal(panel.querySelector('[data-bonus-month]').value, '2026-07');
+});
+
+test('index.html / sw.js: both pickers exist, the legend labels are addressable, SW cache is v10+', () => {
+  const html = pub('index.html');
+  const overview = /<section class="panel is-active" id="panel-overview"[\s\S]*?<\/section>/.exec(html)[0];
+  assert.match(overview, /<select id="bonusMonthOverview"/);
+  assert.match(overview, /id="bonusMonthBackOverview" hidden>חזרה לחודש נוכחי</);
+  assert.ok(overview.indexOf('bonusMonthOverview') < overview.indexOf('id="networkKpis"'), 'overview picker sits above the KPI cards');
+  assert.match(overview, /id="kpiActiveLabel"/);
+  const tpl = /<template id="houseDetailTpl">[\s\S]*?<\/template>/.exec(html)[0];
+  assert.match(tpl, /<select data-bonus-month /);
+  assert.match(tpl, /data-bonus-month-back hidden>חזרה לחודש נוכחי</);
+  assert.ok(tpl.indexOf('data-bonus-month') < tpl.indexOf('data-status-banner'), 'house picker sits above the hero');
+  assert.match(tpl, /data-stat-label="daysSoFar"/);
+  assert.match(tpl, /data-stat-label="daysProjection"/);
+  assert.match(tpl, /data-quarterly-months hidden/);
+  const m = pub('sw.js').match(/const CACHE = 'ezone-managers-v(\d+)'/);
+  assert.ok(m && Number(m[1]) >= 10, 'SW cache must be bumped to v10+ (bonus-history picker shell)');
+  assert.match(pub('styles.css'), /\.next-tier-card\[hidden\]\s*\{\s*display:\s*none/);
+  assert.match(pub('styles.css'), /\.link-btn\[hidden\]\s*\{\s*display:\s*none/);
+});

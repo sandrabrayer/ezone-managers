@@ -1,4 +1,4 @@
-# E-ZONE Ecosystem Status — updated July 4, 2026 (Managers house roster refreshed September 5, 2026; Managers bonus month labelling September 8, 2026; Managers occupancy history picker September 10, 2026)
+# E-ZONE Ecosystem Status — updated July 4, 2026 (Managers house roster refreshed September 5, 2026; Managers bonus month labelling September 8, 2026; Managers occupancy history picker and bonus history picker September 10, 2026)
 
 Add this file to the knowledge of EVERY E-Zone app Project (all six), replacing
 the July 3 version, so any future chat/session starts from the true state.
@@ -117,6 +117,26 @@ outpatient was switched dashboard-hKjf9 → volta, orphaning a day of work).
   tests 125. Details: `docs/occupancy-history-view.md`. Backend unchanged:
   whether the month overview carries a per-house `dailyChart` is decided in
   the dashboard Apps Script.
+
+## Managers: bonus history month picker (September 10, 2026)
+
+- **"חודש בונוס" picker on the overview and on every house tab**: the
+  running month (default) plus every finished month back to the May 2026
+  quarterly anchor, no cap. One page-wide selection; `חזרה לחודש נוכחי`
+  restores the live view. A finished month renders the WHOLE page settled
+  through `BonusView.settledMonthView` — `יולי 2026 — סופי`, tier reached,
+  amount, gate result — KPIs, winners banner, network chart, house cards,
+  house hero, month split, days bar, tier track, quarterly block
+  (anchored to the selected month's window, with `מאי ✓ · יוני ✗ · יולי ✓`
+  marks) and breakdown. Never `בתהליך` / `בדרך` / `חסרים` / `צפי`; the
+  next-tier card is hidden; days-so-far of a finished month = full-month
+  total.
+- Data: the existing `managersOverview&month=YYYY-MM` fetch only (selected
+  month + finished months of its window, ≤ 3 requests), cached per month in
+  memory for the life of the page; explicit error state, retried on
+  re-select. **No new endpoints, no Apps Script changes.** The running month
+  is byte-for-byte unchanged (snapshot-tested). SW cache v10, tests 136.
+  Details: `docs/bonus-month-labelling.md` → "Bonus history month picker".
 
 ## Managers: house roster (5 houses, current as of September 5, 2026)
 

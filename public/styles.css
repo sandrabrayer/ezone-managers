@@ -1384,3 +1384,36 @@ body::before {
 .history-status { font-size: 13px; color: var(--text-dim); margin-bottom: 12px; }
 .history-empty { font-size: 13px; color: var(--text-mute); padding: 10px 0; }
 .daily-spark-wrap [data-history-spark] { flex: 1; min-width: 0; }
+
+/* ===== Bonus history (month picker on the overview + house tabs) ===== */
+.bonus-month-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 6px 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-btn:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+.link-btn[hidden] { display: none; }
+.next-tier-card[hidden] { display: none; }
+.house-card.settled .hc-month.hc-settled { margin-bottom: 12px; }
+.quarterly-months {
+  font-size: 12px;
+  color: var(--text-mute);
+  margin-top: 6px;
+  line-height: 1.6;
+}
+.quarterly-months[hidden] { display: none; }
+.log-empty { font-size: 13px; color: var(--text-mute); padding: 8px 0; list-style: none; }

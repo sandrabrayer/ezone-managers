@@ -88,6 +88,22 @@
     var m = d.getMonth() + 1, day = d.getDate();
     return d.getFullYear() + '-' + (m < 10 ? '0' + m : m) + '-' + (day < 10 ? '0' + day : day);
   }
+  /* Every month from `toYm` back to `fromYm` (both inclusive), NEWEST first —
+     the option list of the bonus-history month picker: the running month
+     plus every finished month since the quarterly anchor. [] for bad input
+     or when `fromYm` is after `toYm`. */
+  function monthsBetween(fromYm, toYm) {
+    var a = ymParts(fromYm), b = ymParts(toYm);
+    if (!a || !b) return [];
+    var out = [];
+    var cursor = new Date(b.year, b.month - 1, 1);
+    var floor = a.year * 12 + (a.month - 1);
+    while (cursor.getFullYear() * 12 + cursor.getMonth() >= floor) {
+      out.push(ymOf(cursor));
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1);
+    }
+    return out;
+  }
 
   /* ── payload sanitising ─────────────────────────────────── */
   /* A display label taken from the feed (manager / type / name) must be a
@@ -192,8 +208,9 @@
    * Wording is final-state only — never "בדרך"/"בתהליך"/"חסרים".
    *
    * in : { key, ym, avgDaily, treatmentDays }
-   * out: { month, label, title, amount, tier, eligible, gatePassed,
-   *        treatmentDays, gate, avgDaily, threshold, statusText, badge, final }
+   * out: { month, label, title, shortTitle, gateText, amount, tier, eligible,
+   *        gatePassed, treatmentDays, gate, avgDaily, threshold, statusText,
+   *        badge, final }
    */
   function settledMonthView(o, resolveThreshold) {
     var opts = o || {};
@@ -221,6 +238,10 @@
       month: ym,
       label: label,
       title: 'בונוס ' + label + ' — סופי (לתשלום)',
+      /* Picker / history heading: "יולי 2026 — סופי". */
+      shortTitle: label + ' — סופי',
+      /* Gate result in words, countable: "441/510 ימי טיפול · המכסה לא הושלמה". */
+      gateText: fmtInt(td) + '/' + fmtInt(r.minRequired) + ' ימי טיפול · ' + (gateMet ? 'המכסה הושלמה' : 'המכסה לא הושלמה'),
       amount: r.amount,
       tier: r.tier,
       eligible: r.eligible,
@@ -335,22 +356,25 @@
   /**
    * Headline = the SETTLED previous month for this house. Secondary line =
    * the running month, always named and marked "בתהליך".
-   * in : { name, manager, settled (settledMonthView|null), prevYm, current (currentMonthView) }
+   * in : { name, manager, settled (settledMonthView|null), prevYm, current (currentMonthView),
+   *        selected: true when `settled` is a month the user PICKED in the
+   *        bonus-history picker — the headline then leads with its short
+   *        title ("יולי 2026 — סופי: …") and there is no running-month line }
    */
   function houseHeroView(o) {
     var opts = o || {};
     var s = opts.settled;
-    var c = opts.current;
+    var c = opts.selected ? null : opts.current;
     var manager = safeLabel(opts.manager);
     var name = safeLabel(opts.name) || '';
     var headline, sub, tone, emoji;
     if (s && s.amount > 0) {
       tone = 'above'; emoji = '🏆';
-      headline = s.title + ': ' + s.statusText;
+      headline = (opts.selected ? s.shortTitle : s.title) + ': ' + s.statusText;
       sub = (manager ? 'מנהל/ת: ' + manager + ' · ' : '') + 'ממוצע ' + fmtNum1(s.avgDaily) + ' מטופלים/יום · ' + fmtInt(s.treatmentDays) + '/' + fmtInt(s.gate) + ' ימי טיפול';
     } else if (s) {
       tone = 'below'; emoji = '⚠️';
-      headline = s.label + ': ' + s.statusText;
+      headline = (opts.selected ? s.shortTitle : s.label) + ': ' + s.statusText;
       sub = (manager ? 'מנהל/ת: ' + manager + ' · ' : '') + 'ממוצע ' + fmtNum1(s.avgDaily) + ' מטופלים/יום · ' + fmtInt(s.treatmentDays) + '/' + fmtInt(s.gate) + ' ימי טיפול';
     } else {
       tone = 'below'; emoji = 'ℹ️';
@@ -376,6 +400,7 @@
     daysInMonth: daysInMonth,
     monthLabel: monthLabel,
     dateKey: dateKey,
+    monthsBetween: monthsBetween,
     safeLabel: safeLabel,
     daysSoFar: daysSoFar,
     tiersAscFor: tiersAscFor,

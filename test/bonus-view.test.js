@@ -224,3 +224,45 @@ test('safeLabel drops numeric / amount-like feed values (the stray "2500")', () 
   assert.equal(BV.safeLabel('אורן'), 'אורן');
   assert.equal(BV.safeLabel('בית מאזן'), 'בית מאזן');
 });
+
+/* ── bonus-history month picker (view-model side) ────────── */
+test('monthsBetween lists every month from the running month back to the May 2026 anchor, newest first, with no cap', () => {
+  assert.deepEqual(BV.monthsBetween('2026-05', '2026-09'), ['2026-09', '2026-08', '2026-07', '2026-06', '2026-05']);
+  assert.deepEqual(BV.monthsBetween('2026-05', '2026-05'), ['2026-05']);
+  assert.equal(BV.monthsBetween('2026-05', '2027-09').length, 17, 'no 12-month cap — every finished month since the anchor');
+  assert.deepEqual(BV.monthsBetween('2026-05', '2026-04'), [], 'floor after the running month → nothing');
+  assert.deepEqual(BV.monthsBetween('nope', '2026-09'), []);
+});
+
+test('settled month carries a short picker title ("יולי 2026 — סופי") and a countable gate result', () => {
+  const met = BV.settledMonthView({ key: 'ramot', ym: '2026-07', avgDaily: 19.2, treatmentDays: 560 }, noThreshold);
+  assert.equal(met.shortTitle, 'יולי 2026 — סופי');
+  assert.equal(met.gateText, '560/510 ימי טיפול · המכסה הושלמה');
+  assert.equal(met.statusText, 'זכאי · מדרגה 2 · 2,500 ₪');
+  const missed = BV.settledMonthView({ key: 'ramot', ym: '2026-06', avgDaily: 14.7, treatmentDays: 441 }, noThreshold);
+  assert.equal(missed.gateText, '441/510 ימי טיפול · המכסה לא הושלמה');
+  for (const v of [met, missed]) {
+    for (const f of ['shortTitle', 'gateText', 'statusText', 'title']) {
+      assert.ok(!hasForbidden(v[f]), `${f} must be final-state wording`);
+      assert.ok(!v[f].includes('צפי'), `${f} must not mention a projection`);
+    }
+  }
+});
+
+test('houseHeroView({ selected:true }) leads with the short settled title and drops the running-month line', () => {
+  const s = BV.settledMonthView({ key: 'ramot', ym: '2026-07', avgDaily: 19.2, treatmentDays: 560 }, noThreshold);
+  const c = BV.currentMonthView({ key: 'ramot', ym: '2026-09', daysSoFar: 102, elapsedDays: 8, daysInMonth: 30, capacity: 20 }, noThreshold);
+  const hero = BV.houseHeroView({ name: 'רמות השבים', manager: 'אורן', settled: s, prevYm: '2026-07', current: c, selected: true });
+  assert.equal(hero.headline, 'יולי 2026 — סופי: זכאי · מדרגה 2 · 2,500 ₪');
+  assert.equal(hero.secondary, '', 'no running-month line on a picked month');
+  assert.equal(hero.tone, 'above');
+  assert.match(hero.sub, /מנהל\/ת: אורן · ממוצע 19\.2 מטופלים\/יום · 560\/510 ימי טיפול/);
+  const missed = BV.settledMonthView({ key: 'ramot', ym: '2026-06', avgDaily: 14.7, treatmentDays: 441 }, noThreshold);
+  const hero2 = BV.houseHeroView({ name: 'רמות השבים', settled: missed, prevYm: '2026-06', current: c, selected: true });
+  assert.equal(hero2.headline, 'יוני 2026 — סופי: לא זכאי · המכסה לא הושלמה (441/510)');
+  assert.equal(hero2.secondary, '');
+  // Without `selected` the existing (running-month) behaviour is unchanged.
+  const plain = BV.houseHeroView({ name: 'רמות השבים', settled: s, prevYm: '2026-07', current: c });
+  assert.equal(plain.headline, 'בונוס יולי 2026 — סופי (לתשלום): זכאי · מדרגה 2 · 2,500 ₪');
+  assert.ok(plain.secondary.includes('בתהליך'));
+});
