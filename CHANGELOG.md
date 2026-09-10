@@ -3,6 +3,38 @@
 
 ## Unreleased
 
+### Added — occupancy history: month picker on the house-detail tab (September 10, 2026)
+
+Frontend only (`public/`), no Apps Script / server / endpoint changes. Full
+write-up: `docs/occupancy-history-view.md`.
+
+- **"היסטוריית תפוסה" card at the top of every house tab** with a month
+  picker (current month back to the May 2026 quarterly anchor, growing to a
+  12-month lookback). Picking a past month renders that month's daily
+  occupancy chart, `ימי טיפול — <חודש>: 441 / 510`, the daily average and the
+  settled status line — always titled `(סופי)`, never `בתהליך`. The current
+  month keeps the card to the picker alone (the live blocks below show it).
+- **Data**: `managersOverview&month=YYYY-MM` via a new shared
+  `fetchMonthOverview_` helper (`loadOverview` now uses the same helper for
+  the quarter-window months — the per-month fetch exists once). The daily
+  chart comes from that payload when present, else from one
+  `managersHouse&house=…&month=…` attempt accepted **only** when its `month`
+  matches; otherwise an explicit "no daily data" note. Fetch errors render
+  an explicit error state (no blank/stale figures) and are retried on
+  re-select. Picker values are validated (`YYYY-MM`) before use.
+- **Bonus figures are unaffected by the picker**: the history code has its
+  own state (`historyMonth` / `historyByMonth` / `loadingHistory`), never
+  writes the bonus slices, and renders last in `renderHouseDetail`.
+- **Tests 117 → 125** (`test/app-render.test.js`): picker defaults/range/
+  wiring; past-month render is settled and chart-based; a byte-for-byte
+  snapshot of every bonus string (hero, KPIs, month split, chart card, tiers,
+  breakdown, overview card) plus bonus state is unchanged after selecting,
+  re-rendering and switching back; wrong-month chart rejected; right-month
+  chart accepted; already-loaded month reused without a request; fetch error
+  state; invalid values never fetch; template/static guards.
+- SW cache bumped `v8` → `v9`. Docs: `docs/occupancy-history-view.md`
+  (new), README, `EZONE-ECOSYSTEM-STATUS.md` Managers section.
+
 ### Fixed — overview cards use the chart-based days-so-far on first load (September 8, 2026)
 
 Follow-up to PR #19. Frontend only, no backend changes.

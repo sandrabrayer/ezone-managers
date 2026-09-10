@@ -59,7 +59,9 @@ quarterly 5,000 ₪ (`test/bonus-eligibility.test.js`) — the bonus VIEW rules
 (month labelling, settled vs running wording, projection vs actual, tier
 badge, single days-so-far: `test/bonus-view.test.js`), the real `app.js`
 render paths in a `vm` sandbox with a minimal fake DOM (`test/app-render.test.js`
-— no backend bonus figure reaches the DOM, KPI = hero = bar = card), and
+— no backend bonus figure reaches the DOM, KPI = hero = bar = card, and the
+occupancy-history month picker leaves every bonus figure unchanged, see
+`docs/occupancy-history-view.md`), and
 static UI guards (`test/ui-guards.test.js`).
 
 **Tests never call the live Apps Script backend**: all upstream HTTP is mocked

@@ -1,4 +1,4 @@
-# E-ZONE Ecosystem Status — updated July 4, 2026 (Managers house roster refreshed September 5, 2026; Managers bonus month labelling September 8, 2026)
+# E-ZONE Ecosystem Status — updated July 4, 2026 (Managers house roster refreshed September 5, 2026; Managers bonus month labelling September 8, 2026; Managers occupancy history picker September 10, 2026)
 
 Add this file to the knowledge of EVERY E-Zone app Project (all six), replacing
 the July 3 version, so any future chat/session starts from the true state.
@@ -102,6 +102,21 @@ outpatient was switched dashboard-hKjf9 → volta, orphaning a day of work).
   `lib/bonus-eligibility.js`). Tests: 113 via `node --test`. SW cache v7.
   Details: `docs/bonus-month-labelling.md`. Still pending: strip the dead
   bonus code from the live dashboard Apps Script (unchanged by this work).
+
+## Managers: occupancy history picker (September 10, 2026)
+
+- Every house tab opens with a **"היסטוריית תפוסה"** card: a month picker
+  (current month back to the May 2026 quarterly anchor, up to 12 months)
+  that shows a past month's daily occupancy chart, `ימי טיפול` vs the fixed
+  gate, daily average and settled status — always `(סופי)`, never `בתהליך`.
+- Data: `managersOverview&month=YYYY-MM` (shared `fetchMonthOverview_`
+  helper); the daily chart from that payload or one
+  `managersHouse&house=…&month=…` attempt accepted only when its `month`
+  matches. Fetch errors show an explicit error state. **The picker never
+  touches the bonus KPIs / hero / cards** (snapshot-tested). SW cache v9,
+  tests 125. Details: `docs/occupancy-history-view.md`. Backend unchanged:
+  whether the month overview carries a per-house `dailyChart` is decided in
+  the dashboard Apps Script.
 
 ## Managers: house roster (5 houses, current as of September 5, 2026)
 

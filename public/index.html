@@ -111,6 +111,20 @@
     <div class="house-detail">
       <div class="status-banner" data-status-banner></div>
 
+      <!-- Occupancy history: browse any past month's daily occupancy.
+           Display-only — the bonus KPIs / hero above and below never read
+           this selection (see docs/occupancy-history-view.md). -->
+      <div class="card history-card" data-history-card>
+        <div class="history-head">
+          <div class="card-title">היסטוריית תפוסה</div>
+          <label class="month-picker">
+            <span>חודש</span>
+            <select data-history-month aria-label="בחירת חודש לתצוגת תפוסה"></select>
+          </label>
+        </div>
+        <div class="history-view" data-history-view hidden></div>
+      </div>
+
       <div class="next-tier-card" data-next-tier-card>
         <div class="next-tier-header" data-next-tier-header>—</div>
         <div class="next-tier-primary" data-next-tier-primary>
