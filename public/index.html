@@ -52,13 +52,25 @@
 
     <!-- TAB 1: OVERVIEW -->
     <section class="panel is-active" id="panel-overview" role="tabpanel">
+      <!-- Bonus history: pick any finished month since May 2026 (the
+           quarterly anchor). A finished month renders the whole overview
+           settled; the running month is the default (see
+           docs/bonus-month-labelling.md, "Bonus history month picker"). -->
+      <div class="bonus-month-bar" id="bonusMonthBar">
+        <label class="month-picker">
+          <span>חודש בונוס</span>
+          <select id="bonusMonthOverview" aria-label="בחירת חודש בונוס"></select>
+        </label>
+        <button type="button" class="link-btn" id="bonusMonthBackOverview" hidden>חזרה לחודש נוכחי</button>
+      </div>
+
       <div class="kpis" id="networkKpis">
         <div class="kpi kpi-green">
           <div class="kpi-label" id="kpiHousesAboveLabel">בתים עם בונוס מובטח (חודש נוכחי)</div>
           <div class="kpi-value is-skeleton" id="kpiHousesAbove">&nbsp;</div>
         </div>
         <div class="kpi kpi-pink">
-          <div class="kpi-label">מטופלים פעילים</div>
+          <div class="kpi-label" id="kpiActiveLabel">מטופלים פעילים</div>
           <div class="kpi-value is-skeleton" id="kpiActive">&nbsp;</div>
         </div>
         <div class="kpi kpi-gold">
@@ -77,7 +89,7 @@
         <div class="spark-card-head">
           <div>
             <div class="spark-title">תפוסה לעומת זכאות לבונוס</div>
-            <div class="spark-sub">קו זוהר = זכאות לבונוס · מילוי = מטופלים נוכחיים · רקע = קיבולת</div>
+            <div class="spark-sub" id="sparkSub">קו זוהר = זכאות לבונוס · מילוי = מטופלים נוכחיים · רקע = קיבולת</div>
           </div>
         </div>
         <div class="network-spark" id="networkSpark"></div>
@@ -109,6 +121,16 @@
   <!-- House detail template -->
   <template id="houseDetailTpl">
     <div class="house-detail">
+      <!-- Bonus history: same picker as the overview — a finished month
+           renders this whole tab settled. -->
+      <div class="bonus-month-bar">
+        <label class="month-picker">
+          <span>חודש בונוס</span>
+          <select data-bonus-month aria-label="בחירת חודש בונוס"></select>
+        </label>
+        <button type="button" class="link-btn" data-bonus-month-back hidden>חזרה לחודש נוכחי</button>
+      </div>
+
       <div class="status-banner" data-status-banner></div>
 
       <!-- Occupancy history: browse any past month's daily occupancy.
@@ -150,9 +172,9 @@
           <div class="bep-marker" data-bep-marker><span>★</span><em data-bep-marker-label></em></div>
         </div>
         <div class="bep-legend">
-          <span>ימי טיפול עד כה: <b data-stat="daysSoFar">—</b></span>
+          <span><span data-stat-label="daysSoFar">ימי טיפול עד כה</span>: <b data-stat="daysSoFar">—</b></span>
           <span>יעד (זכאות לבונוס): <b data-stat="daysTarget">—</b></span>
-          <span>צפי לסוף החודש: <b data-stat="daysProjection">—</b></span>
+          <span><span data-stat-label="daysProjection">צפי לסוף החודש</span>: <b data-stat="daysProjection">—</b></span>
         </div>
 
         <div class="card-subtitle">תפוסה יומית — מספר מטופלים בכל יום בחודש</div>
@@ -182,6 +204,7 @@
           <div class="quarterly-target" data-quarterly-target>—</div>
         </div>
         <div class="quarterly-note" data-quarterly-note>—</div>
+        <div class="quarterly-months" data-quarterly-months hidden></div>
       </div>
 
       <div class="card breakdown-card">

@@ -3,6 +3,56 @@
 
 ## Unreleased
 
+### Added — bonus history: month picker on the overview and every house tab (September 10, 2026)
+
+Frontend only (`public/`), no Apps Script / server / endpoint changes. Full
+write-up: `docs/bonus-month-labelling.md` → "Bonus history month picker".
+
+- **"חודש בונוס" picker** at the top of the overview and of every house tab,
+  listing the running month (default, `ספטמבר 2026 — חודש נוכחי (בתהליך)`)
+  and **every finished month back to May 2026** (the quarterly anchor) as
+  `יולי 2026 — סופי` — no lookback cap. A `חזרה לחודש נוכחי` link appears
+  while a finished month is selected. The selection is shared: picking a
+  month on the overview shows it on every opened house tab and vice versa.
+- **A finished month renders SETTLED everywhere**, through the existing
+  `BonusView.settledMonthView`: overview KPIs (`בתים זכאים לבונוס`, `ממוצע
+  מטופלים/יום`, `בונוס יולי 2026 — סופי (לתשלום)`, `ימים בחודש 31 מתוך 31` —
+  days-so-far of a finished month = the full month), winners banner, network
+  chart (month average), house cards (one settled block: tier reached,
+  amount, gate result, tier pill only when earned), house hero
+  (`יולי 2026 — סופי: זכאי · מדרגה 2 · 2,500 ₪`), KPIs, month split,
+  treatment-days bar (gate result in words), tier track, quarterly block
+  and breakdown. Never `בתהליך` / `בדרך` / `חסרים` / `צפי` / `ממוצע נוכחי`;
+  the next-tier ("missing for the next tier") card is hidden; entries/exits
+  show `—` (a month overview carries none).
+- **Quarterly block anchored to the selected month's window** (May–Jul for
+  July) as it stood at the end of that month, with a per-month line
+  `מאי 2026 ✓ · יוני 2026 ✗ · יולי 2026 ✓` (`(לאחר החודש שנבחר)` for months
+  after the selection).
+- **Data**: the existing `managersOverview&month=YYYY-MM` fetch only
+  (`fetchMonthOverview_`); the selected month plus the finished months of
+  its window (≤ 3 requests), cached per month in `state.bonusHistory` for
+  the life of the page — re-selecting, a month of the same window and last
+  month cost no request, and the cache survives the 60-second refresh.
+  Fetch errors render an explicit error state (no stale figures) and are
+  retried on re-select; picker values are validated against the offered
+  list. The daily chart is shown when the month payload (or the
+  occupancy-history cache) has one; otherwise an explicit no-data note.
+- **Running month unchanged**: with no selection every render path is the
+  one shipped before; the live bonus state is never written by the picker.
+  Small refactors only: `tierCfgFor_` (shared tier config),
+  `quarterlyLocal_(key, asOfYM)`, `settledAmountFor_` reads either cache.
+- **Tests 125 → 136**: `test/bonus-view.test.js` (+3: `monthsBetween`,
+  `shortTitle` / `gateText`, `houseHeroView({ selected })`);
+  `test/app-render.test.js` (+8: picker months on both surfaces; a picked
+  month renders settled on overview + tab with a forbidden-word sweep over
+  the whole rendered page; a month without a tier; running month
+  byte-for-byte unchanged after picking and returning, also across a
+  refresh; in-memory cache reuse; error state / retry / invalid values;
+  occupancy picker independence; template / SW guards).
+- SW cache bumped `v9` → `v10`. Docs: `docs/bonus-month-labelling.md`,
+  README, `EZONE-ECOSYSTEM-STATUS.md` Managers section.
+
 ### Added — occupancy history: month picker on the house-detail tab (September 10, 2026)
 
 Frontend only (`public/`), no Apps Script / server / endpoint changes. Full

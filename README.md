@@ -34,6 +34,16 @@ Server-only `lib/auth.js` is never served over HTTP; only
 (`public/bonus-view.js` — month labelling, wording, days-so-far) lives in
 `public/` and is served by the static mount; see `docs/bonus-month-labelling.md`.
 
+## Bonus history
+
+A **"חודש בונוס"** picker on the overview and on every house tab lists the
+running month (default) and every finished month back to May 2026, the
+quarterly anchor. A finished month renders the whole page settled
+(`יולי 2026 — סופי`: tier reached, amount, gate result, quarterly window),
+using only the existing `managersOverview&month=YYYY-MM` endpoint, cached
+per month in memory. `חזרה לחודש נוכחי` restores the live view. See
+`docs/bonus-month-labelling.md` → "Bonus history month picker".
+
 ## Local
 
 ```bash
@@ -59,10 +69,11 @@ quarterly 5,000 ₪ (`test/bonus-eligibility.test.js`) — the bonus VIEW rules
 (month labelling, settled vs running wording, projection vs actual, tier
 badge, single days-so-far: `test/bonus-view.test.js`), the real `app.js`
 render paths in a `vm` sandbox with a minimal fake DOM (`test/app-render.test.js`
-— no backend bonus figure reaches the DOM, KPI = hero = bar = card, and the
+— no backend bonus figure reaches the DOM, KPI = hero = bar = card, the
 occupancy-history month picker leaves every bonus figure unchanged, see
-`docs/occupancy-history-view.md`), and
-static UI guards (`test/ui-guards.test.js`).
+`docs/occupancy-history-view.md`, and the bonus-history month picker renders
+a finished month settled-only while the running month stays byte-for-byte
+unchanged), and static UI guards (`test/ui-guards.test.js`).
 
 **Tests never call the live Apps Script backend**: all upstream HTTP is mocked
 in-process and all secrets are dummy values set inside the test files.

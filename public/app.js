@@ -41,7 +41,9 @@ const HEBREW_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי
 /* Occupancy-history picker (house-detail tab): months offered = the current
    month back HISTORY_LOOKBACK_MONTHS months, never earlier than
    HISTORY_FLOOR_YM — the bonus model's quarterly anchor (May 2026, see
-   BonusEligibility.quarterWindowFor); there is no bonus-era data before it. */
+   BonusEligibility.quarterWindowFor); there is no bonus-era data before it.
+   The bonus-history picker (overview + house tabs) uses the same floor with
+   NO lookback cap: every finished month since the anchor is offered. */
 const HISTORY_LOOKBACK_MONTHS = 12;
 const HISTORY_FLOOR_YM = '2026-05';
 
@@ -65,7 +67,17 @@ const state = {
    *   loadingHistory['key:YYYY-MM']  = in-flight promise */
   historyMonth: {},
   historyByMonth: {},
-  loadingHistory: {}
+  loadingHistory: {},
+  /* Bonus-history month picker (overview + every house tab).
+   *   bonusMonth              = selected FINISHED 'YYYY-MM' (null = running
+   *                             month → every render path is unchanged)
+   *   bonusHistory['YYYY-MM'] = { ok:true, byKey } | { ok:false, error } —
+   *                             the month's `managersOverview&month=` rows,
+   *                             kept for the life of the page (never refetched)
+   *   loadingBonusHistory[ym] = in-flight promise */
+  bonusMonth: null,
+  bonusHistory: {},
+  loadingBonusHistory: {}
 };
 
 /* ============================================================
@@ -175,7 +187,7 @@ function renderWinnersBanner_(houses) {
  * the canonical rules. Returns the amount, or null when that month's feed is
  * unavailable. */
 function settledAmountFor_(key, ym) {
-  const byKey = (state.monthOverviews || {})[ym];
+  const byKey = monthByKey_(ym);
   const ph = byKey ? byKey[key] : null;
   if (!ph) return null;
   const r = window.BonusEligibility.monthlyBonusAmount(
@@ -187,15 +199,26 @@ function settledAmountFor_(key, ym) {
 
 /* Quarterly standing for a house — computed LOCALLY (window anchored May 2026:
  * May–Jul, Aug–Oct, ...). A month counts when its settled monthly bonus was
- * >= 2,000; the 5,000 pays only when all 3 finished months met it. */
-function quarterlyLocal_(key) {
-  const win = state.quarterWindow || [];
+ * >= 2,000; the 5,000 pays only when all 3 finished months met it.
+ * `asOfYM` (bonus-history picker): the window is the one containing that
+ * month and only its months up to and including it count as finished — the
+ * standing exactly as it stood at the end of the selected month. Without it
+ * the running window (state.quarterWindow) is used, as before.
+ * The result also carries `byMonth` ({ ym: settled amount }) for the
+ * per-month marks of the history view. */
+function quarterlyLocal_(key, asOfYM) {
+  const win = asOfYM
+    ? (window.BonusEligibility.quarterWindowFor(asOfYM) || [])
+    : (state.quarterWindow || []);
   const settled = {};
   win.forEach(ym => {
+    if (asOfYM && ym > asOfYM) return;
     const amt = settledAmountFor_(key, ym);
     if (amt !== null) settled[ym] = amt;
   });
-  return window.BonusEligibility.quarterlyStatus(win, settled);
+  const q = window.BonusEligibility.quarterlyStatus(win, settled);
+  q.byMonth = settled;
+  return q;
 }
 
 /* Settled bonus for a house in LAST month — the canonical settledMonthView
@@ -237,11 +260,12 @@ function settledPrevFor_(h) {
  *   "<נוכחי> — חודש נוכחי (בתהליך)" actual days-so-far + labelled projection
  * Both are computed locally (BonusView); the feed's own bonus fields are
  * never rendered. */
-function renderMonthSplit_(panel, bonusEl, h) {
+function renderMonthSplit_(panel, bonusEl, h, settledOverride) {
   const BV = window.BonusView;
-  const status = monthlyStatus(h);
-  const prev = settledPrevFor_(h);
-  const cur = status.view;
+  // Bonus-history view: ONE row — the selected finished month, final state.
+  const status = settledOverride ? null : monthlyStatus(h);
+  const prev = settledOverride || settledPrevFor_(h);
+  const cur = status ? status.view : null;
   const viewingYM = h?.month || state.overview?.month || currentMonthYM_();
 
   let box = panel.querySelector('[data-month-split]');
@@ -256,9 +280,9 @@ function renderMonthSplit_(panel, bonusEl, h) {
   if (prev) {
     parts.push(
       `<div class="ms-row ms-prev ms-headline">
-         <span class="ms-tag">${prev.title}</span>
+         <span class="ms-tag">${settledOverride ? prev.shortTitle : prev.title}</span>
          <span class="ms-amt ${prev.amount > 0 ? 'gold' : 'zero'}">${fmtCurrency(prev.amount)}</span>
-         <span class="ms-sub">${prev.statusText} · ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום</span>
+         <span class="ms-sub">${prev.statusText} · ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום${settledOverride ? ' · ' + prev.gateText : ''}</span>
        </div>`
     );
   } else {
@@ -480,6 +504,11 @@ async function ensureHouseCharts_(ym, keys) {
 }
 
 function renderOverview(data) {
+  // Bonus-history picker: a FINISHED month is selected → render that month,
+  // settled, from the per-month cache (the live feed keeps refreshing
+  // underneath and is shown again on "חזרה לחודש נוכחי").
+  if (state.bonusMonth) { renderOverviewSettled_(state.bonusMonth); return; }
+
   const BV = window.BonusView;
   const houses = Array.isArray(data.houses) ? data.houses : [];
   const totals = data.totals || {};
@@ -487,6 +516,9 @@ function renderOverview(data) {
   const nowLabel = BV.monthLabel(nowYM);
 
   document.getElementById('monthTag').textContent = nowLabel;
+  renderOverviewPicker_();
+  setKpiLabel('kpiActiveLabel', 'מטופלים פעילים');
+  setSparkSub_('קו זוהר = זכאות לבונוס · מילוי = מטופלים נוכחיים · רקע = קיבולת');
 
   // Houses whose CURRENT-month bonus is already secured (locked in), or a
   // finished month that earned — never merely occupancy-eligible mid-month.
@@ -527,6 +559,10 @@ function renderOverview(data) {
 
 function setKpiLabel(id, text) {
   const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+function setSparkSub_(text) {
+  const el = document.getElementById('sparkSub');
   if (el) el.textContent = text;
 }
 
@@ -701,10 +737,13 @@ function monthlyStatus(h) {
     trusts the backend's quarterly math. */
 function quarterlyEarnedAmount(h) {
   if (!h || !h.key) return 0;
-  return quarterlyLocal_(h.key).earned;
+  return quarterlyLocal_(h.key, historyYMOf_(h)).earned;
 }
 
 function buildHouseCard(h) {
+  // Bonus-history picker: the card is the selected finished month, settled.
+  if (state.bonusMonth) return buildSettledHouseCard_(settledHouseFor_(h.key, state.bonusMonth));
+
   const BV = window.BonusView;
   const key = h.key;
   const labels = HOUSE_LABELS[key] || {};
@@ -881,6 +920,13 @@ function renderHouseDetail(key, data) {
   const panel = document.getElementById(`panel-${key}`);
   if (!panel) return;
   const BV = window.BonusView;
+  panel.setAttribute('data-rendered', '1'); // rerenderAll_ (bonus-history picker) re-renders opened tabs only
+
+  // Bonus-history picker: a FINISHED month is selected → the whole tab shows
+  // that month, settled (renderHouseDetailSettled_); the live payload is
+  // still cached and rendered again on "חזרה לחודש נוכחי".
+  if (state.bonusMonth) { renderHouseDetailSettled_(panel, key, state.bonusMonth); return; }
+  renderBonusMonthPicker_(panel.querySelector('[data-bonus-month]'), panel.querySelector('[data-bonus-month-back]'));
 
   const o = state.housesById[key] || {};
   const merged = { ...o, ...data, key, bonus: { ...(o.bonus || {}), ...(data.bonus || {}) } };
@@ -906,15 +952,7 @@ function renderHouseDetail(key, data) {
   const paid = (status.state === 'finished' && status.amount > 0) || status.state === 'locked';
   const above = eligible;
 
-  // Compatibility config for the detail-page visualizations. Tier patient
-  // counts come from the canonical per-house table. Quarterly is unchanged.
-  const houseCfg = (window.BonusEligibility.HOUSE_BONUS || {})[key] || null;
-  const tierTable = (houseCfg && Array.isArray(houseCfg.tiers)) ? houseCfg.tiers.slice() : [];
-  const cfg = {
-    base: monthlyResult.amount || (tierTable.length ? tierTable[tierTable.length - 1].amount : 0),
-    tierTable,                          // [{patients, amount}], highest first
-    quarterly: window.BonusEligibility.QUARTERLY_AMOUNT
-  };
+  const cfg = tierCfgFor_(key, monthlyResult);
 
   const activity = Array.isArray(data.activity) ? data.activity : [];
   const entries = activity.filter(a => a.kind === 'entry');
@@ -984,6 +1022,8 @@ function renderHouseDetail(key, data) {
       ? `ימי טיפול — ${viewingLabel} (בתהליך, נספר מה-1 בחודש)`
       : `ימי טיפול — ${viewingLabel} (סופי)`;
   }
+  setStatLabel(panel, 'daysSoFar', 'ימי טיפול עד כה');
+  setStatLabel(panel, 'daysProjection', 'צפי לסוף החודש');
   const denom = Math.max(nights, target, projection, 1);
   const fillPct = Math.min(100, (nights / denom) * 100);
   const bepPct  = Math.min(100, (target / denom) * 100);
@@ -1034,6 +1074,18 @@ function renderHouseDetail(key, data) {
 function setStatLabel(panel, name, text) {
   const el = panel.querySelector(`[data-stat-label="${name}"]`);
   if (el) el.textContent = text;
+}
+
+/* Compatibility config for the detail-page visualizations. Tier patient
+ * counts come from the canonical per-house table. Quarterly is unchanged. */
+function tierCfgFor_(key, monthlyResult) {
+  const houseCfg = (window.BonusEligibility.HOUSE_BONUS || {})[key] || null;
+  const tierTable = (houseCfg && Array.isArray(houseCfg.tiers)) ? houseCfg.tiers.slice() : [];
+  return {
+    base: monthlyResult.amount || (tierTable.length ? tierTable[tierTable.length - 1].amount : 0),
+    tierTable,                          // [{patients, amount}], highest first
+    quarterly: window.BonusEligibility.QUARTERLY_AMOUNT
+  };
 }
 
 function setStat(panel, name, value) {
@@ -1088,6 +1140,552 @@ function renderDailySparkInto_(host, legendLine, chart, bep, capacity) {
   if (legendLine) {
     legendLine.textContent = `הקו הכתום = זכאות לבונוס (${fmtInt(bep)} מטופלים)`;
   }
+}
+
+/* ============================================================
+   Bonus history (month picker on the overview and every house tab)
+   Selecting a FINISHED month renders the whole page for that month in the
+   SETTLED convention — KPIs, hero, house cards, month split, tier track,
+   quarterly block, breakdown — via BonusView.settledMonthView (final state:
+   tier reached, amount, gate result; never "בתהליך" / "בדרך" / "צפי").
+   Data: the existing `managersOverview&month=YYYY-MM` fetch
+   (fetchMonthOverview_), cached per month in state.bonusHistory for the life
+   of the page. No new endpoints, no Apps Script changes. With no selection
+   (state.bonusMonth = null) every render path is exactly as before.
+   ============================================================ */
+
+/* The selected history month when `h` is a house object built FOR it (its
+ * `month` is the selection); undefined on the running-month path. */
+function historyYMOf_(h) {
+  const ym = state.bonusMonth;
+  return ym && h && h.month === ym ? ym : undefined;
+}
+
+/* One month's overview rows keyed by house, from whichever cache holds
+ * them: the bonus code's per-refresh state.monthOverviews first (fresh),
+ * then the persistent history cache. null when not loaded. */
+function monthByKey_(ym) {
+  const fresh = (state.monthOverviews || {})[ym];
+  if (fresh) return fresh;
+  const e = state.bonusHistory[ym];
+  return e && e.ok ? e.byKey : null;
+}
+
+/* Cache entry for the picker: { ok:true, byKey } | { ok:false, error } | null. */
+function bonusMonthEntry_(ym) {
+  const e = state.bonusHistory[ym];
+  if (e) return e;
+  const fresh = (state.monthOverviews || {})[ym];
+  return fresh ? { ok: true, byKey: fresh } : null;
+}
+
+/* Months offered, newest first: the running month, then EVERY finished
+ * month back to the quarterly anchor (HISTORY_FLOOR_YM) — no lookback cap. */
+function bonusMonths_(nowYM = historyNowYM_()) {
+  return window.BonusView.monthsBetween(HISTORY_FLOOR_YM, nowYM);
+}
+
+/* House keys in the live overview's order (roster order as fallback). */
+function houseKeysOrdered_() {
+  const live = Array.isArray(state.overview?.houses)
+    ? state.overview.houses.map(h => h && h.key).filter(Boolean) : [];
+  return live.length ? live : HOUSE_KEYS.slice();
+}
+
+/* A house object for a FINISHED month, built ONLY from whitelisted raw
+ * fields of that month's overview row (avgDaily, treatmentDays, sanitised
+ * name / manager) plus the live capacity. `month` is the selected month, so
+ * monthlyStatus() treats it as finished. Backend bonus fields are never
+ * copied. { key, month, missing:true } when the row is absent. The daily
+ * chart is taken from the payload, or from the occupancy-history cache when
+ * that picker already loaded it — no extra request. */
+function settledHouseFor_(key, ym) {
+  const BV = window.BonusView;
+  const byKey = monthByKey_(ym);
+  const ph = byKey ? byKey[key] : null;
+  const live = state.housesById[key] || {};
+  const base = {
+    key, month: ym,
+    name: BV.safeLabel(ph && ph.name) || BV.safeLabel(live.name) || '',
+    manager: BV.safeLabel(ph && ph.manager) || BV.safeLabel(live.manager) || '',
+    capacity: Number(live.capacity) || 0
+  };
+  if (!ph) return { ...base, missing: true };
+  const occ = historyEntry_(key, ym);
+  return {
+    ...base,
+    avgDaily: Number(ph.avgDaily) || 0,
+    treatmentDays: Number(ph.treatmentDays) || 0,
+    dailyChart: monthChart_(ph.dailyChart, ym) || (occ && occ.ok ? occ.dailyChart : null)
+  };
+}
+
+/* settledMonthView for a settledHouseFor_ object (null when missing). */
+function settledViewFor_(h) {
+  if (!h || h.missing) return null;
+  return window.BonusView.settledMonthView(
+    { key: h.key, ym: h.month, avgDaily: h.avgDaily, treatmentDays: h.treatmentDays },
+    resolveThreshold
+  );
+}
+
+/* Fetch (once) every month the selected month's view needs: the month
+ * itself plus the finished months of its quarter window up to it (≤ 3
+ * requests, all `managersOverview&month=`). Months already in either cache
+ * are not refetched; a failed month is cached as an error and retried on the
+ * next selection. Resolves to the number of requests made. */
+async function loadBonusMonth_(ym) {
+  if (state.loadingBonusHistory[ym]) return state.loadingBonusHistory[ym];
+  const nowYM = historyNowYM_();
+  const win = window.BonusEligibility.quarterWindowFor(ym) || [];
+  const months = [...new Set([ym, ...win.filter(m => m <= ym && m < nowYM)])];
+  const run = (async () => {
+    let requests = 0;
+    await Promise.all(months.map(async m => {
+      const cached = bonusMonthEntry_(m);
+      if (cached && cached.ok) { state.bonusHistory[m] = cached; return; } // pin it: monthOverviews is reset every refresh
+      requests += 1;
+      try {
+        state.bonusHistory[m] = { ok: true, byKey: await fetchMonthOverview_(m) };
+      } catch (e) {
+        console.error(`bonus history ${m} failed`, e);
+        state.bonusHistory[m] = { ok: false, error: (e && e.message) || 'שגיאה' };
+      }
+    }));
+    return requests;
+  })();
+  state.loadingBonusHistory[ym] = run;
+  try { return await run; } finally { delete state.loadingBonusHistory[ym]; }
+}
+
+/* Picker change / "חזרה לחודש נוכחי". The value is validated against the
+ * offered list (never trusted from the DOM); the running month or anything
+ * invalid clears the selection and restores the live view. A finished month
+ * re-renders everything at once (loading state if not cached), loads what is
+ * missing, then re-renders from the cache. */
+async function selectBonusMonth_(ym) {
+  const nowYM = historyNowYM_();
+  const target = isValidYM_(ym) && bonusMonths_(nowYM).includes(String(ym)) ? String(ym) : nowYM;
+  state.bonusMonth = target === nowYM ? null : target;
+  rerenderAll_();
+  if (!state.bonusMonth) return;
+  const requests = await loadBonusMonth_(target);
+  if (requests > 0 && state.bonusMonth === target) rerenderAll_();
+}
+
+/* Re-render the overview and every house tab that has been opened. Back on
+ * the running month a tab whose live payload is missing is (re)loaded. */
+function rerenderAll_() {
+  if (state.overview) renderOverview(state.overview);
+  else renderOverviewPicker_();
+  HOUSE_KEYS.forEach(key => {
+    const panel = document.getElementById(`panel-${key}`);
+    if (!panel || !(panel.getAttribute('data-rendered') || panel.firstChild)) return; // tab never opened
+    if (state.bonusMonth) renderHouseDetail(key, state.details[key] || {});
+    else if (state.details[key]) renderHouseDetail(key, state.details[key]);
+    else loadHouseDetail(key);
+  });
+}
+
+/* Fill a picker <select> (options rebuilt only when the month set changes),
+ * mirror the selection, wire the change handler and the back link once. */
+function renderBonusMonthPicker_(sel, back) {
+  if (!sel) return;
+  const nowYM = historyNowYM_();
+  const months = bonusMonths_(nowYM);
+  if (state.bonusMonth && !months.includes(state.bonusMonth)) state.bonusMonth = null; // out of range → running month
+  const selected = state.bonusMonth || nowYM;
+  const sig = months.join(',');
+  if (sel.getAttribute('data-months') !== sig) {
+    sel.innerHTML = months
+      .map(ym => `<option value="${ym}">${historyOptionLabel_(ym, nowYM)}</option>`)
+      .join('');
+    sel.setAttribute('data-months', sig);
+  }
+  sel.value = selected;
+  if (!sel.getAttribute('data-wired')) {
+    sel.setAttribute('data-wired', '1');
+    sel.addEventListener('change', () => { selectBonusMonth_(sel.value); });
+  }
+  if (back) {
+    back.hidden = !state.bonusMonth;
+    if (!back.getAttribute('data-wired')) {
+      back.setAttribute('data-wired', '1');
+      back.addEventListener('click', e => {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        selectBonusMonth_(historyNowYM_());
+      });
+    }
+  }
+}
+function renderOverviewPicker_() {
+  renderBonusMonthPicker_(
+    document.getElementById('bonusMonthOverview'),
+    document.getElementById('bonusMonthBackOverview')
+  );
+}
+
+/* ── overview, settled month ─────────────────────────────── */
+function renderOverviewSettled_(ym) {
+  const BV = window.BonusView;
+  const label = BV.monthLabel(ym);
+  const keys = houseKeysOrdered_();
+  const grid = document.getElementById('houseGrid');
+  const banner = document.getElementById('winnersBanner');
+  const spark = document.getElementById('networkSpark');
+
+  document.getElementById('monthTag').textContent = `${label} — סופי`;
+  renderOverviewPicker_();
+  setKpiLabel('kpiHousesAboveLabel', `בתים זכאים לבונוס — ${label} (סופי)`);
+  setKpiLabel('kpiActiveLabel', `ממוצע מטופלים/יום — ${label} (סופי)`);
+  setKpiLabel('kpiBonusLabel', `בונוס ${label} — סופי (לתשלום)`);
+  setKpiLabel('kpiDaysLabel', `ימים בחודש — ${label} (סופי)`);
+  setSparkSub_(`קו זוהר = זכאות לבונוס · מילוי = ממוצע מטופלים/יום ב${label} · רקע = קיבולת`);
+
+  const entry = bonusMonthEntry_(ym);
+  if (!entry || !entry.ok) {
+    const stateName = entry ? 'error' : 'loading';
+    const msg = entry ? `שגיאה בטעינת ${label}: ${escapeHtml_(entry.error)}` : `טוען ${label}…`;
+    ['kpiHousesAbove', 'kpiActive', 'kpiBonus', 'kpiDaysLeft'].forEach(id => setKpi(id, '—'));
+    if (banner) {
+      banner.innerHTML = `<div class="wb-head"><span class="wb-trophy">🏆</span>
+          <span class="wb-title">בונוסים לתשלום — ${label} (סופי)</span></div>
+        <div class="wb-none" data-bonus-history-state="${stateName}">${msg}</div>`;
+      banner.hidden = false;
+    }
+    if (spark) spark.innerHTML = '';
+    grid.innerHTML = `<div class="loading${entry ? ' error' : ''}" data-bonus-history-state="${stateName}">${msg}</div>`;
+    return;
+  }
+
+  const houses = keys.map(k => settledHouseFor_(k, ym));
+  const views = houses.map(settledViewFor_);
+  const known = views.filter(Boolean);
+  const earned = known.filter(v => v.amount > 0).length;
+  const total = known.reduce((s, v) => s + v.amount, 0);
+  const avgTotal = known.reduce((s, v) => s + v.avgDaily, 0);
+  const dim = daysInMonthFromLabel(ym);
+
+  setKpi('kpiHousesAbove', `${earned}/${keys.length}`);
+  setKpi('kpiActive', fmtNum1_(avgTotal));
+  setKpi('kpiBonus', fmtCurrency(total));
+  setKpi('kpiDaysLeft', `${fmtInt(dim)} מתוך ${fmtInt(dim)}`); // finished month: days-so-far = the full month
+  renderWinnersBannerSettled_(ym, houses, views);
+  renderNetworkSparkSettled_(houses, views);
+
+  grid.innerHTML = '';
+  houses.forEach(h => grid.appendChild(buildSettledHouseCard_(h)));
+}
+
+/* Winners banner for the selected month — same chips as the settled
+ * previous month, no running-month line (the month is final). */
+function renderWinnersBannerSettled_(ym, houses, views) {
+  const el = document.getElementById('winnersBanner');
+  if (!el) return;
+  const BV = window.BonusView;
+  const rows = houses.map((h, i) => {
+    const v = views[i];
+    const q = quarterlyLocal_(h.key, ym);
+    return {
+      name: HOUSE_LABELS[h.key]?.name || BV.safeLabel(h.name) || h.key,
+      manager: BV.safeLabel(h.manager) || HOUSE_LABELS[h.key]?.manager || '',
+      amount: v ? v.amount : 0,
+      tier: v ? v.tier : 0,
+      quarterly: q.earned
+    };
+  });
+  const view = BV.winnersBannerView(ym, rows, null);
+  const head = `<div class="wb-head"><span class="wb-trophy">🏆</span>
+      <span class="wb-title">${view.title}</span></div>`;
+  const body = !view.winners.length
+    ? `<div class="wb-none">${view.noneText}</div>`
+    : `<div class="wb-chips">${view.winners.map(r => `
+      <div class="wb-chip">
+        <span class="wb-house">${r.name}</span>
+        <span class="wb-manager">${r.manager ? 'מנהל/ת: ' + r.manager : ''}</span>
+        <span class="wb-amt">${fmtCurrency(r.total)}</span>
+        <span class="wb-detail">${r.text}</span>
+      </div>`).join('')}</div>`;
+  el.innerHTML = `${head}${body}<div class="wb-current" data-bonus-history-note>📅 ${BV.monthLabel(ym)} — סופי · תצוגה היסטורית</div>`;
+  el.hidden = false;
+}
+
+/* Network chart for the selected month: bar = that month's average daily
+ * occupancy (there is no "current" count for a finished month). */
+function renderNetworkSparkSettled_(houses, views) {
+  const el = document.getElementById('networkSpark');
+  if (!el) return;
+  const rows = houses.map((h, i) => ({ h, v: views[i] })).filter(r => r.v);
+  if (!rows.length) { el.innerHTML = ''; return; }
+  const calcMax = Math.max(
+    ...rows.map(r => Math.max(r.v.avgDaily, resolveThreshold(r.h), resolveCapacity(r.h)))
+  ) || 1;
+  el.innerHTML = rows.map(({ h, v }) => {
+    const avg = v.avgDaily;
+    const threshold = resolveThreshold(h);
+    const cap = resolveCapacity(h);
+    const above = v.amount > 0;
+    const occH = Math.round((avg / calcMax) * 100);
+    const bepH = Math.round((threshold / calcMax) * 100);
+    const capH = Math.round((cap / calcMax) * 100);
+    const fullName = HOUSE_LABELS[h.key]?.name || window.BonusView.safeLabel(h.name) || h.key;
+    return `
+      <div class="spark-col ${above ? 'above' : 'below'}" data-house="${h.key}">
+        <div class="spark-stack">
+          <div class="spark-cap" style="height:${capH}%"></div>
+          <div class="spark-bar" style="height:${occH}%"></div>
+          <div class="spark-bep" style="bottom:${bepH}%"></div>
+        </div>
+        <div class="spark-label">${fullName}</div>
+        <div class="spark-num">${fmtNum1_(avg)}/${cap || '—'}</div>
+      </div>`;
+  }).join('');
+  el.querySelectorAll('.spark-col').forEach(col => {
+    col.addEventListener('click', () => activateTab(col.dataset.house));
+  });
+}
+
+/* House card for the selected month: ONE settled block (final state), the
+ * month's average vs the eligibility line, treatment days vs the fixed gate
+ * and a tier pill only when the tier was actually earned. */
+function buildSettledHouseCard_(h) {
+  const BV = window.BonusView;
+  const key = h.key;
+  const labels = HOUSE_LABELS[key] || {};
+  const name = labels.name || BV.safeLabel(h.name) || key;
+  const manager = BV.safeLabel(h.manager) || labels.manager || '';
+  const type = labels.type || '';
+  const cap = resolveCapacity(h);
+  const threshold = resolveThreshold(h);
+  const s = settledViewFor_(h);
+  const label = BV.monthLabel(h.month);
+
+  const card = document.createElement('div');
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('data-house-card', key);
+  card.setAttribute('data-bonus-history-month', h.month);
+
+  const head = (badge) => `
+    <div class="hc-head">
+      <div class="hc-head-text">
+        <div class="hc-title">${name}</div>
+        <div class="hc-manager">מנהל/ת: ${manager}</div>
+        ${type ? `<div class="hc-type">${type}</div>` : ''}
+      </div>
+      ${badge}
+    </div>`;
+
+  if (!s) {
+    card.className = 'house-card below settled';
+    card.innerHTML = `
+      ${head(`<div class="warn-badge">ℹ ${label}</div>`)}
+      <div class="hc-month hc-settled not-earned" data-month-block="settled">
+        <div class="hc-month-head">
+          <span class="hc-month-title">${label} — סופי</span>
+          <span class="hc-month-amt">—</span>
+        </div>
+        <div class="hc-month-line dim">הנתונים לא זמינים</div>
+      </div>`;
+  } else {
+    const earned = s.amount > 0;
+    const q = quarterlyLocal_(key, h.month);
+    const avg = s.avgDaily;
+    const denominator = cap || Math.max(avg, threshold) || 1;
+    const fillPct = Math.min(100, (avg / denominator) * 100);
+    const bepPct  = Math.min(100, (threshold / denominator) * 100);
+    const tierBadge = earned && s.tier > 0
+      ? `<span class="tier-pill t${s.tier}">מדרגה ${s.tier} ✓</span>`
+      : '';
+    card.className = `house-card ${earned ? 'above' : 'below'} settled`;
+    card.innerHTML = `
+      ${earned ? '<div class="trophy" aria-label="זכאי לבונוס">🏆</div>' : ''}
+      ${head(earned
+        ? `<div class="qualify-badge">✓ זכאי · ${label}</div>`
+        : `<div class="warn-badge">⚠ לא זכאי · ${label}</div>`)}
+
+      <div class="hc-month hc-settled ${earned ? 'earned' : 'not-earned'}" data-month-block="settled">
+        <div class="hc-month-head">
+          <span class="hc-month-title">${s.shortTitle}</span>
+          <span class="hc-month-amt">${fmtCurrency(s.amount)}</span>
+        </div>
+        <div class="hc-month-line" data-settled-status>${s.statusText}</div>
+        <div class="hc-month-line dim">ממוצע ${fmtNum1_(avg)} מטופלים/יום · ${s.gateText}</div>
+        ${q.earned > 0 ? `<div class="hc-month-line dim">רבעוני ${fmtCurrency(q.earned)}</div>` : ''}
+      </div>
+
+      <div class="hc-stats">
+        <div class="hc-occ">${fmtNum1_(avg)}<small> / ${cap || '—'}</small></div>
+        <div class="hc-bep">ממוצע מטופלים/יום · זכאות לבונוס: <b>${threshold || '—'}</b></div>
+      </div>
+
+      <div class="bep-bar">
+        <div class="bep-fill" style="width:${fillPct}%"></div>
+        <div class="bep-marker" style="right:${bepPct}%"><span>★</span><em>זכאות ${threshold}</em></div>
+      </div>
+
+      <div class="hc-nights">
+        <span class="hc-nights-label">ימי טיפול — ${label} (סופי)</span>
+        <span class="hc-nights-value" data-card-days>${fmtInt(s.treatmentDays)} / ${fmtInt(s.gate)}</span>
+        ${tierBadge}
+      </div>`;
+  }
+
+  const go = () => activateTab(key);
+  card.addEventListener('click', go);
+  card.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+  });
+  return card;
+}
+
+/* ── house detail, settled month ─────────────────────────── */
+/* Blank every figure of the tab (labels keep naming the selected month) so
+ * a loading / error / missing state never leaves another month's numbers
+ * on screen. */
+function blankDetailFigures_(panel, label) {
+  ['entries', 'exits', 'treatmentDays', 'bonus', 'daysSoFar', 'daysTarget', 'daysProjection', 'bonusTotal']
+    .forEach(n => setStat(panel, n, '—'));
+  setStatLabel(panel, 'treatmentDays', `ימי טיפול — ${label} (סופי)`);
+  setStatLabel(panel, 'bonus', `בונוס ${label} — סופי`);
+  const note = panel.querySelector('[data-bonus-fallback-note]');
+  if (note) { note.textContent = ''; note.remove(); }
+  const split = panel.querySelector('[data-month-split]');
+  if (split) split.innerHTML = '';
+  const chartTitle = panel.querySelector('[data-chart-title]');
+  if (chartTitle) chartTitle.textContent = `ימי טיפול — ${label} (סופי)`;
+  const spark = panel.querySelector('[data-daily-spark]');
+  if (spark) spark.innerHTML = '';
+  const bk = panel.querySelector('[data-breakdown]');
+  if (bk) bk.innerHTML = '';
+  const tc = panel.querySelector('[data-tier-current]');
+  if (tc) tc.textContent = '—';
+  const qn = panel.querySelector('[data-quarterly-note]');
+  if (qn) qn.textContent = '—';
+  const qm = panel.querySelector('[data-quarterly-months]');
+  if (qm) { qm.hidden = true; qm.textContent = ''; }
+  const entries = panel.querySelector('[data-log="entries"]');
+  const exits = panel.querySelector('[data-log="exits"]');
+  if (entries) entries.innerHTML = '';
+  if (exits) exits.innerHTML = '';
+}
+
+function renderHouseDetailSettled_(panel, key, ym) {
+  const BV = window.BonusView;
+  const label = BV.monthLabel(ym);
+  renderBonusMonthPicker_(panel.querySelector('[data-bonus-month]'), panel.querySelector('[data-bonus-month-back]'));
+
+  // A "what is missing for the next tier" card has no meaning for a
+  // finished month — hidden (and blanked) until the running month is shown
+  // again; renderNextTierCard repopulates every field.
+  const nextCard = panel.querySelector('[data-next-tier-card]');
+  if (nextCard) nextCard.hidden = true;
+  ['header', 'daily-gap', 'daily-label', 'cumulative', 'status', 'jump'].forEach(n => {
+    const el = panel.querySelector(`[data-next-tier-${n}]`);
+    if (el) el.textContent = '';
+  });
+
+  const labels = HOUSE_LABELS[key] || {};
+  const entry = bonusMonthEntry_(ym);
+  const h = settledHouseFor_(key, ym);
+  const name = labels.name || BV.safeLabel(h.name) || key;
+  const manager = BV.safeLabel(h.manager) || labels.manager || '';
+  const s = settledViewFor_(h);
+  const banner = panel.querySelector('[data-status-banner]');
+
+  if (!entry || !entry.ok || !s) {
+    const stateName = !entry ? 'loading' : !entry.ok ? 'error' : 'missing';
+    const msg = !entry ? `טוען ${label}…`
+      : !entry.ok ? `שגיאה בטעינת ${label}: ${escapeHtml_(entry.error)}`
+      : `${label} — סופי: הנתונים לא זמינים לבית זה`;
+    banner.className = 'status-banner below';
+    banner.innerHTML = `<div class="big-emoji">${!entry ? '⏳' : 'ℹ️'}</div>
+       <div>
+         <div class="sb-name">${name}</div>
+         <div class="sb-title" data-hero-headline data-bonus-history-state="${stateName}">${msg}</div>
+         <div class="sb-sub">${manager ? 'מנהל/ת: ' + manager : ''}</div>
+       </div>`;
+    blankDetailFigures_(panel, label);
+    renderHistoryPicker_(panel, key);
+    renderHistoryView_(panel, key);
+    return;
+  }
+
+  const merged = { ...h, bonus: {} };
+  const threshold = resolveThreshold(merged);
+  const capacity = resolveCapacity(merged);
+  const monthlyResult = monthlyBonusResult(merged);
+  const status = monthlyStatus(merged);   // 'finished' — merged.month is the selected month
+  const target = status.target;
+  const nights = s.treatmentDays;         // finished month: days-so-far = the full-month total
+  const cfg = tierCfgFor_(key, monthlyResult);
+  const cont = continuityCounts({});      // no referral data in a month overview row
+  const quartly = quarterlyLocal_(key, ym).earned;
+  const totalBonus = s.amount + quartly;
+
+  // Hero: the selected month, final state ("יולי 2026 — סופי: …").
+  const hero = BV.houseHeroView({ name, manager, settled: s, prevYm: ym, current: null, selected: true });
+  banner.className = 'status-banner ' + hero.tone;
+  banner.innerHTML = `<div class="big-emoji">${hero.emoji}</div>
+     <div>
+       <div class="sb-name">${name}</div>
+       <div class="sb-title" data-hero-headline>${hero.headline}</div>
+       <div class="sb-sub">${hero.sub}</div>
+     </div>`;
+
+  // KPIs — every label names the month; no entries/exits in a month overview.
+  setStat(panel, 'entries', '—');
+  setStat(panel, 'exits', '—');
+  setStatLabel(panel, 'treatmentDays', `ימי טיפול — ${label} (סופי)`);
+  setStat(panel, 'treatmentDays', fmtInt(nights));
+  const bonusEl = panel.querySelector('[data-stat="bonus"]');
+  setStatLabel(panel, 'bonus', `בונוס ${label} — סופי`);
+  bonusEl.classList.remove('is-skeleton');
+  bonusEl.textContent = fmtCurrency(totalBonus);
+  bonusEl.classList.toggle('gold', totalBonus > 0);
+  const fallbackEl = panel.querySelector('[data-bonus-fallback-note]');
+  if (fallbackEl) { fallbackEl.textContent = ''; fallbackEl.remove(); } // no projection on a finished month
+
+  renderMonthSplit_(panel, bonusEl, merged, s);
+
+  // Treatment-days bar: the settled total vs the fixed gate; gate result in words.
+  const chartTitle = panel.querySelector('[data-chart-title]');
+  if (chartTitle) chartTitle.textContent = `ימי טיפול — ${label} (סופי)`;
+  setStatLabel(panel, 'daysSoFar', 'ימי טיפול בחודש');
+  setStatLabel(panel, 'daysProjection', 'המכסה');
+  const denom = Math.max(nights, target, 1);
+  const bar = panel.querySelector('[data-bep-bar]');
+  bar.classList.toggle('above', s.amount > 0);
+  panel.querySelector('[data-bep-fill]').style.width = Math.min(100, (nights / denom) * 100) + '%';
+  const marker = panel.querySelector('[data-bep-marker]');
+  marker.style.right = Math.min(100, (target / denom) * 100) + '%';
+  panel.querySelector('[data-bep-marker-label]').textContent = `יעד ${fmtInt(target)}`;
+  setStat(panel, 'daysSoFar', fmtInt(nights));
+  setStat(panel, 'daysTarget', fmtInt(target));
+  setStat(panel, 'daysProjection', s.gatePassed ? 'הושלמה' : 'לא הושלמה');
+
+  const chart = Array.isArray(h.dailyChart) ? h.dailyChart : [];
+  renderDailySpark(panel, chart, threshold, capacity);
+  if (!chart.length) {
+    const host = panel.querySelector('[data-daily-spark]');
+    if (host) host.innerHTML = `<div class="history-empty" data-bonus-history-state="no-chart">אין נתוני תפוסה יומית ל${label}</div>`;
+  }
+
+  const ctx = { key, cfg, target, nights, tier: s.tier, occ: s.avgDaily, monthlyResult, status, settled: s };
+  renderTierTrack(panel, ctx);
+  renderQuarterlyTrack(panel, merged, cfg, target);
+  renderBreakdown(panel, merged, { ...ctx, above: s.amount > 0, cont, quartly, totalBonus });
+
+  const entriesUl = panel.querySelector('[data-log="entries"]');
+  const exitsUl = panel.querySelector('[data-log="exits"]');
+  renderEntries(entriesUl, []);
+  renderExits(exitsUl, []);
+  entriesUl.innerHTML = `<li class="log-empty">אין נתוני כניסות ל${label}</li>`;
+  exitsUl.innerHTML = `<li class="log-empty">אין נתוני יציאות ל${label}</li>`;
+
+  // Occupancy-history card: independent of the bonus picker, rendered as is.
+  renderHistoryPicker_(panel, key);
+  renderHistoryView_(panel, key);
 }
 
 /* ============================================================
@@ -1297,6 +1895,7 @@ function renderHistoryView_(panel, key) {
 function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patientsNow) {
   const card = panel.querySelector('[data-next-tier-card]');
   if (!card) return;
+  card.hidden = false; // hidden while a finished month is selected in the bonus-history picker
   const header = panel.querySelector('[data-next-tier-header]');
   const primary = panel.querySelector('[data-next-tier-primary]');
   const dailyGapEl = panel.querySelector('[data-next-tier-daily-gap]');
@@ -1443,7 +2042,13 @@ function renderTierTrack(panel, ctx) {
   panel.querySelector('[data-tier-fill]').style.width = fillFor(avg) + '%';
 
   const cur = panel.querySelector('[data-tier-current]');
-  if (securedTier >= 3) {
+  const sv = ctx.settled || null; // bonus-history picker: a finished month → final wording only
+  if (sv) {
+    cur.className = 'tier-current ' + (securedTier > 0 ? 'gold' + (securedTier >= 3 ? ' max' : '') : 'zero');
+    cur.textContent = securedTier > 0
+      ? `מדרגה ${securedTier} הושגה ✓ · ${sv.label} (סופי) · ממוצע ${fmtNum1_(avg)} מטופלים/יום`
+      : `לא הושגה מדרגה · ${sv.label} (סופי) · ממוצע ${fmtNum1_(avg)} מטופלים/יום (סף ${fmtInt(sv.threshold)})`;
+  } else if (securedTier >= 3) {
     cur.className = 'tier-current gold max';
     cur.textContent = `מדרגה 3 המקסימלית מובטחת ✓ · ממוצע ${fmtNum1_(avg)} מטופלים/יום`;
   } else if (securedTier > 0) {
@@ -1458,7 +2063,9 @@ function renderTierTrack(panel, ctx) {
 function renderQuarterlyTrack(panel, data, cfg, monthlyTarget) {
   // Quarterly standing is computed LOCALLY from the finished months of the
   // anchored window (May–Jul 2026, Aug–Oct, ...) — never from backend fields.
-  const q = quarterlyLocal_(data.key);
+  // In the bonus-history view the window is the SELECTED month's window.
+  const asOf = historyYMOf_(data);
+  const q = quarterlyLocal_(data.key, asOf);
   const monthsMet      = q.monthsMet;
   const monthsRequired = q.monthsRequired;
   const monthsElapsed  = q.monthsFinished;
@@ -1496,6 +2103,25 @@ function renderQuarterlyTrack(panel, data, cfg, monthlyTarget) {
         : `בונוס יציבות ${fmtCurrency(quarterlyMax)} — נדרשים ${monthsRequired} חודשים רצופים מעל הסף · יחושב בסוף הרבעון${wtxt}`;
     }
   }
+
+  // Which months of the window qualified — bonus-history view only; the
+  // running month keeps its existing block untouched.
+  const monthsEl = panel.querySelector('[data-quarterly-months]');
+  if (monthsEl) {
+    if (asOf) { monthsEl.hidden = false; monthsEl.textContent = quarterMonthsText_(q, asOf); }
+    else { monthsEl.hidden = true; monthsEl.textContent = ''; }
+  }
+}
+
+/* "מאי 2026 ✓ · יוני 2026 ✗ · יולי 2026 (לאחר החודש שנבחר)" — one mark per
+ * window month, from the settled amounts the as-of standing was built on. */
+function quarterMonthsText_(q, asOf) {
+  const min = window.BonusEligibility.QUARTERLY_MIN_MONTHLY;
+  return (q.window || []).map(m => {
+    const amt = (q.byMonth || {})[m];
+    if (Number.isFinite(amt)) return `${fmtMonthLabel(m)} ${amt >= min ? '✓' : '✗'}`;
+    return `${fmtMonthLabel(m)} (${m > asOf ? 'לאחר החודש שנבחר' : 'לא זמין'})`;
+  }).join(' · ');
 }
 
 function renderBreakdown(panel, data, ctx) {
@@ -1513,6 +2139,7 @@ function renderBreakdown(panel, data, ctx) {
   const tiersAsc = tierTable.slice().sort((a, b) => a.patients - b.patients);
   const occNow = Number.isFinite(data.patientsNow) ? data.patientsNow : 0;
   const secured = (st.state === 'finished' && st.amount > 0) || st.state === 'locked';
+  const sv = ctx.settled || null; // bonus-history picker: a finished month
 
   const tierItems = tiersAsc.map((row, i) => {
     const tierNum = i + 1;
@@ -1523,7 +2150,9 @@ function renderBreakdown(panel, data, ctx) {
     if (!isMatched) {
       formula = `נדרש ממוצע ${fmtInt(row.patients)} מטופלים/יום`;
     } else if (securedHere) {
-      formula = `${fmtCurrency(row.amount)} ✓ מובטח · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`;
+      formula = sv
+        ? `${fmtCurrency(row.amount)} ✓ הושג · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`
+        : `${fmtCurrency(row.amount)} ✓ מובטח · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`;
     } else {
       // current month, projected toward this tier but not yet locked
       formula = st.view
@@ -1544,11 +2173,12 @@ function renderBreakdown(panel, data, ctx) {
     if (ctx.cont.maintenance) parts.push(`${ctx.cont.maintenance} תחזוקתי × 100`);
     if (ctx.cont.day_2x)      parts.push(`${ctx.cont.day_2x} יום 2/שבוע × 500`);
     if (ctx.cont.day_daily)   parts.push(`${ctx.cont.day_daily} יום יומי × 1,000`);
-    return parts.length ? parts.join(' · ') : 'אין הפניות פעילות החודש';
+    if (parts.length) return parts.join(' · ');
+    return sv ? `אין נתוני הפניות ל${sv.label}` : 'אין הפניות פעילות החודש';
   })();
 
   // Quarterly line — LOCAL standing (anchored window), no backend fields.
-  const q = quarterlyLocal_(data.key);
+  const q = quarterlyLocal_(data.key, historyYMOf_(data));
   const qWindow = q.window.length ? q.window.map(fmtMonthLabel).join(' · ') : '';
   const qMet = q.monthsMet;
   const qReq = q.monthsRequired;
