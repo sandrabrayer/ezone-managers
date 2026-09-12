@@ -1,16 +1,14 @@
 'use strict';
 /*
- * ezone-managers server — open viewer app, private full view.
+ * ezone-managers server — fully open read-only dashboard.
  *
- *   - NO password and NO login screen. Anyone who opens the app gets it.
- *   - ANONYMOUS view: every patient name is stripped server-side from the
- *     Apps Script payload (lib/redact.js). Counts, dates and kinds stay.
- *   - FULL view: `https://<host>/?key=<FULL_VIEW_KEY>` sets an httpOnly
- *     cookie (HMAC token keyed by FULL_VIEW_KEY) and unlocks patient names.
- *     A wrong or missing key is a plain 404 — it never hints that a key
- *     exists, and it never shows a login form.
- *   - fail-closed startup (APPS_SCRIPT_URL + FULL_VIEW_KEY required in prod)
- *   - per-IP rate limiting on /api/sheets AND on the key check
+ *   - NO password, NO login screen, NO access key and NO session cookie.
+ *     Anyone who opens the URL gets the whole app, including the patient
+ *     names in each house's entry/exit log. That is a deliberate decision
+ *     by the app owner (September 12, 2026); see docs/open-access.md.
+ *   - fail-closed startup (APPS_SCRIPT_URL required in production)
+ *   - per-IP rate limiting on /api/sheets, so the open proxy cannot be used
+ *     to drain the shared Apps Script quota
  *   - security headers incl. X-Robots-Tag: noindex, nofollow
  *   - APPS_SCRIPT_URL is server-to-server only; it is never sent to a browser
  *     and never echoed in an error body.
@@ -19,17 +17,9 @@
 const express = require('express');
 const path = require('path');
 
-const { signToken, verifyToken, timingSafeEquals } = require('./lib/auth');
-const { redactJsonText } = require('./lib/redact');
-
 const PORT = Number(process.env.PORT) || 3000;
 const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL || '';
-const FULL_VIEW_KEY = process.env.FULL_VIEW_KEY || '';
-const SESSION_DAYS = Number(process.env.SESSION_DAYS) || 7;
 const IS_PROD = process.env.NODE_ENV === 'production';
-
-const COOKIE_NAME = 'ezm_full';
-const MIN_KEY_LEN = 32;
 
 function fatal(msg) {
   console.error(`[fatal] ${msg}`);
@@ -39,27 +29,22 @@ function fatal(msg) {
 // Fail closed in production. Tests require() this module with NODE_ENV=test.
 if (process.env.NODE_ENV !== 'test' && require.main === module) {
   if (!APPS_SCRIPT_URL) fatal('APPS_SCRIPT_URL is required');
-  if (!FULL_VIEW_KEY) fatal('FULL_VIEW_KEY is required');
-  if (FULL_VIEW_KEY.length < MIN_KEY_LEN) {
-    fatal(`FULL_VIEW_KEY must be at least ${MIN_KEY_LEN} chars`);
-  }
 }
 
 const app = express();
 app.disable('x-powered-by');
 // Behind Railway's proxy: without this, req.ip is the proxy's IP for ALL
-// users, so every rate limit becomes one shared bucket for everyone.
+// users, so the rate limit becomes one shared bucket for everyone.
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '16kb' }));
 
-// ---- security headers (every response, both modes) ----
+// ---- security headers (every response) ----
 app.use((req, res, next) => {
-  // The app is a private internal dashboard: keep it out of every index.
+  // The app is open but it is still an internal tool: keep it out of every
+  // search index. robots.txt says the same thing for crawlers that read it.
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
-  // no-referrer also stops a ?key= link from leaking through the Referer
-  // header if a manager's page ever links out.
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader(
     'Content-Security-Policy',
@@ -110,66 +95,15 @@ function clientIp(req) {
 }
 
 // The app polls the overview every 60s and fetches up to 6 house payloads on
-// first paint, so the data limit is generous; the key check is not.
+// first paint, so the limit is generous — it exists to cap abuse of the open
+// proxy, not to ration normal use.
 const allowSheets = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 300 });
-const allowKeyCheck = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
 
-/* A wrong key, a rate-limited key check and an unknown path are all the SAME
- * bare 404: nothing in the response tells a probe that a key exists. */
-function notFound(res) {
-  res.status(404).type('text/plain').send('Not Found');
-}
-
-// ---- full-view key: ?key=… → httpOnly cookie, then drop the key from the URL ----
-function readCookie(req, name) {
-  const raw = req.headers.cookie || '';
-  for (const part of raw.split(';')) {
-    const eq = part.indexOf('=');
-    if (eq < 0) continue;
-    if (part.slice(0, eq).trim() !== name) continue;
-    try {
-      return decodeURIComponent(part.slice(eq + 1).trim());
-    } catch {
-      return '';
-    }
-  }
-  return '';
-}
-
-app.use((req, res, next) => {
-  const key = req.query && req.query.key;
-  if (typeof key === 'string' && key) {
-    if (!allowKeyCheck(clientIp(req))) return notFound(res);
-    if (!timingSafeEquals(key, FULL_VIEW_KEY)) return notFound(res);
-
-    res.cookie(COOKIE_NAME, signToken(FULL_VIEW_KEY, SESSION_DAYS), {
-      httpOnly: true,
-      secure: IS_PROD,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000
-    });
-
-    // Redirect to the same page without ?key= so the secret does not sit in
-    // history, bookmarks or a shared screenshot. req.path is request-shaped,
-    // so "//host" (a protocol-relative open redirect) falls back to "/".
-    const dest = req.path.startsWith('//') ? '/' : req.path;
-    const rest = new URLSearchParams();
-    for (const [k, v] of Object.entries(req.query)) {
-      if (k !== 'key' && typeof v === 'string') rest.set(k, v);
-    }
-    const qs = rest.toString();
-    return res.redirect(302, `${dest}${qs ? `?${qs}` : ''}`);
-  }
-  req.fullView = verifyToken(FULL_VIEW_KEY, readCookie(req, COOKIE_NAME));
-  next();
-});
-
-// ---- static: public assets only (no gate — the app itself is open) ----
+// ---- static: public assets only (no gate — the app is open) ----
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Expose ONLY the client-shared bonus module. Server-only lib/auth.js and
-// lib/redact.js must never be reachable over HTTP (no static mount on lib/).
+// Expose ONLY the client-shared bonus module. There is no static mount on
+// lib/, so nothing else under it is reachable over HTTP.
 app.get('/lib/bonus-eligibility.js', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'lib', 'bonus-eligibility.js'));
@@ -199,21 +133,10 @@ app.get('/api/sheets', async (req, res) => {
     });
 
     const text = await upstream.text();
+    res.status(upstream.status);
     res.set('Cache-Control', 'no-store');
     const ct = upstream.headers.get('content-type') || 'application/json';
-
-    if (req.fullView) {
-      return res.status(upstream.status).type(ct).send(text);
-    }
-
-    // Anonymous: strip every patient name. A body we cannot parse cannot be
-    // proven name-free, so it is refused rather than passed through.
-    const safe = redactJsonText(text);
-    if (safe === null) {
-      console.error('Upstream body was not JSON; refused in the anonymous view');
-      return res.status(502).json({ error: 'upstream_error' });
-    }
-    return res.status(upstream.status).type('application/json').send(safe);
+    res.type(ct).send(text);
   } catch (err) {
     // Log the detail, return none: a URL-parse failure would otherwise echo
     // APPS_SCRIPT_URL straight to the browser.
@@ -236,4 +159,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, _rateLimiters: { allowSheets, allowKeyCheck }, COOKIE_NAME };
+module.exports = { app, _rateLimiters: { allowSheets } };
