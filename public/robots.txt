@@ -1,0 +1,3 @@
+# Internal E-Zone managers dashboard — not for indexing.
+User-agent: *
+Disallow: /

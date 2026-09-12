@@ -320,26 +320,22 @@ function escapeHtml_(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-/* ---- session token (HMAC session issued by /api/login) ---- */
-const TOKEN_KEY = 'ezm_session_token';
+/* ---- data fetch ----
+ * There is no login and no token. The app is open; the server decides what
+ * the payload may contain (anonymous = patient names stripped, full view =
+ * unlocked by the private ?key= link, which sets an httpOnly cookie the
+ * browser sends on its own). Nothing here needs to know which mode it is in:
+ * a redacted activity row simply arrives with `nameHidden: true`. */
+const LEGACY_TOKEN_KEY = 'ezm_session_token';
 
-function getToken() {
-  try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
-}
-function setToken(t) {
-  try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch { /* private mode */ }
+/* One-time cleanup: drop the token left in localStorage by the old PIN
+ * login so a returning visitor carries no stale credential. */
+function clearLegacySession() {
+  try { localStorage.removeItem(LEGACY_TOKEN_KEY); } catch { /* private mode */ }
 }
 
 async function fetchJson(url) {
-  const headers = { Accept: 'application/json' };
-  const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const r = await fetch(url, { headers });
-  if (r.status === 401) {
-    setToken('');
-    showLogin();
-    throw new Error('נדרשת התחברות');
-  }
+  const r = await fetch(url, { headers: { Accept: 'application/json' } });
   const text = await r.text();
   let data;
   try { data = JSON.parse(text); } catch { throw new Error(`Bad JSON from ${url} — ${text.slice(0, 160)}`); }
@@ -2226,95 +2222,42 @@ function renderBreakdown(panel, data, ctx) {
   panel.querySelector('[data-stat="bonusTotal"]').textContent = fmtCurrency(ctx.totalBonus);
 }
 
-function renderEntries(ul, list) {
+/* Activity log row: date + who.
+ *
+ * In the anonymous view the server strips the patient name and marks the row
+ * `nameHidden` (lib/redact.js). The row is still rendered — the date and the
+ * entry/exit split are the point of the list — with an explicit "מוסתר"
+ * placeholder rather than a blank gap, so it reads as deliberately withheld
+ * and not as missing data ("—", which still means "the sheet had no name"). */
+function activityRowHtml(item) {
+  const who = item.nameHidden
+    ? '<span class="log-name is-redacted">מוסתר</span>'
+    : `<span class="log-name">${escapeHtml_(item.name) || '—'}</span>`;
+  return `
+        <span class="log-date">${fmtDateShort(item.date)}</span>
+        ${who}
+      `;
+}
+
+function renderActivityLog(ul, list) {
   ul.innerHTML = '';
   list
     .slice()
     .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
     .forEach(item => {
       const li = document.createElement('li');
-      li.innerHTML = `
-        <span class="log-date">${fmtDateShort(item.date)}</span>
-        <span class="log-name">${item.name || '—'}</span>
-      `;
+      li.innerHTML = activityRowHtml(item);
       ul.appendChild(li);
     });
 }
 
-function renderExits(ul, list) {
-  ul.innerHTML = '';
-  list
-    .slice()
-    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
-    .forEach(item => {
-      const li = document.createElement('li');
-      li.innerHTML = `
-        <span class="log-date">${fmtDateShort(item.date)}</span>
-        <span class="log-name">${item.name || '—'}</span>
-      `;
-      ul.appendChild(li);
-    });
-}
+function renderEntries(ul, list) { renderActivityLog(ul, list); }
+
+function renderExits(ul, list) { renderActivityLog(ul, list); }
 
 /* ============================================================
    Boot
    ============================================================ */
-
-/* ---- login overlay ---- */
-function showLogin() {
-  const ov = document.getElementById('loginOverlay');
-  if (!ov) return;
-  ov.hidden = false;
-  const pin = document.getElementById('loginPin');
-  if (pin) { pin.value = ''; setTimeout(() => pin.focus(), 50); }
-}
-
-function hideLogin() {
-  const ov = document.getElementById('loginOverlay');
-  if (ov) ov.hidden = true;
-}
-
-function setLoginError(msg) {
-  const el = document.getElementById('loginError');
-  if (!el) return;
-  el.textContent = msg || '';
-  el.hidden = !msg;
-}
-
-async function submitLogin() {
-  const pinEl = document.getElementById('loginPin');
-  const btn = document.getElementById('loginBtn');
-  const pin = (pinEl && pinEl.value || '').trim();
-  if (!pin) { setLoginError('נא להזין קוד'); return; }
-  setLoginError('');
-  if (btn) btn.disabled = true;
-  try {
-    const r = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ pin })
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok || !data.token) {
-      setLoginError(data.error || 'קוד שגוי');
-      return;
-    }
-    setToken(data.token);
-    hideLogin();
-    startData();
-  } catch {
-    setLoginError('שגיאת רשת. נסו שוב.');
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-function wireLogin() {
-  const btn = document.getElementById('loginBtn');
-  const pin = document.getElementById('loginPin');
-  if (btn) btn.addEventListener('click', submitLogin);
-  if (pin) pin.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitLogin(); });
-}
 
 let dataStarted = false;
 function startData() {
@@ -2325,18 +2268,17 @@ function startData() {
 }
 
 function boot() {
+  clearLegacySession();
   wireTabs();
-  wireLogin();
   document.getElementById('monthTag').textContent = currentMonthLabel();
 
   const hash = (location.hash || '').replace('#', '');
   if (['overview', ...HOUSE_KEYS].includes(hash)) activateTab(hash);
 
-  if (getToken()) {
-    startData(); // token verified server-side; a 401 will re-show the login
-  } else {
-    showLogin();
-  }
+  // No gate: every visitor gets the app and its data straight away. Whether
+  // patient names are in the payload is the server's decision, not the
+  // client's — see fetchJson above.
+  startData();
 }
 
 document.addEventListener('DOMContentLoaded', boot);

@@ -902,3 +902,37 @@ test('index.html / sw.js: both pickers exist, the legend labels are addressable,
   assert.match(pub('styles.css'), /\.next-tier-card\[hidden\]\s*\{\s*display:\s*none/);
   assert.match(pub('styles.css'), /\.link-btn\[hidden\]\s*\{\s*display:\s*none/);
 });
+
+/* ── activity log: anonymous vs full view ─────────────────── */
+test('activity log: a redacted row renders the Hebrew label "מוסתר", keeping its date', () => {
+  const { ctx } = setup();
+  const list = [
+    { date: '2026-09-03', kind: 'entry', nameHidden: true },
+    { date: '2026-09-11', kind: 'entry', nameHidden: true }
+  ];
+  const target = { innerHTML: '', children: [], appendChild(c) { this.children.push(c); } };
+  call(ctx, 'renderEntries', target, list);
+  assert.equal(target.children.length, 2, 'a redacted row is still rendered — the date is the point');
+  const html = target.children.map((c) => c.innerHTML).join('');
+  assert.match(html, /class="log-name is-redacted">מוסתר</,
+    'a withheld name must read as deliberately hidden, not as a blank gap');
+  assert.match(html, /class="log-date">3\/9</, 'the date stays visible');
+  assert.ok(!html.includes('—'), 'מוסתר replaces the "no data" dash, it does not sit next to it');
+});
+
+test('activity log: the full view still renders the patient name, HTML-escaped', () => {
+  const { ctx } = setup();
+  const target = { innerHTML: '', children: [], appendChild(c) { this.children.push(c); } };
+  call(ctx, 'renderExits', target, [{ date: '2026-09-11', kind: 'exit', name: '<img src=x onerror=alert(1)>ישראל' }]);
+  const html = target.children[0].innerHTML;
+  assert.match(html, /ישראל/, 'the full view shows the name');
+  assert.ok(!html.includes('<img'), 'an upstream name must be escaped before it reaches innerHTML');
+  assert.match(html, /&lt;img/);
+});
+
+test('app.js: the client never asks for a login and sends no token', () => {
+  const js = pub('app.js');
+  assert.ok(!js.includes('/api/login'));
+  assert.ok(!js.includes('Bearer'));
+  assert.ok(js.includes('clearLegacySession'));
+});

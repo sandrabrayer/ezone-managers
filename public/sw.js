@@ -1,10 +1,11 @@
-const CACHE = 'ezone-managers-v10';
+const CACHE = 'ezone-managers-v11';
 const SHELL = [
   '/',
   '/index.html',
   '/styles.css',
   '/app.js',
   '/bonus-view.js',
+  '/sw-register.js',
   '/manifest.json',
   '/favicon.svg'
 ];
