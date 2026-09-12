@@ -97,9 +97,11 @@ Run: `npm test` (`node --test`, no network, no secrets).
 ## Security
 
 No new endpoints, no secrets, no server changes. `bonus-view.js` lives in
-`public/` and is served by the existing static mount; `lib/auth.js` remains
-unreachable over HTTP. Feed strings rendered into the DOM are limited to
-roster names and sanitised manager names.
+`public/` and is served by the existing static mount; there is no static
+mount on `lib/`, so only `bonus-eligibility.js` is reachable over HTTP. Feed
+strings rendered into the DOM are limited to roster names and sanitised
+manager names. (The app's access model has since changed twice — see
+`docs/open-access.md` for the current one.)
 
 ## Bonus history month picker (September 10, 2026)
 

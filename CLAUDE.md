@@ -35,13 +35,15 @@ dashboard Apps Script; the frontend lives in `public/`.
 - Apps Script (backend) changes are out of scope for Code sessions —
   the frontend must work with the existing `managersOverview` /
   `managersHouse` payloads.
-- `lib/auth.js` and `lib/redact.js` are server-only and must never be served
-  over HTTP.
-- The app is OPEN — no password, no login screen. What protects the data is
-  `lib/redact.js`: no patient name may reach an anonymous response. The full
-  view (names included) is unlocked only by the `?key=` link's httpOnly
-  cookie. Never add a login UI, and never move redaction to the client.
-  See `docs/open-access-and-full-view-key.md`.
+- The app is fully OPEN: no password, no access key, no cookie, no login
+  screen, in any circumstance. Patient names in the entry/exit logs are
+  visible to anyone with the URL — a deliberate owner decision of
+  September 12, 2026, not an oversight. Do not add a gate, a key or a
+  redaction layer back without Sandra asking for it; equally, do not remove
+  the rate limit, the `noindex` header or `robots.txt`, which are what is
+  left. See `docs/open-access.md`.
+- Keep `escapeHtml_` on the patient name in `activityRowHtml`. The Patients
+  sheet is hand-edited; that escape is an XSS fix, not cosmetics.
 - Escape any upstream string rendered into the DOM; validate picker /
   query values before use.
 
