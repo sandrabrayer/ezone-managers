@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { signToken, verifyToken, checkPin } = require('../lib/auth');
+const { signToken, verifyToken, timingSafeEquals } = require('../lib/auth');
 
 const SECRET = 's'.repeat(32);
 
@@ -50,11 +50,21 @@ test('verifyToken uses payload prefix "managers:" (staffing tokens are invalid h
   assert.equal(verifyToken(SECRET, `${exp}.${staffingSig}`), false);
 });
 
-test('checkPin: exact match only, timing-safe path', () => {
-  assert.equal(checkPin('123456', '123456'), true);
-  assert.equal(checkPin('123457', '123456'), false);
-  assert.equal(checkPin('12345', '123456'), false);
-  assert.equal(checkPin('', ''), false); // empty expected PIN never authenticates
-  assert.equal(checkPin(null, '123456'), false);
-  assert.equal(checkPin('123456', null), false);
+
+test('timingSafeEquals: exact match only, and length mismatch never throws', () => {
+  const key = 'k'.repeat(48);
+  assert.equal(timingSafeEquals(key, key), true);
+  assert.equal(timingSafeEquals(key + 'x', key), false);
+  assert.equal(timingSafeEquals(key.slice(0, 10), key), false);
+  assert.equal(timingSafeEquals('', ''), false); // an unset key never unlocks
+  assert.equal(timingSafeEquals(null, key), false);
+  assert.equal(timingSafeEquals(key, null), false);
+});
+
+test('signToken is keyed by FULL_VIEW_KEY: rotating the key invalidates old cookies', () => {
+  const oldKey = 'o'.repeat(40);
+  const newKey = 'n'.repeat(40);
+  const cookie = signToken(oldKey, 7);
+  assert.equal(verifyToken(oldKey, cookie), true);
+  assert.equal(verifyToken(newKey, cookie), false);
 });
