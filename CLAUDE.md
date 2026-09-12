@@ -35,8 +35,13 @@ dashboard Apps Script; the frontend lives in `public/`.
 - Apps Script (backend) changes are out of scope for Code sessions —
   the frontend must work with the existing `managersOverview` /
   `managersHouse` payloads.
-- `lib/auth.js` is server-only and must never be served over HTTP;
-  `/api/sheets` stays gated behind the HMAC session token.
+- `lib/auth.js` and `lib/redact.js` are server-only and must never be served
+  over HTTP.
+- The app is OPEN — no password, no login screen. What protects the data is
+  `lib/redact.js`: no patient name may reach an anonymous response. The full
+  view (names included) is unlocked only by the `?key=` link's httpOnly
+  cookie. Never add a login UI, and never move redaction to the client.
+  See `docs/open-access-and-full-view-key.md`.
 - Escape any upstream string rendered into the DOM; validate picker /
   query values before use.
 

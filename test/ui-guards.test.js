@@ -8,24 +8,49 @@ const path = require('node:path');
 
 const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
 
-test('login overlay: [hidden] must actually hide it (display:flex would win otherwise)', () => {
-  const css = pub('styles.css');
-  assert.match(css, /\.login-overlay\[hidden\]\s*\{\s*display:\s*none/, 
-    '.login-overlay[hidden]{display:none} is required — the base rule sets display:flex, which overrides the UA hidden rule');
-});
-
-test('login overlay markup starts hidden and app.js controls it via the hidden property', () => {
+test('no login UI remains in the shell (the app is open to every visitor)', () => {
   const html = pub('index.html');
-  assert.match(html, /id="loginOverlay"[^>]*\bhidden\b/);
-  const js = pub('app.js');
-  assert.ok(js.includes('ov.hidden = false'), 'showLogin must clear hidden');
-  assert.ok(js.includes('ov.hidden = true'), 'hideLogin must set hidden');
+  const css = pub('styles.css');
+  for (const needle of ['loginOverlay', 'loginPin', 'loginBtn', 'login-card', 'קוד גישה']) {
+    assert.ok(!html.includes(needle), `index.html still carries login markup: ${needle}`);
+  }
+  assert.ok(!css.includes('.login-overlay'), 'the login overlay CSS is dead code');
 });
 
-test('SW cache version is v4+ (bumped whenever shell files change)', () => {
+test('app.js has no login code path and sends no session token', () => {
+  const js = pub('app.js');
+  for (const needle of ['showLogin', 'submitLogin', 'wireLogin', '/api/login', 'Authorization', 'Bearer']) {
+    assert.ok(!js.includes(needle), `app.js still carries login code: ${needle}`);
+  }
+  assert.ok(js.includes('clearLegacySession'),
+    'a stale PIN-era token from a returning visitor must be cleared on boot');
+});
+
+test('the shell has no inline <script> (CSP is script-src self)', () => {
+  const html = pub('index.html');
+  assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>[^<]*\S/.test(html),
+    'inline scripts are blocked by the CSP — use an external file');
+  assert.ok(html.includes('/sw-register.js'), 'SW registration moved to its own file');
+});
+
+test('robots.txt disallows the whole app', () => {
+  const txt = pub('robots.txt');
+  assert.match(txt, /User-agent:\s*\*/i);
+  assert.match(txt, /Disallow:\s*\//);
+});
+
+test('the activity log labels a redacted patient name rather than leaving a gap', () => {
+  const js = pub('app.js');
+  assert.ok(js.includes('nameHidden'), 'app.js must read the server redaction flag');
+  assert.ok(js.includes('מוסתר'), 'a hidden name renders as the Hebrew label מוסתר');
+  const css = pub('styles.css');
+  assert.ok(css.includes('.log-name.is-redacted'), 'the redacted label needs its own style');
+});
+
+test('SW cache version is v11+ (bumped whenever shell files change)', () => {
   const sw = pub('sw.js');
   const m = sw.match(/const CACHE = 'ezone-managers-v(\d+)'/);
-  assert.ok(m && Number(m[1]) >= 4);
+  assert.ok(m && Number(m[1]) >= 11);
 });
 
 test('top bar drops the "איזון" (E-ZONE) wordmark', () => {
