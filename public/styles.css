@@ -733,9 +733,6 @@ body::before {
   min-width: 56px;
 }
 .log-name { font-weight: 600; color: var(--text); flex: 1; }
-/* Anonymous view: the patient name is withheld server-side. Muted + italic so
-   the row reads as deliberately hidden, not as a missing value. */
-.log-name.is-redacted { font-weight: 500; font-style: italic; color: var(--text-mute); }
 .log-meta {
   font-size: 13px;
   font-weight: 700;

@@ -39,18 +39,28 @@ test('robots.txt disallows the whole app', () => {
   assert.match(txt, /Disallow:\s*\//);
 });
 
-test('the activity log labels a redacted patient name rather than leaving a gap', () => {
+test('no redaction machinery is left behind in the client', () => {
   const js = pub('app.js');
-  assert.ok(js.includes('nameHidden'), 'app.js must read the server redaction flag');
-  assert.ok(js.includes('מוסתר'), 'a hidden name renders as the Hebrew label מוסתר');
   const css = pub('styles.css');
-  assert.ok(css.includes('.log-name.is-redacted'), 'the redacted label needs its own style');
+  assert.ok(!js.includes('nameHidden'), 'the redaction flag is gone from the client');
+  assert.ok(!js.includes('מוסתר'), 'names render normally — no withheld label');
+  assert.ok(!css.includes('is-redacted'), 'the redacted-name style is dead code');
 });
 
-test('SW cache version is v11+ (bumped whenever shell files change)', () => {
+test('the patient name is still escaped before it reaches innerHTML', () => {
+  const js = pub('app.js');
+  // The Patients sheet is hand-edited and the name goes into innerHTML. This
+  // escape is an XSS fix, independent of who may see the name.
+  assert.match(js, /<span class="log-name">\$\{escapeHtml_\(item\.name\)/,
+    'activityRowHtml must escape item.name — never interpolate it raw');
+  assert.ok(!/<span class="log-name">\$\{item\.name/.test(js),
+    'a raw name interpolation would let a spreadsheet cell inject markup');
+});
+
+test('SW cache version is v12+ (bumped whenever shell files change)', () => {
   const sw = pub('sw.js');
   const m = sw.match(/const CACHE = 'ezone-managers-v(\d+)'/);
-  assert.ok(m && Number(m[1]) >= 11);
+  assert.ok(m && Number(m[1]) >= 12);
 });
 
 test('top bar drops the "איזון" (E-ZONE) wordmark', () => {

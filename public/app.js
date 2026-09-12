@@ -321,11 +321,8 @@ function escapeHtml_(s) {
 }
 
 /* ---- data fetch ----
- * There is no login and no token. The app is open; the server decides what
- * the payload may contain (anonymous = patient names stripped, full view =
- * unlocked by the private ?key= link, which sets an httpOnly cookie the
- * browser sends on its own). Nothing here needs to know which mode it is in:
- * a redacted activity row simply arrives with `nameHidden: true`. */
+ * The app is fully open: no login, no token, no key, no cookie. Every
+ * visitor gets the feed as the Apps Script returns it. */
 const LEGACY_TOKEN_KEY = 'ezm_session_token';
 
 /* One-time cleanup: drop the token left in localStorage by the old PIN
@@ -2222,20 +2219,15 @@ function renderBreakdown(panel, data, ctx) {
   panel.querySelector('[data-stat="bonusTotal"]').textContent = fmtCurrency(ctx.totalBonus);
 }
 
-/* Activity log row: date + who.
+/* Activity log row: date + name, exactly as the feed supplies them.
  *
- * In the anonymous view the server strips the patient name and marks the row
- * `nameHidden` (lib/redact.js). The row is still rendered — the date and the
- * entry/exit split are the point of the list — with an explicit "מוסתר"
- * placeholder rather than a blank gap, so it reads as deliberately withheld
- * and not as missing data ("—", which still means "the sheet had no name"). */
+ * escapeHtml_ is NOT optional: the name comes from the Patients sheet, which
+ * is hand-edited, and it goes straight into innerHTML. Dropping the escape
+ * turns a name typed into a spreadsheet cell into markup on the page. */
 function activityRowHtml(item) {
-  const who = item.nameHidden
-    ? '<span class="log-name is-redacted">מוסתר</span>'
-    : `<span class="log-name">${escapeHtml_(item.name) || '—'}</span>`;
   return `
         <span class="log-date">${fmtDateShort(item.date)}</span>
-        ${who}
+        <span class="log-name">${escapeHtml_(item.name) || '—'}</span>
       `;
 }
 
