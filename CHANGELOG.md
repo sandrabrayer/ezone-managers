@@ -3,6 +3,69 @@
 
 ## Unreleased
 
+### Changed — the app is open; patient names moved behind a private link (September 12, 2026)
+
+Removes the shared-PIN login for viewers and replaces it with an open app
+whose anonymous view carries **no patient-identifying data**, plus a private
+`?key=` link that unlocks the full view. Full write-up:
+`docs/open-access-and-full-view-key.md`.
+
+**Why.** The PIN was one shared code for everyone; its token carried no
+identity and every holder saw all five houses, so it was friction rather than
+access control. It could not just be deleted, because
+`managersHouse.activity[]` carries **patient names** (`name` comes from the
+Patients sheet via the dashboard Apps Script's `readPatientsForBonus_`),
+paired with admission/discharge dates and house — and the overview prefetches
+all five houses on every load, so those names reached the browser even
+without opening a house tab.
+
+- **No login screen anywhere**, in either mode. `POST /api/login`, the overlay
+  markup, its CSS and every client-side token code path are gone. A visitor
+  arriving with an old PIN-era `localStorage` token gets the app normally; the
+  stale token is cleared on boot.
+- **Anonymous view**: `lib/redact.js` strips every patient name from the
+  upstream payload server-side and flags the row `nameHidden`. Counts, dates
+  and kinds stay. Two independent rules (activity-row *shape*, and any array
+  under an `activity` key) so a backend rename cannot silently unredact. An
+  upstream body that will not parse as JSON is refused with `502` rather than
+  passed through — it cannot be proven name-free.
+- **UI**: a redacted row keeps its date and renders the Hebrew label
+  **`מוסתר`** (muted italic) in the name slot — *not* a hidden card, which
+  would lose the dates, and *not* the existing `—`, which already means "the
+  sheet had no name". Patient names are now HTML-escaped before reaching
+  `innerHTML` (they were interpolated raw).
+- **Full view**: `https://<host>/?key=<FULL_VIEW_KEY>` → constant-time key
+  check → **httpOnly** cookie holding an HMAC token **keyed by
+  `FULL_VIEW_KEY`** → `302` to the same path without `?key=`, so the secret
+  does not linger in history or a screenshot. Rotating `FULL_VIEW_KEY`
+  invalidates every cookie already handed out. A wrong key, a rate-limited
+  check and an unknown path are the **same bare 404** — nothing hints a key
+  exists. A stale or forged cookie degrades silently to the anonymous view.
+- **Rate limiting**, per IP: `/api/sheets` 300 / 15 min (new — the old limiter
+  only covered `/api/login`, so without it the now-open proxy could drain the
+  Apps Script quota) and the key check 10 / 15 min.
+- **Security headers** on every response, where there were none:
+  `X-Robots-Tag: noindex, nofollow`, `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` (also stops a
+  `?key=` link leaking through `Referer`), a CSP and HSTS in production. Since
+  the CSP is `script-src 'self'`, the service-worker registration moved out of
+  `index.html` into `public/sw-register.js`.
+- **`public/robots.txt`** with `Disallow: /`.
+- **`err.message` is no longer echoed on 502**: a `fetch` URL-parse failure
+  reads `Failed to parse URL from <APPS_SCRIPT_URL>` and would have handed the
+  Apps Script URL to any caller. Logged server-side, not returned.
+- **Env vars**: `FULL_VIEW_KEY` is new and required (≥32 chars, fail-closed at
+  startup alongside `APPS_SCRIPT_URL`). `APP_PIN` and `SESSION_SECRET` are now
+  unused and can be deleted from Railway. `SESSION_DAYS` still sets the cookie
+  lifetime.
+- **Apps Script unchanged.** The managers endpoints never authenticated a
+  caller — the proxy forwards only `action` / `house` / `month`, no secret and
+  no token — so there was no session token to mint silently.
+
+Tests 136 → **169** (`test/redact.test.js` and `test/access.test.js` are new;
+`test/server-auth.test.js` removed, its coverage folded into `access`).
+SW cache v10 → **v11**.
+
 ### Added — CLAUDE.md standing rules for Code sessions (September 10, 2026)
 
 Docs only. `CLAUDE.md` at the repo root records the working rules every
