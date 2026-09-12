@@ -903,31 +903,40 @@ test('index.html / sw.js: both pickers exist, the legend labels are addressable,
   assert.match(pub('styles.css'), /\.link-btn\[hidden\]\s*\{\s*display:\s*none/);
 });
 
-/* ── activity log: anonymous vs full view ─────────────────── */
-test('activity log: a redacted row renders the Hebrew label "מוסתר", keeping its date', () => {
+/* ── activity log ──────────────────────────────────────────── */
+test('activity log: patient names render normally, newest first, with their dates', () => {
   const { ctx } = setup();
   const list = [
-    { date: '2026-09-03', kind: 'entry', nameHidden: true },
-    { date: '2026-09-11', kind: 'entry', nameHidden: true }
+    { date: '2026-09-03', kind: 'entry', name: 'ישראל ישראלי' },
+    { date: '2026-09-11', kind: 'entry', name: 'דנה כהן' }
   ];
   const target = { innerHTML: '', children: [], appendChild(c) { this.children.push(c); } };
   call(ctx, 'renderEntries', target, list);
-  assert.equal(target.children.length, 2, 'a redacted row is still rendered — the date is the point');
+  assert.equal(target.children.length, 2);
   const html = target.children.map((c) => c.innerHTML).join('');
-  assert.match(html, /class="log-name is-redacted">מוסתר</,
-    'a withheld name must read as deliberately hidden, not as a blank gap');
-  assert.match(html, /class="log-date">3\/9</, 'the date stays visible');
-  assert.ok(!html.includes('—'), 'מוסתר replaces the "no data" dash, it does not sit next to it');
+  assert.match(html, /class="log-name">ישראל ישראלי</, 'the name is shown as-is');
+  assert.match(html, /class="log-name">דנה כהן</);
+  assert.match(html, /class="log-date">3\/9</);
+  assert.ok(!html.includes('מוסתר'), 'nothing is withheld any more');
+  assert.ok(!html.includes('is-redacted'));
+  assert.ok(target.children[0].innerHTML.includes('11/9'), 'newest first');
 });
 
-test('activity log: the full view still renders the patient name, HTML-escaped', () => {
+test('activity log: an upstream name is HTML-escaped before it reaches innerHTML', () => {
   const { ctx } = setup();
   const target = { innerHTML: '', children: [], appendChild(c) { this.children.push(c); } };
   call(ctx, 'renderExits', target, [{ date: '2026-09-11', kind: 'exit', name: '<img src=x onerror=alert(1)>ישראל' }]);
   const html = target.children[0].innerHTML;
-  assert.match(html, /ישראל/, 'the full view shows the name');
-  assert.ok(!html.includes('<img'), 'an upstream name must be escaped before it reaches innerHTML');
+  assert.match(html, /ישראל/, 'the name is shown');
+  assert.ok(!html.includes('<img'), 'the Patients sheet is hand-edited — a cell must not inject markup');
   assert.match(html, /&lt;img/);
+});
+
+test('activity log: a row with no name still renders, falling back to the dash', () => {
+  const { ctx } = setup();
+  const target = { innerHTML: '', children: [], appendChild(c) { this.children.push(c); } };
+  call(ctx, 'renderEntries', target, [{ date: '2026-09-03', kind: 'entry' }]);
+  assert.match(target.children[0].innerHTML, /class="log-name">—</);
 });
 
 test('app.js: the client never asks for a login and sends no token', () => {

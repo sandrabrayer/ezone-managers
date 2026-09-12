@@ -13,42 +13,43 @@ Both are proxied through `server.js` to the E-Zone Apps Script `/exec` endpoint.
 
 The endpoint URL is configured via the `APPS_SCRIPT_URL` env var. It is **required** — there is no hardcoded fallback, and the server refuses to start if it is not set.
 
-## Access — open app, private full view
+## Access — the app is open
 
-**There is no password and no login screen.** Anyone who opens the app gets
-it. What differs is whether the payload carries patient names:
+**No password, no access key, no cookie, no login screen — in any
+circumstance.** Anyone who opens the URL gets the whole app, **including the
+patient names in each house's entry/exit log**. That exposure is a deliberate
+decision by the app owner (September 12, 2026), not an oversight: treat the
+deployment URL as the only thing between the feed and the public, and don't
+add a gate back without asking. Background: `docs/open-access.md`.
 
-- **Anonymous (everyone).** Every bonus figure, KPI, chart and entry/exit
-  **count and date**. Patient names are stripped **server-side**
-  (`lib/redact.js`) before the response leaves the process; each activity row
-  arrives flagged `nameHidden` and renders as the Hebrew label `מוסתר`.
-- **Full view.** Opening `https://<host>/?key=<FULL_VIEW_KEY>` once sets an
-  httpOnly cookie (an HMAC token keyed by `FULL_VIEW_KEY`) and redirects to
-  the same page without `?key=`, so the secret does not stay in the URL.
-  Patient names are then included. A wrong or missing key is a bare `404` —
-  nothing hints that a key exists. Rotating `FULL_VIEW_KEY` invalidates every
-  cookie already handed out.
+What is still enforced:
 
-Rate limits, per IP: `/api/sheets` 300 / 15 min, key check 10 / 15 min. Every
-response carries `X-Robots-Tag: noindex, nofollow`, `X-Frame-Options: DENY`,
-`X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and a CSP
-(HSTS in production); `robots.txt` disallows everything.
+- **Per-IP rate limit** on `/api/sheets`, 300 / 15 min — nothing gates the
+  proxy any more, so without it one client could drain the shared dashboard
+  Apps Script's quota and take Dashboard, Managers and Therapists down with it.
+- **`X-Robots-Tag: noindex, nofollow`** on every response and `robots.txt`
+  with `Disallow: /`, so the open URL is at least not indexed.
+- `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: no-referrer`, a CSP, and HSTS in production.
+- The Apps Script URL stays **server-side**: never sent to a browser and never
+  echoed in an error body (a `fetch` URL-parse failure would otherwise return
+  it verbatim).
+- Patient names are **HTML-escaped** before reaching `innerHTML` — the
+  Patients sheet is hand-edited, so this is an XSS fix, not cosmetics.
 
-Required env vars (fail-closed — the server refuses to start without them):
+Env vars:
 
 | Var | Notes |
 |---|---|
-| `APPS_SCRIPT_URL` | Dashboard Apps Script `/exec` URL. Server-to-server only — never sent to a browser, never echoed in an error |
-| `FULL_VIEW_KEY` | Unlocks the full view, **minimum 32 chars** (e.g. `openssl rand -hex 32`). Also signs the cookie, so rotating it revokes outstanding links |
-| `SESSION_DAYS` | Optional, cookie lifetime in days (default 7) |
+| `APPS_SCRIPT_URL` | **Required** (fail-closed). Dashboard Apps Script `/exec` URL — the only secret this app holds |
 
-`APP_PIN` and `SESSION_SECRET` are no longer used and can be deleted.
+`APP_PIN`, `SESSION_SECRET`, `SESSION_DAYS` and `FULL_VIEW_KEY` are all unused
+and can be deleted.
 
-Server-only `lib/auth.js` and `lib/redact.js` are never served over HTTP; only
-`/lib/bonus-eligibility.js` is exposed to the browser. The bonus VIEW module
-(`public/bonus-view.js` — month labelling, wording, days-so-far) lives in
-`public/` and is served by the static mount; see `docs/bonus-month-labelling.md`.
-Full write-up of the access model: `docs/open-access-and-full-view-key.md`.
+There is no static mount on `lib/`; only `/lib/bonus-eligibility.js` is
+exposed to the browser. The bonus VIEW module (`public/bonus-view.js` — month
+labelling, wording, days-so-far) lives in `public/` and is served by the
+static mount; see `docs/bonus-month-labelling.md`.
 
 ## Bonus history
 
@@ -76,13 +77,10 @@ npm ci
 npm test   # node --test, no env vars or network needed
 ```
 
-The suite covers the HMAC cookie-token and key-compare unit logic
-(`test/auth.test.js`), patient-name redaction incl. nested/cyclic payloads and
-the non-JSON fail-closed path (`test/redact.test.js`), access integration —
-the app works with no login, the anonymous body carries no patient name, the
-`?key=` handshake, wrong key → bare 404, forged/stale cookies, both rate
-limits, security headers, `robots.txt`, no secret in any response, and
-`lib/auth.js` / `lib/redact.js` never served (`test/access.test.js`) — the
+The suite covers open access — every route works with no key and no cookie,
+patient names come through, nothing sets a cookie, `?key=` is an ordinary
+ignored param, the rate limit, security headers, `robots.txt`, and no Apps
+Script URL in any response or 502 body (`test/access.test.js`) — the
 `/api/sheets` proxy against a mocked upstream (`test/sheets-proxy.test.js`),
 the canonical bonus rules — tiers, fixed threshold×30 gate, secured floor,
 quarterly 5,000 ₪ (`test/bonus-eligibility.test.js`) — the bonus VIEW rules

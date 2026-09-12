@@ -3,6 +3,43 @@
 
 ## Unreleased
 
+### Changed — the app is fully open: no key, no cookie, patient names visible to everyone (September 12, 2026)
+
+Removes the `?key=` full-view link and the server-side patient-name redaction
+shipped hours earlier in the same day's PR #25. The app now has **no password,
+no access key, no cookie and no login screen in any circumstance**, and the
+entry/exit logs show patient names to every visitor. Owner decision; full
+write-up: `docs/open-access.md`.
+
+- **Removed**: `FULL_VIEW_KEY`, the constant-time key check, the httpOnly
+  cookie and its HMAC token, the `?key=` → 302 redirect, and the key-check
+  rate limiter. `lib/auth.js` and `lib/redact.js` are deleted outright, along
+  with `test/auth.test.js` and `test/redact.test.js`. A `?key=` in a URL is
+  now an ordinary ignored query param — 200, no cookie, no redirect — and a
+  leftover cookie from the key era changes nothing.
+- **Removed**: the `nameHidden` flag and the `מוסתר` label with its CSS. Names
+  render normally everywhere, newest first, with their dates; a row with no
+  name still falls back to `—`.
+- **Kept** from PR #25, deliberately and test-guarded: the per-IP rate limit
+  on `/api/sheets` (300 / 15 min — now the *only* thing stopping an open proxy
+  from draining the shared Apps Script quota, which would take Dashboard,
+  Managers and Therapists down together), every security header including
+  `X-Robots-Tag: noindex, nofollow`, `robots.txt` with `Disallow: /`, the
+  suppressed `err.message` on 502 (a `fetch` URL-parse failure would return
+  `APPS_SCRIPT_URL` verbatim), and **`escapeHtml_` on the patient name before
+  `innerHTML`** — an XSS fix, independent of who may see the name.
+- **Startup** now requires only `APPS_SCRIPT_URL` (still fail-closed).
+  `FULL_VIEW_KEY`, `APP_PIN`, `SESSION_SECRET` and `SESSION_DAYS` are all
+  unused and can be deleted from Railway.
+- **Apps Script unchanged**, as throughout: the managers endpoints never
+  authenticated a caller.
+
+Tests 169 → **148** (`test/auth.test.js` and `test/redact.test.js` removed
+with the code they covered; `test/access.test.js` rewritten as an open-app
+suite — every route with no credential, names present, no cookie ever set,
+rate limit, headers, robots, no Apps Script URL in any response).
+SW cache v11 → **v12**.
+
 ### Changed — the app is open; patient names moved behind a private link (September 12, 2026)
 
 Removes the shared-PIN login for viewers and replaces it with an open app

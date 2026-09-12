@@ -1,23 +1,22 @@
 'use strict';
-/* Open app + private full view (Option C).
+/* The app is fully open: no password, no key, no cookie.
  *
- * Covers: no login anywhere, the anonymous view never carries a patient name,
- * the ?key= link unlocks the full view through an httpOnly cookie, a wrong or
- * missing key is an indistinguishable 404, both rate limits, the security
- * headers and robots.txt, and that no server secret leaks into any response.
+ * Covers: every route works with no credential of any kind, the feed reaches
+ * the client complete (patient names included), no login UI or login route
+ * exists, the rate limit still caps the open proxy, the security headers and
+ * robots.txt are present, and no SERVER secret (the Apps Script URL) leaks
+ * into a response.
  *
  * All env values below are dummies and global.fetch is MOCKED — no test ever
  * reaches the real Apps Script. */
 process.env.NODE_ENV = 'test';
 process.env.APPS_SCRIPT_URL = 'https://apps-script.test/exec';
-process.env.FULL_VIEW_KEY = 'F'.repeat(48);
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { app, _rateLimiters, COOKIE_NAME } = require('../server');
+const { app, _rateLimiters } = require('../server');
 
-const KEY = process.env.FULL_VIEW_KEY;
 const PATIENT = 'ישראל ישראלי';
 
 const HOUSE_PAYLOAD = JSON.stringify({
@@ -55,15 +54,7 @@ function mockUpstream(body, { status = 200, contentType = 'application/json' } =
   });
 }
 
-/* Runs the ?key= handshake and returns the Cookie header a browser would
- * send back afterwards. */
-function cookieFrom(res) {
-  const setCookie = res.headers['set-cookie'] || [];
-  const target = setCookie.find((c) => c.startsWith(`${COOKIE_NAME}=`));
-  return target ? target.split(';')[0] : '';
-}
-
-test('open app + private full view', async (t) => {
+test('fully open app', async (t) => {
   const realFetch = global.fetch;
   t.after(() => { global.fetch = realFetch; });
 
@@ -71,27 +62,16 @@ test('open app + private full view', async (t) => {
   await new Promise((r) => server.once('listening', r));
   t.after(() => server.close());
 
-  t.beforeEach(() => {
-    _rateLimiters.allowSheets.clear();
-    _rateLimiters.allowKeyCheck.clear();
-  });
+  t.beforeEach(() => { _rateLimiters.allowSheets.clear(); });
 
-  // ── no login remains ─────────────────────────────────────────────
-  await t.test('/api/login is gone (404 JSON, not a login handler)', async () => {
-    const r = await request(server, '/api/login', { method: 'POST' });
-    assert.equal(r.status, 404);
-    assert.equal(JSON.parse(r.text).error, 'not found');
-  });
-
-  await t.test('the app shell is served with no login markup', async () => {
+  // ── every route works with no credential ─────────────────────────
+  await t.test('the app shell is served with no key and no cookie', async () => {
     const r = await request(server, '/');
     assert.equal(r.status, 200);
-    assert.ok(!r.text.includes('loginOverlay'));
-    assert.ok(!r.text.includes('קוד גישה'));
+    assert.ok(r.text.includes('houseDetailTpl'));
   });
 
-  // ── anonymous view ───────────────────────────────────────────────
-  await t.test('/api/sheets works with NO login and NO key', async () => {
+  await t.test('/api/sheets works with no key and no cookie', async () => {
     mockUpstream(HOUSE_PAYLOAD);
     const r = await request(server, '/api/sheets?action=managersOverview');
     assert.equal(r.status, 200);
@@ -99,127 +79,96 @@ test('open app + private full view', async (t) => {
     assert.equal(JSON.parse(r.text).ok, true);
   });
 
-  await t.test('anonymous response body contains NO patient name', async () => {
-    mockUpstream(HOUSE_PAYLOAD);
-    const r = await request(server, '/api/sheets?action=managersHouse&house=ramot');
-    assert.ok(!r.text.includes(PATIENT), 'patient name leaked into the anonymous view');
-    assert.ok(!r.text.includes('דנה כהן'));
-    const body = JSON.parse(r.text);
-    for (const row of body.activity) {
-      assert.equal('name' in row, false);
-      assert.equal(row.nameHidden, true);
-    }
-  });
-
-  await t.test('anonymous view keeps counts, dates and kinds', async () => {
-    mockUpstream(HOUSE_PAYLOAD);
-    const r = await request(server, '/api/sheets?action=managersHouse&house=ramot');
-    const body = JSON.parse(r.text);
-    assert.equal(body.entriesMonth, 1);
-    assert.equal(body.exitsMonth, 1);
-    assert.deepEqual(body.activity.map((a) => a.date), ['2026-09-03', '2026-09-11']);
-    assert.deepEqual(body.activity.map((a) => a.kind), ['entry', 'exit']);
-    assert.equal(body.manager, 'אורן', 'a manager is staff, not a patient');
-  });
-
-  await t.test('an unparseable upstream body is refused, never passed through', async () => {
-    mockUpstream('<html>Apps Script exception: patient ' + PATIENT + '</html>',
-      { contentType: 'text/html' });
-    const r = await request(server, '/api/sheets?action=managersHouse&house=ramot');
-    assert.equal(r.status, 502);
-    assert.ok(!r.text.includes(PATIENT));
-  });
-
-  // ── the ?key= handshake ──────────────────────────────────────────
-  await t.test('a valid key sets an httpOnly cookie and redirects the key out of the URL', async () => {
-    const r = await request(server, `/?key=${KEY}`);
-    assert.equal(r.status, 302);
-    assert.equal(r.headers.location, '/');
-    const setCookie = (r.headers['set-cookie'] || []).join(';');
-    assert.match(setCookie, new RegExp(`${COOKIE_NAME}=`));
-    assert.match(setCookie, /HttpOnly/i);
-    assert.match(setCookie, /SameSite=Lax/i);
-    assert.ok(!setCookie.includes(KEY), 'the raw key must never be the cookie value');
-  });
-
-  await t.test('the cookie unlocks the FULL view — patient names present', async () => {
-    const handshake = await request(server, `/?key=${KEY}`);
-    const cookie = cookieFrom(handshake);
-    assert.ok(cookie);
-    mockUpstream(HOUSE_PAYLOAD);
-    const r = await request(server, '/api/sheets?action=managersHouse&house=ramot', {
-      headers: { Cookie: cookie }
-    });
-    assert.equal(r.status, 200);
-    assert.ok(r.text.includes(PATIENT), 'the full view must still show patient names');
-  });
-
-  await t.test('a valid key on a deep path keeps the path and other params', async () => {
-    const r = await request(server, `/?key=${KEY}&tab=ramot`);
-    assert.equal(r.status, 302);
-    assert.equal(r.headers.location, '/?tab=ramot');
-  });
-
-  await t.test('a wrong key → bare 404 with no hint that a key exists', async () => {
-    const r = await request(server, '/?key=wrong-key-value');
-    assert.equal(r.status, 404);
-    assert.equal(r.text, 'Not Found');
-    assert.ok(!r.text.includes('key'));
-    assert.ok(!r.text.includes('מפתח'));
-    assert.equal(r.headers['set-cookie'], undefined, 'a wrong key must set no cookie');
-  });
-
-  await t.test('a forged cookie signed with another key does not unlock the full view', async () => {
-    const { signToken } = require('../lib/auth');
-    const forged = signToken('w'.repeat(48), 1);
-    mockUpstream(HOUSE_PAYLOAD);
-    const r = await request(server, '/api/sheets?action=managersHouse&house=ramot', {
-      headers: { Cookie: `${COOKIE_NAME}=${forged}` }
-    });
-    assert.ok(!r.text.includes(PATIENT));
-  });
-
-  await t.test('a garbage cookie degrades to the anonymous view, never an error screen', async () => {
-    mockUpstream(HOUSE_PAYLOAD);
-    const r = await request(server, '/api/sheets?action=managersOverview', {
-      headers: { Cookie: 'ezm_session_token=old-pin-era-token; ezm_full=nonsense' }
-    });
-    assert.equal(r.status, 200);
-    assert.ok(!r.text.includes(PATIENT));
-  });
-
-  await t.test('the shell is served normally to a visitor holding an old session token', async () => {
-    const r = await request(server, '/', {
-      headers: { Cookie: 'ezm_session_token=stale' }
-    });
+  await t.test('a deep link to a house tab is served the shell, not a gate', async () => {
+    const r = await request(server, '/ramot');
     assert.equal(r.status, 200);
     assert.ok(r.text.includes('houseDetailTpl'));
   });
 
-  await t.test('a protocol-relative path cannot turn the handshake into an open redirect', async () => {
-    const r = await request(server, `//evil.example.com/?key=${KEY}`);
-    assert.equal(r.status, 302);
-    assert.equal(r.headers.location, '/');
+  await t.test('/healthz is open', async () => {
+    const r = await request(server, '/healthz');
+    assert.equal(r.status, 200);
   });
 
-  // ── rate limits ──────────────────────────────────────────────────
-  await t.test('the key check is rate-limited (10 per window) and stays a 404', async () => {
-    let last;
-    for (let i = 0; i < 11; i++) last = await request(server, '/?key=wrong');
-    assert.equal(last.status, 404);
-    // even the CORRECT key is refused while limited, with the same bare 404
-    const r = await request(server, `/?key=${KEY}`);
+  // ── the feed reaches the client complete ─────────────────────────
+  await t.test('patient names ARE returned — no redaction anywhere', async () => {
+    mockUpstream(HOUSE_PAYLOAD);
+    const r = await request(server, '/api/sheets?action=managersHouse&house=ramot');
+    assert.ok(r.text.includes(PATIENT), 'the name must reach the client unchanged');
+    assert.ok(r.text.includes('דנה כהן'));
+    const body = JSON.parse(r.text);
+    for (const row of body.activity) {
+      assert.equal(typeof row.name, 'string');
+      assert.equal('nameHidden' in row, false, 'the redaction flag is gone');
+    }
+  });
+
+  await t.test('the upstream body is passed through byte-for-byte', async () => {
+    mockUpstream(HOUSE_PAYLOAD);
+    const r = await request(server, '/api/sheets?action=managersHouse&house=ramot');
+    assert.equal(r.text, HOUSE_PAYLOAD);
+  });
+
+  await t.test('a non-JSON upstream body is passed through as-is (no redaction step)', async () => {
+    mockUpstream('<html>upstream said no</html>', { contentType: 'text/html' });
+    const r = await request(server, '/api/sheets?action=managersOverview');
+    assert.equal(r.status, 200);
+    assert.equal(r.text, '<html>upstream said no</html>');
+  });
+
+  // ── nothing gate-shaped remains ──────────────────────────────────
+  await t.test('there is no login route', async () => {
+    const r = await request(server, '/api/login', { method: 'POST' });
     assert.equal(r.status, 404);
-    assert.equal(r.text, 'Not Found');
+    assert.equal(JSON.parse(r.text).error, 'not found');
+  });
+
+  await t.test('the shell carries no login markup', async () => {
+    const r = await request(server, '/');
+    for (const needle of ['loginOverlay', 'loginPin', 'קוד גישה', 'מוסתר']) {
+      assert.ok(!r.text.includes(needle), `shell still carries ${needle}`);
+    }
+  });
+
+  await t.test('a ?key= param is now just an ignored query param — 200, no cookie, no redirect', async () => {
+    const r = await request(server, '/?key=anything-at-all');
+    assert.equal(r.status, 200, 'no key check, so no 404 and no redirect');
+    assert.equal(r.headers['set-cookie'], undefined, 'no cookie is ever set');
+    assert.equal(r.headers.location, undefined);
+  });
+
+  await t.test('a leftover cookie from the key era changes nothing', async () => {
+    mockUpstream(HOUSE_PAYLOAD);
+    const r = await request(server, '/api/sheets?action=managersHouse&house=ramot', {
+      headers: { Cookie: 'ezm_full=1789794151242.deadbeef; ezm_session_token=stale' }
+    });
+    assert.equal(r.status, 200);
+    assert.ok(r.text.includes(PATIENT));
     assert.equal(r.headers['set-cookie'], undefined);
   });
 
+  await t.test('the server never sets a cookie on any route', async () => {
+    for (const p of ['/', '/healthz', '/robots.txt', '/api/sheets?action=managersOverview']) {
+      mockUpstream('{"ok":true}');
+      const r = await request(server, p);
+      assert.equal(r.headers['set-cookie'], undefined, `a cookie was set on ${p}`);
+    }
+  });
+
+  // ── rate limit ───────────────────────────────────────────────────
   await t.test('/api/sheets is rate-limited per IP (300 per window)', async () => {
     mockUpstream('{"ok":true}');
     let last;
     for (let i = 0; i < 301; i++) last = await request(server, '/api/sheets?action=managersOverview');
     assert.equal(last.status, 429);
     assert.equal(JSON.parse(last.text).error, 'יותר מדי בקשות. נסו שוב מאוחר יותר.');
+  });
+
+  await t.test('the rate limit does not apply to the app shell itself', async () => {
+    mockUpstream('{"ok":true}');
+    for (let i = 0; i < 301; i++) await request(server, '/api/sheets?action=managersOverview');
+    const r = await request(server, '/');
+    assert.equal(r.status, 200, 'a rate-limited visitor can still load the page');
   });
 
   // ── headers, robots, secrets ─────────────────────────────────────
@@ -254,11 +203,10 @@ test('open app + private full view', async (t) => {
       'an inline script would be blocked by script-src \'self\'');
   });
 
-  await t.test('no server secret appears in any response', async () => {
+  await t.test('the Apps Script URL never appears in a response', async () => {
     mockUpstream('{"ok":true}');
     for (const p of ['/', '/app.js', '/healthz', '/api/sheets?action=managersOverview']) {
       const r = await request(server, p);
-      assert.ok(!r.text.includes(KEY), `FULL_VIEW_KEY leaked on ${p}`);
       assert.ok(!r.text.includes('apps-script.test'), `APPS_SCRIPT_URL leaked on ${p}`);
       assert.ok(!r.text.includes('/exec'), `Apps Script /exec URL leaked on ${p}`);
     }
@@ -272,12 +220,12 @@ test('open app + private full view', async (t) => {
     assert.ok(!r.text.includes('apps-script.test'));
   });
 
-  // ── module exposure ──────────────────────────────────────────────
-  await t.test('server-only lib/auth.js and lib/redact.js are NOT served over HTTP', async () => {
-    for (const f of ['/lib/auth.js', '/lib/redact.js']) {
+  await t.test('no server-only module is reachable over HTTP', async () => {
+    for (const f of ['/lib/auth.js', '/lib/redact.js', '/server.js', '/package.json']) {
       const r = await request(server, f);
+      // Deleted or unmounted: the SPA shell answers, never module source.
       assert.ok(!r.text.includes('createHmac'), `${f} source was served`);
-      assert.ok(!r.text.includes('redactPatientNames'), `${f} source was served`);
+      assert.ok(!r.text.includes('APPS_SCRIPT_URL'), `${f} source was served`);
     }
   });
 
@@ -287,35 +235,18 @@ test('open app + private full view', async (t) => {
     assert.ok(r.text.includes('tierForPatients') || r.text.includes('bonus'));
   });
 
-  await t.test('/healthz is open', async () => {
-    const r = await request(server, '/healthz');
-    assert.equal(r.status, 200);
-  });
-
   await t.test('the proxy still forwards ONLY allowlisted query keys', async () => {
     let seen = null;
     global.fetch = async (url) => {
       seen = String(url);
       return { status: 200, text: async () => '{"ok":true}', headers: { get: () => null } };
     };
-    await request(server, '/api/sheets?action=managersHouse&house=ramot&month=2026-07&evil=1&redirect=x');
+    await request(server, '/api/sheets?action=managersHouse&house=ramot&month=2026-07&evil=1&key=x');
     const qs = new URL(seen).searchParams;
     assert.equal(qs.get('action'), 'managersHouse');
     assert.equal(qs.get('house'), 'ramot');
     assert.equal(qs.get('month'), '2026-07');
     assert.equal(qs.has('evil'), false);
-    assert.equal(qs.has('redirect'), false);
-  });
-
-  await t.test('a key on an API URL is consumed by the handshake, never forwarded upstream', async () => {
-    let called = false;
-    global.fetch = async () => {
-      called = true;
-      return { status: 200, text: async () => '{"ok":true}', headers: { get: () => null } };
-    };
-    const r = await request(server, `/api/sheets?action=managersOverview&key=${KEY}`);
-    assert.equal(r.status, 302, 'the key is stripped by a redirect before the proxy runs');
-    assert.equal(r.headers.location, '/api/sheets?action=managersOverview');
-    assert.equal(called, false, 'the full-view key must never reach the Apps Script');
+    assert.equal(qs.has('key'), false);
   });
 });
