@@ -96,6 +96,18 @@
         <div class="house-card is-skeleton-card"></div>
         <div class="house-card is-skeleton-card"></div>
       </div>
+
+      <!-- Monthly occupancy (permanent). Settled months only, newest first
+           from the May 2026 anchor; «אין נתונים» for a month a house has no
+           snapshot for. Data: /api/sheets?action=occupancySnapshots. See
+           docs/occupancy-history-view.md → "Monthly occupancy (permanent)". -->
+      <div class="card occupancy-card" data-occupancy-card>
+        <div class="occupancy-head">
+          <div class="card-title">תפוסה חודשית (סופי)</div>
+          <button type="button" class="link-btn" data-occupancy-export hidden>ייצוא CSV</button>
+        </div>
+        <div class="occupancy-body" data-occupancy-body></div>
+      </div>
     </section>
 
     <!-- TABS 2-6: HOUSE DETAIL (shared template, populated by JS) -->
@@ -138,6 +150,18 @@
           </label>
         </div>
         <div class="history-view" data-history-view hidden></div>
+      </div>
+
+      <!-- Monthly occupancy (permanent). Settled months only, newest first
+           from the May 2026 anchor; «אין נתונים» for a month a house has no
+           snapshot for. Data: /api/sheets?action=occupancySnapshots. See
+           docs/occupancy-history-view.md → "Monthly occupancy (permanent)". -->
+      <div class="card occupancy-card" data-occupancy-card>
+        <div class="occupancy-head">
+          <div class="card-title">תפוסה חודשית (סופי)</div>
+          <button type="button" class="link-btn" data-occupancy-export hidden>ייצוא CSV</button>
+        </div>
+        <div class="occupancy-body" data-occupancy-body></div>
       </div>
 
       <div class="next-tier-card" data-next-tier-card>
@@ -224,6 +248,7 @@
 
   <script src="/lib/bonus-eligibility.js"></script>
   <script src="/bonus-view.js"></script>
+  <script src="/occupancy-export.js"></script>
   <script src="/app.js"></script>
   <!-- External, not inline: the CSP is script-src 'self' with no
        'unsafe-inline'. -->

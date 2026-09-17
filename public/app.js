@@ -3,6 +3,7 @@
    Endpoints:
      /api/sheets?action=managersOverview
      /api/sheets?action=managersHouse&house=<houseKey>
+     /api/sheets?action=occupancySnapshots
 */
 
 const HOUSE_KEYS = ['raanana', 'ramot', 'efroni', 'rehab', 'pardes'];
@@ -77,7 +78,15 @@ const state = {
    *   loadingBonusHistory[ym] = in-flight promise */
   bonusMonth: null,
   bonusHistory: {},
-  loadingBonusHistory: {}
+  loadingBonusHistory: {},
+  /* Monthly occupancy snapshots (permanent «תפוסה חודשית (סופי)» card) —
+   * DISPLAY ONLY, its own slice, never read by the bonus code.
+   *   occupancy = { ym, ok:true, rows:[…normalised…] } | { ym, ok:false, error }
+   *               `ym` is the calendar month the snapshots were fetched in,
+   *               so the feed is refetched once the month rolls over.
+   *   loadingOccupancy = in-flight promise (one at a time) */
+  occupancy: null,
+  loadingOccupancy: null
 };
 
 /* ============================================================
@@ -406,6 +415,10 @@ function wireTabs() {
 
 async function loadOverview() {
   setStatus('טוען סקירה…');
+  // Monthly-occupancy snapshots: own request, own state slice, never rejects
+  // and cached for the calendar month — a failed overview still leaves the
+  // «תפוסה חודשית (סופי)» card with its own explicit state.
+  const occupancy = ensureOccupancySnapshots_();
   try {
     const data = await fetchJson('/api/sheets?action=managersOverview');
     state.overview = data;
@@ -444,6 +457,9 @@ async function loadOverview() {
     document.getElementById('houseGrid').innerHTML =
       `<div class="loading error">שגיאה בטעינת נתונים: ${err.message}</div>`;
     setStatus('שגיאה בטעינה');
+  } finally {
+    await occupancy;
+    renderOccupancyEverywhere_();
   }
 }
 
@@ -918,7 +934,11 @@ function renderHouseDetail(key, data) {
   // Bonus-history picker: a FINISHED month is selected → the whole tab shows
   // that month, settled (renderHouseDetailSettled_); the live payload is
   // still cached and rendered again on "חזרה לחודש נוכחי".
-  if (state.bonusMonth) { renderHouseDetailSettled_(panel, key, state.bonusMonth); return; }
+  if (state.bonusMonth) {
+    renderHouseDetailSettled_(panel, key, state.bonusMonth);
+    renderOccupancyCard_(panel, [key]); // permanent card — independent of the bonus month
+    return;
+  }
   renderBonusMonthPicker_(panel.querySelector('[data-bonus-month]'), panel.querySelector('[data-bonus-month-back]'));
 
   const o = state.housesById[key] || {};
@@ -1062,6 +1082,10 @@ function renderHouseDetail(key, data) {
   //    depends on the selected month. ──
   renderHistoryPicker_(panel, key);
   renderHistoryView_(panel, key);
+
+  // ── Monthly occupancy (permanent) — this house's column only, from its own
+  //    state slice, rendered last so nothing above can depend on it. ──
+  renderOccupancyCard_(panel, [key]);
 }
 
 function setStatLabel(panel, name, text) {
@@ -1883,6 +1907,345 @@ function renderHistoryView_(panel, key) {
       chart, threshold, capacity
     );
   }
+}
+
+/* ============================================================
+   Monthly occupancy (permanent) — «תפוסה חודשית (סופי)»
+   ------------------------------------------------------------
+   A permanent card on the overview (all five houses) and on every house tab
+   (that house only), fed by ONE backend action, `occupancySnapshots`, read
+   through the same /api/sheets proxy as managersOverview:
+
+     rows: [{ month:'YYYY-MM', houseId, treatmentDays, daysInMonth, avgDaily,
+              capacity, occupancyPct, manager, capturedAt }]
+
+   Rules this section enforces (docs/occupancy-history-view.md →
+   "Monthly occupancy (permanent)"):
+
+     - SETTLED MONTHS ONLY. The running month and anything after it are
+       dropped on ingest, so a cell can never be labelled סופי while its
+       month is still accruing. Months run newest first from the May 2026
+       anchor (OCCUPANCY_FLOOR_YM).
+     - The backend house id `arfoni` is the frontend `efroni`
+       (OCCUPANCY_HOUSE_IDS); an id that is not a HOUSE_KEYS key after the
+       mapping is dropped. House labels come from HOUSE_LABELS only.
+     - ONLY the nine documented fields are read off a row. Everything else the
+       backend sends (bonus fields included) is discarded at the boundary, so
+       it reaches neither the DOM nor the CSV.
+     - NO SILENT FALLBACK. A failed request, a body that is not `ok:true` with
+       a `rows` array, an unknown action — all render an explicit error state
+       with a retry button. A missing cell says «אין נתונים», never 0.
+     - Feed values reach the DOM through textContent only.
+     - Display-only: this code reads and writes state.occupancy /
+       state.loadingOccupancy and nothing else, so no bonus KPI, hero, card,
+       breakdown or month picker can be affected by it.
+   ============================================================ */
+
+const OCCUPANCY_FLOOR_YM = '2026-05';
+const OCCUPANCY_NO_DATA = 'אין נתונים';
+/* Backend house id → frontend key (Efroni is `arfoni` upstream). */
+const OCCUPANCY_HOUSE_IDS = { arfoni: 'efroni' };
+
+function occupancyHouseKey_(houseId) {
+  const raw = String(houseId == null ? '' : houseId).trim();
+  const key = OCCUPANCY_HOUSE_IDS[raw] || raw;
+  return HOUSE_KEYS.includes(key) ? key : null;
+}
+
+/* A finite number, or null — never 0 standing in for "missing". */
+function occupancyNum_(v) {
+  if (v === null || v === undefined || v === '' || typeof v === 'boolean') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/* The ONLY place a snapshot row is read. Copies the documented fields and
+ * nothing else; drops the running month, the future, pre-anchor months,
+ * unknown houses and duplicate month+house pairs (the first row wins). */
+function normalizeOccupancyRows_(rows, nowYM) {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(rows) ? rows : []).forEach(r => {
+    if (!r || typeof r !== 'object') return;
+    const month = String(r.month || '');
+    if (!isValidYM_(month)) return;
+    if (month < OCCUPANCY_FLOOR_YM || month >= nowYM) return;
+    const key = occupancyHouseKey_(r.houseId);
+    if (!key) return;
+    const slot = `${month}:${key}`;
+    if (seen.has(slot)) return;
+    seen.add(slot);
+    out.push({
+      month,
+      key,
+      treatmentDays: occupancyNum_(r.treatmentDays),
+      daysInMonth: occupancyNum_(r.daysInMonth),
+      avgDaily: occupancyNum_(r.avgDaily),
+      capacity: occupancyNum_(r.capacity),
+      occupancyPct: occupancyNum_(r.occupancyPct),
+      manager: window.BonusView.safeLabel(r.manager),
+      capturedAt: typeof r.capturedAt === 'string' ? r.capturedAt : ''
+    });
+  });
+  return out;
+}
+
+/* Fetch the snapshots once per calendar month, FAIL-CLOSED. A body that is
+ * not `{ ok:true, rows:[…] }` — an unknown action included — is an error,
+ * never an empty table and never a computed stand-in. Never rejects. */
+async function ensureOccupancySnapshots_(force = false) {
+  const ym = currentMonthYM_();
+  if (!force && state.occupancy && state.occupancy.ym === ym) return state.occupancy;
+  if (state.loadingOccupancy) return state.loadingOccupancy;
+  const run = (async () => {
+    let entry;
+    try {
+      const data = await fetchJson('/api/sheets?action=occupancySnapshots');
+      if (!data || data.ok !== true || !Array.isArray(data.rows)) {
+        const upstream = data && typeof data.error === 'string' ? data.error.slice(0, 200) : '';
+        throw new Error(upstream || 'תגובה לא תקינה מהשרת');
+      }
+      entry = { ym, ok: true, rows: normalizeOccupancyRows_(data.rows, ym) };
+    } catch (e) {
+      console.error('occupancySnapshots failed', e);
+      entry = { ym, ok: false, error: (e && e.message) || 'שגיאה' };
+    }
+    state.occupancy = entry;
+    return entry;
+  })();
+  state.loadingOccupancy = run;
+  try { return await run; } finally { state.loadingOccupancy = null; }
+}
+
+/* Settled months, newest first: last month back to the anchor. */
+function occupancyMonths_(nowYM = currentMonthYM_()) {
+  const out = [];
+  let ym = prevMonthYM_(nowYM);
+  while (isValidYM_(ym) && ym >= OCCUPANCY_FLOOR_YM) {
+    out.push(ym);
+    ym = prevMonthYM_(ym);
+  }
+  return out;
+}
+
+/* One cell. A row without a finite occupancyPct is "no data" — the figure is
+ * never derived from the other fields behind the reader's back. */
+function occupancyCell_(key, row) {
+  if (!row || row.occupancyPct === null) {
+    return { key, hasData: false, pctText: OCCUPANCY_NO_DATA, subText: '' };
+  }
+  const sub = (row.avgDaily !== null && row.capacity !== null)
+    ? `${fmtNum1_(row.avgDaily)} / ${fmtInt(row.capacity)}`
+    : '';
+  return { key, hasData: true, pctText: `${fmtNum1_(row.occupancyPct)}%`, subText: sub, row };
+}
+
+/* The table model: rows = settled months newest first, columns = the houses
+ * asked for, in HOUSE_KEYS order, named from HOUSE_LABELS only. Pure — it
+ * returns display strings and the renderer only prints them. */
+function occupancyTableModel_(keys, nowYM = currentMonthYM_()) {
+  const wanted = (keys && keys.length ? keys : HOUSE_KEYS);
+  const cols = HOUSE_KEYS.filter(k => wanted.includes(k));
+  const entry = state.occupancy;
+  const rows = entry && entry.ok ? entry.rows : [];
+  const byMonth = {};
+  rows.forEach(r => {
+    if (!byMonth[r.month]) byMonth[r.month] = {};
+    byMonth[r.month][r.key] = r;
+  });
+  const houses = cols.map(k => ({ key: k, name: (HOUSE_LABELS[k] || {}).name || k }));
+  const months = occupancyMonths_(nowYM).map(ym => ({
+    ym,
+    label: `${window.BonusView.monthLabel(ym)} — סופי`,
+    cells: cols.map(k => occupancyCell_(k, (byMonth[ym] || {})[k] || null))
+  }));
+  return { houses, months, hasData: months.some(m => m.cells.some(c => c.hasData)) };
+}
+
+/* CSV rows for the houses on screen — only cells that actually carry data,
+ * in the table's order (newest month first, HOUSE_KEYS order within a month).
+ * The house name and the manager fallback come from HOUSE_LABELS. */
+function occupancyExportRows_(keys, nowYM = currentMonthYM_()) {
+  const model = occupancyTableModel_(keys, nowYM);
+  const out = [];
+  model.months.forEach(m => {
+    m.cells.forEach((cell, i) => {
+      if (!cell.hasData) return;
+      const house = model.houses[i];
+      const r = cell.row;
+      out.push({
+        month: r.month,
+        houseName: house.name,
+        manager: r.manager,
+        managerFallback: (HOUSE_LABELS[house.key] || {}).manager || '',
+        treatmentDays: r.treatmentDays,
+        daysInMonth: r.daysInMonth,
+        avgDaily: r.avgDaily,
+        capacity: r.capacity,
+        occupancyPct: r.occupancyPct
+      });
+    });
+  });
+  return out;
+}
+
+/* Hand the browser the file. Guarded so a renderer without Blob/URL (the
+ * test DOM, an old WebView) is a no-op instead of a thrown error. */
+function occupancyCsvDownload_(text, name) {
+  if (typeof Blob !== 'function') return false;
+  const URLApi = window.URL;
+  if (!URLApi || typeof URLApi.createObjectURL !== 'function') return false;
+  const url = URLApi.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.rel = 'noopener';
+  if (document.body && typeof document.body.appendChild === 'function') document.body.appendChild(a);
+  if (typeof a.click === 'function') a.click();
+  if (typeof a.remove === 'function') a.remove();
+  if (typeof URLApi.revokeObjectURL === 'function') URLApi.revokeObjectURL(url);
+  return true;
+}
+
+function exportOccupancyCsv_(keys) {
+  const rows = occupancyExportRows_(keys);
+  if (!rows.length) return false;
+  const months = rows.map(r => r.month).sort();
+  return occupancyCsvDownload_(
+    window.OccupancyExport.buildCsv(rows),
+    window.OccupancyExport.fileName(months[0], months[months.length - 1])
+  );
+}
+
+/* ---- rendering — every feed value goes in through textContent ---- */
+
+function occupancyEl_(tag, cls, text) {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+function renderOccupancyTableInto_(body, cols) {
+  const model = occupancyTableModel_(cols);
+  if (!model.hasData) {
+    const empty = occupancyEl_('div', 'occupancy-empty', `${OCCUPANCY_NO_DATA} — טרם נקלטו תפוסות חודשיות`);
+    empty.setAttribute('data-occupancy-state', 'empty');
+    body.appendChild(empty);
+    return model;
+  }
+  const table = occupancyEl_('table', 'occupancy-table');
+  table.setAttribute('data-occupancy-table', '1');
+  const caption = occupancyEl_('caption', 'sr-only', 'תפוסה חודשית לפי בית — חודשים סגורים בלבד');
+  table.appendChild(caption);
+
+  const thead = occupancyEl_('thead');
+  const head = occupancyEl_('tr', 'occupancy-head-row');
+  head.appendChild(occupancyEl_('th', 'occupancy-th occupancy-th-month', 'חודש'));
+  model.houses.forEach(h => {
+    const th = occupancyEl_('th', 'occupancy-th', h.name);
+    th.setAttribute('scope', 'col');
+    th.setAttribute('data-occupancy-house', h.key);
+    head.appendChild(th);
+  });
+  thead.appendChild(head);
+  table.appendChild(thead);
+
+  const tbody = occupancyEl_('tbody');
+  model.months.forEach(m => {
+    const tr = occupancyEl_('tr', 'occupancy-row');
+    tr.setAttribute('data-occupancy-row', m.ym);
+    const monthCell = occupancyEl_('th', 'occupancy-th occupancy-month', m.label);
+    monthCell.setAttribute('scope', 'row');
+    monthCell.setAttribute('data-occupancy-month', m.ym);
+    tr.appendChild(monthCell);
+    m.cells.forEach(cell => {
+      const td = occupancyEl_('td', cell.hasData ? 'occupancy-cell' : 'occupancy-cell is-empty');
+      td.setAttribute('data-occupancy-cell', `${m.ym}:${cell.key}`);
+      if (!cell.hasData) td.setAttribute('data-occupancy-empty', '1');
+      const pct = occupancyEl_('div', 'occupancy-pct', cell.pctText);
+      pct.setAttribute('data-occupancy-pct', '1');
+      td.appendChild(pct);
+      if (cell.subText) {
+        const sub = occupancyEl_('div', 'occupancy-sub', cell.subText);
+        sub.setAttribute('data-occupancy-sub', '1');
+        td.appendChild(sub);
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  body.appendChild(table);
+  body.appendChild(occupancyEl_(
+    'div', 'occupancy-legend',
+    'בכל תא: אחוז התפוסה החודשי, ומתחתיו ממוצע מטופלים ליום מתוך הקיבולת. חודשים סגורים בלבד.'
+  ));
+  return model;
+}
+
+/* Render the card inside `root` (the overview panel, or one house panel).
+ * `cols` decides the columns — all five on the overview, one on a house tab.
+ * Fetching is NOT done here: loadOverview owns it, so re-rendering a tab can
+ * never fire a request. */
+function renderOccupancyCard_(root, keys) {
+  if (!root) return;
+  const body = root.querySelector('[data-occupancy-body]');
+  if (!body) return;
+  const exportBtn = root.querySelector('[data-occupancy-export]');
+  const cols = (keys && keys.length ? keys : HOUSE_KEYS).slice();
+
+  if (exportBtn && !exportBtn.getAttribute('data-wired')) {
+    exportBtn.setAttribute('data-wired', '1');
+    exportBtn.addEventListener('click', e => {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      exportOccupancyCsv_(cols);
+    });
+  }
+
+  body.innerHTML = '';
+  const entry = state.occupancy;
+
+  if (!entry) {
+    const loading = occupancyEl_('div', 'loading', 'טוען תפוסה חודשית…');
+    loading.setAttribute('data-occupancy-state', 'loading');
+    body.appendChild(loading);
+    if (exportBtn) exportBtn.hidden = true;
+    return;
+  }
+
+  if (!entry.ok) {
+    const box = occupancyEl_('div', 'occupancy-error');
+    box.setAttribute('data-occupancy-state', 'error');
+    box.appendChild(occupancyEl_('div', 'loading error', `שגיאה בטעינת תפוסה חודשית: ${entry.error}`));
+    const retry = occupancyEl_('button', 'link-btn', 'נסה שוב');
+    retry.setAttribute('type', 'button');
+    retry.setAttribute('data-occupancy-retry', '1');
+    retry.addEventListener('click', async e => {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      await ensureOccupancySnapshots_(true);
+      renderOccupancyEverywhere_();
+    });
+    box.appendChild(retry);
+    body.appendChild(box);
+    if (exportBtn) exportBtn.hidden = true;
+    return;
+  }
+
+  const model = renderOccupancyTableInto_(body, cols);
+  if (exportBtn) exportBtn.hidden = !model.hasData;
+}
+
+/* Both mount points, refreshed together: the overview panel and every house
+ * tab that has already been rendered (an unopened tab has no card yet —
+ * renderHouseDetail renders its own when it opens). */
+function renderOccupancyEverywhere_() {
+  renderOccupancyCard_(document.getElementById('panel-overview'), HOUSE_KEYS);
+  HOUSE_KEYS.forEach(key => {
+    const panel = document.getElementById(`panel-${key}`);
+    if (panel && panel.getAttribute('data-rendered') === '1') renderOccupancyCard_(panel, [key]);
+  });
 }
 
 function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patientsNow) {

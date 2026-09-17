@@ -43,6 +43,7 @@ function makeEl(tag) {
   el.appendChild = (c) => { c.parentNode = el; el.children.push(c); return c; };
   el.remove = () => { if (el.parentNode) el.parentNode.children = el.parentNode.children.filter((x) => x !== el); };
   el.addEventListener = (t, f) => { (el._listeners[t] = el._listeners[t] || []).push(f); };
+  el.click = () => (el._listeners.click || []).forEach((f) => f({ preventDefault: () => {} }));
   el.matches = (sel) => {
     const m = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(sel);
     if (!m) return false;
@@ -72,16 +73,21 @@ function makeEl(tag) {
 
 function makeSandbox(fetchImpl) {
   const byId = new Map();
+  const created = [];   // every createElement'd node, so the CSV download can be inspected
+  const blobs = [];     // everything handed to URL.createObjectURL
   const document = {
     getElementById: (id) => { if (!byId.has(id)) byId.set(id, makeEl('div')); return byId.get(id); },
-    createElement: (tag) => makeEl(tag),
+    createElement: (tag) => { const el = makeEl(tag); created.push(el); return el; },
     addEventListener: () => {},
     querySelectorAll: () => []
   };
+  document.body = makeEl('body');
   const sandbox = {
     document, console, localStorage: { getItem: () => '', setItem: () => {}, removeItem: () => {} },
     location: { hash: '' }, history: { replaceState: () => {} },
     setInterval: () => 0, setTimeout: () => 0,
+    Blob: function Blob(parts, opts) { this.parts = parts; this.type = opts && opts.type; },
+    URL: { createObjectURL: (b) => { blobs.push(b); return 'blob:stub'; }, revokeObjectURL: () => {} },
     fetch: fetchImpl || (() => Promise.reject(new Error('no network in tests')))
   };
   sandbox.window = sandbox;
@@ -89,8 +95,9 @@ function makeSandbox(fetchImpl) {
   const ctx = vm.createContext(sandbox);
   vm.runInContext(lib('bonus-eligibility.js'), ctx, { filename: 'bonus-eligibility.js' });
   vm.runInContext(pub('bonus-view.js'), ctx, { filename: 'bonus-view.js' });
+  vm.runInContext(pub('occupancy-export.js'), ctx, { filename: 'occupancy-export.js' });
   vm.runInContext(pub('app.js'), ctx, { filename: 'app.js' });
-  return { ctx, byId };
+  return { ctx, byId, created, blobs };
 }
 
 /* ── fixture: Ramot HaShavim, 8 Sep 2026 (the screenshots) ── */
@@ -944,4 +951,303 @@ test('app.js: the client never asks for a login and sends no token', () => {
   assert.ok(!js.includes('/api/login'));
   assert.ok(!js.includes('Bearer'));
   assert.ok(js.includes('clearLegacySession'));
+});
+
+/* ── monthly occupancy (permanent) — «תפוסה חודשית (סופי)» ─ */
+/* The card is fed by ONE action, occupancySnapshots, and is display-only: it
+ * owns state.occupancy and touches nothing the bonus code reads. These tests
+ * cover the table build, the arfoni→efroni mapping, a missing cell, the
+ * newest-first order, the running month never appearing, the explicit error
+ * state with its retry button, and the rule that no backend field outside the
+ * documented nine reaches the DOM or the CSV. */
+
+const OCC_JUNK = {
+  qualifies: true, lockedIn: true, projectedBonus: 8811, quarterlyBonus: 5000,
+  tier: 3, amount: 8811, bep: 8811, bonusAmount: 8811, securedTier: 3
+};
+const occRow = (month, houseId, over = {}) => ({
+  month, houseId,
+  treatmentDays: 441, daysInMonth: 31, avgDaily: 14.23, capacity: 20,
+  occupancyPct: 71.15, manager: 'אורן', capturedAt: `${month}-01T00:00:00Z`,
+  ...OCC_JUNK, ...over
+});
+
+/* A settled snapshot per house for May–August 2026, plus rows that must be
+ * dropped: the running month, a future month, a pre-anchor month and an
+ * unknown house id. Efroni arrives under its backend id `arfoni`. */
+function occupancyFeed({ rows, fail = false, body } = {}) {
+  const calls = [];
+  const defaults = [];
+  for (const m of ['2026-05', '2026-06', '2026-07', '2026-08']) {
+    for (const id of ['raanana', 'ramot', 'arfoni', 'rehab', 'pardes']) {
+      defaults.push(occRow(m, id, { occupancyPct: id === 'ramot' ? 71.15 : 80.4 }));
+    }
+  }
+  defaults.push(
+    occRow('2026-09', 'ramot', { occupancyPct: 99.9 }),   // running month — never shown
+    occRow('2026-10', 'ramot', { occupancyPct: 98.8 }),   // future — never shown
+    occRow('2026-04', 'ramot', { occupancyPct: 97.7 }),   // before the May 2026 anchor
+    occRow('2026-08', 'nosuchhouse', { occupancyPct: 96.6 })
+  );
+  const fetchImpl = async (url) => {
+    const u = new URL(url, 'http://x');
+    const action = u.searchParams.get('action');
+    calls.push({ action, month: u.searchParams.get('month'), house: u.searchParams.get('house') });
+    if (action !== 'occupancySnapshots') {
+      return { status: 200, ok: true, text: async () => JSON.stringify({ ok: true, month: '2026-09', houses: [RAMOT_OVERVIEW] }) };
+    }
+    if (fail) throw new Error('upstream down');
+    const payload = body !== undefined ? body : { ok: true, rows: rows || defaults };
+    return { status: 200, ok: true, text: async () => JSON.stringify(payload) };
+  };
+  return { calls, fetchImpl };
+}
+
+/* Load the snapshots into a sandbox and render both mount points. */
+async function withOccupancy(opts) {
+  const { calls, fetchImpl } = occupancyFeed(opts);
+  const s = setup(fetchImpl);
+  await call(s.ctx, 'ensureOccupancySnapshots_');
+  call(s.ctx, 'renderOccupancyEverywhere_');
+  return { ...s, calls, overview: s.byId.get('panel-overview') };
+}
+
+/* Depth-first walk collecting every descendant carrying `attr`. */
+function nodesWith(el, attr) {
+  const out = [];
+  (function walk(n) { n.children.forEach((c) => { if (attr in c.attrs) out.push(c); walk(c); }); })(el);
+  return out;
+}
+/* Every textContent under `el`, joined — what a reader actually sees. */
+function allText(el) {
+  let out = el.textContent || '';
+  el.children.forEach((c) => { out += '\n' + allText(c); });
+  return out;
+}
+const occBody = (root) => root.querySelector('[data-occupancy-body]');
+
+test('occupancy: the table is months × the five houses, labels from HOUSE_LABELS, cell = תפוסה% over ממוצע/קיבולת', async () => {
+  const { overview } = await withOccupancy();
+  const body = occBody(overview);
+  const table = nodesWith(body, 'data-occupancy-table');
+  assert.equal(table.length, 1, 'one table');
+  assert.deepEqual(
+    nodesWith(body, 'data-occupancy-house').map((th) => [th.getAttribute('data-occupancy-house'), th.textContent]),
+    [['raanana', 'רעננה אשר'], ['ramot', 'רמות השבים'], ['efroni', 'קיסריה עפרוני'], ['rehab', 'קיסריה ריהאב'], ['pardes', 'רעננה הפרדס']],
+    'columns are the five houses in HOUSE_KEYS order, named from HOUSE_LABELS'
+  );
+  const ramotAug = nodesWith(body, 'data-occupancy-cell').find((td) => td.getAttribute('data-occupancy-cell') === '2026-08:ramot');
+  assert.equal(nodesWith(ramotAug, 'data-occupancy-pct')[0].textContent, '71.2%');
+  assert.equal(nodesWith(ramotAug, 'data-occupancy-sub')[0].textContent, '14.2 / 20');
+  assert.equal(ramotAug.getAttribute('data-occupancy-empty'), null);
+  assert.equal(nodesWith(body, 'data-occupancy-cell').length, 4 * 5, 'four settled months × five houses');
+});
+
+test('occupancy: backend house id arfoni is rendered as the frontend efroni column', async () => {
+  const { ctx, overview } = await withOccupancy();
+  assert.deepEqual(
+    vm.runInContext('[...new Set(state.occupancy.rows.map(r => r.key))].sort().join(",")', ctx),
+    'efroni,pardes,raanana,ramot,rehab', 'arfoni is stored under the efroni key; the unknown house id is dropped'
+  );
+  assert.ok(!vm.runInContext('JSON.stringify(state.occupancy.rows)', ctx).includes('arfoni'));
+  const efroni = nodesWith(occBody(overview), 'data-occupancy-cell')
+    .find((td) => td.getAttribute('data-occupancy-cell') === '2026-08:efroni');
+  assert.equal(nodesWith(efroni, 'data-occupancy-pct')[0].textContent, '80.4%');
+  assert.ok(!allText(occBody(overview)).includes('arfoni'));
+  assert.ok(!allText(occBody(overview)).includes('nosuchhouse'));
+});
+
+test('occupancy: a month a house has no snapshot for says «אין נתונים» — never 0', async () => {
+  const rows = [occRow('2026-08', 'ramot'), occRow('2026-07', 'arfoni', { occupancyPct: null })];
+  const { overview } = await withOccupancy({ rows });
+  const cells = nodesWith(occBody(overview), 'data-occupancy-cell');
+  const at = (id) => cells.find((td) => td.getAttribute('data-occupancy-cell') === id);
+  assert.equal(nodesWith(at('2026-08:raanana'), 'data-occupancy-pct')[0].textContent, 'אין נתונים');
+  assert.equal(at('2026-08:raanana').getAttribute('data-occupancy-empty'), '1');
+  assert.equal(nodesWith(at('2026-08:raanana'), 'data-occupancy-sub').length, 0, 'no avg/capacity line without data');
+  // A row that arrives WITHOUT a usable occupancyPct is "no data", not 0%.
+  assert.equal(nodesWith(at('2026-07:efroni'), 'data-occupancy-pct')[0].textContent, 'אין נתונים');
+  assert.ok(!allText(occBody(overview)).includes('0%'), 'a missing figure must never render as 0%');
+  assert.equal(nodesWith(at('2026-08:ramot'), 'data-occupancy-pct')[0].textContent, '71.2%');
+});
+
+test('occupancy: months run newest first from the May 2026 anchor and NEVER include the running month', async () => {
+  const { ctx, overview } = await withOccupancy();
+  const body = occBody(overview);
+  assert.deepEqual(
+    nodesWith(body, 'data-occupancy-row').map((tr) => tr.getAttribute('data-occupancy-row')),
+    ['2026-08', '2026-07', '2026-06', '2026-05'], 'newest first, floored at the anchor'
+  );
+  assert.deepEqual(
+    nodesWith(body, 'data-occupancy-month').map((th) => th.textContent),
+    ['אוגוסט 2026 — סופי', 'יולי 2026 — סופי', 'יוני 2026 — סופי', 'מאי 2026 — סופי'],
+    'every row is labelled סופי'
+  );
+  const text = allText(body);
+  for (const w of [...FORBIDDEN, 'ספטמבר 2026', '2026-09', '2026-10', '2026-04', '99.9', '98.8', '97.7']) {
+    assert.ok(!text.includes(w), `the card must never show "${w}"`);
+  }
+  // The running month, the future and pre-anchor months are dropped on ingest.
+  assert.equal(vm.runInContext('state.occupancy.rows.filter(r => r.month >= "2026-09" || r.month < "2026-05").length', ctx), 0);
+});
+
+test('occupancy: the house tab shows that house only', async () => {
+  const { ctx, byId } = await withOccupancy();
+  vm.runInContext(`state.details.ramot = ${JSON.stringify(RAMOT_DETAIL)}`, ctx);
+  call(ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', ctx));
+  const panel = byId.get('panel-ramot');
+  assert.deepEqual(
+    nodesWith(occBody(panel), 'data-occupancy-house').map((th) => th.getAttribute('data-occupancy-house')),
+    ['ramot']
+  );
+  assert.deepEqual(
+    nodesWith(occBody(panel), 'data-occupancy-cell').map((td) => td.getAttribute('data-occupancy-cell')),
+    ['2026-08:ramot', '2026-07:ramot', '2026-06:ramot', '2026-05:ramot']
+  );
+  assert.ok(!allText(occBody(panel)).includes('קיסריה עפרוני'), 'no other house on a house tab');
+});
+
+test('occupancy: a failed request shows an explicit error state with a retry button — no computed fallback', async () => {
+  const { calls, fetchImpl } = occupancyFeed({ fail: true });
+  const s = setup(fetchImpl);
+  await call(s.ctx, 'ensureOccupancySnapshots_');
+  call(s.ctx, 'renderOccupancyEverywhere_');
+  const overview = s.byId.get('panel-overview');
+  const body = occBody(overview);
+  assert.equal(nodesWith(body, 'data-occupancy-state')[0].getAttribute('data-occupancy-state'), 'error');
+  assert.match(allText(body), /שגיאה בטעינת תפוסה חודשית: upstream down/);
+  assert.equal(nodesWith(body, 'data-occupancy-table').length, 0, 'no table on error');
+  assert.equal(nodesWith(body, 'data-occupancy-cell').length, 0, 'no cells, no zeroes, no silent fallback');
+  assert.equal(overview.querySelector('[data-occupancy-export]').hidden, true, 'nothing to export');
+
+  const retry = nodesWith(body, 'data-occupancy-retry')[0];
+  assert.ok(retry, 'the error state must offer a retry');
+  assert.equal(retry.textContent, 'נסה שוב');
+  assert.equal(calls.length, 1);
+  // Retry re-fetches; with the upstream back the table renders.
+  s.ctx.__ok = true;
+  vm.runInContext('state.occupancy = null', s.ctx);
+  const { fetchImpl: good } = occupancyFeed();
+  s.ctx.fetch = good;
+  await call(s.ctx, 'ensureOccupancySnapshots_', true);
+  call(s.ctx, 'renderOccupancyEverywhere_');
+  assert.equal(nodesWith(occBody(overview), 'data-occupancy-table').length, 1, 'retry recovers');
+});
+
+test('occupancy: an unknown action or any non-ok body is an error state, not an empty table', async () => {
+  for (const body of [
+    { ok: false, error: 'unknown action' },
+    { error: 'unknown action' },
+    { ok: true },
+    { ok: true, rows: 'nope' },
+    null,
+    'not json at all'
+  ]) {
+    const s = setup(occupancyFeed({ body }).fetchImpl);
+    await call(s.ctx, 'ensureOccupancySnapshots_');
+    call(s.ctx, 'renderOccupancyEverywhere_');
+    const dom = occBody(s.byId.get('panel-overview'));
+    assert.equal(nodesWith(dom, 'data-occupancy-state')[0].getAttribute('data-occupancy-state'), 'error',
+      `body ${JSON.stringify(body)} must fail closed`);
+    assert.equal(nodesWith(dom, 'data-occupancy-table').length, 0);
+    assert.match(allText(dom), /שגיאה בטעינת תפוסה חודשית/);
+    assert.ok(nodesWith(dom, 'data-occupancy-retry')[0], 'retry offered');
+  }
+  // The upstream message is shown, never a made-up figure.
+  const s = setup(occupancyFeed({ body: { ok: false, error: 'unknown action' } }).fetchImpl);
+  await call(s.ctx, 'ensureOccupancySnapshots_');
+  call(s.ctx, 'renderOccupancyEverywhere_');
+  assert.match(allText(occBody(s.byId.get('panel-overview'))), /unknown action/);
+});
+
+test('occupancy: no backend field outside the documented nine reaches the DOM or the CSV', async () => {
+  const { ctx, overview, blobs, created } = await withOccupancy();
+  const text = allText(occBody(overview));
+  for (const v of ['8811', '5000', 'true', 'securedTier', 'projectedBonus', '2026-05-01T00:00:00Z']) {
+    assert.ok(!text.includes(v), `backend field value "${v}" reached the DOM`);
+  }
+  // The normalised row carries exactly the nine documented fields.
+  assert.deepEqual(
+    vm.runInContext('Object.keys(state.occupancy.rows[0]).sort().join(",")', ctx),
+    'avgDaily,capacity,capturedAt,daysInMonth,key,manager,month,occupancyPct,treatmentDays'
+  );
+  // …and the CSV, built from the same rows, carries none of the junk either.
+  assert.equal(call(ctx, 'exportOccupancyCsv_', ['raanana', 'ramot', 'efroni', 'rehab', 'pardes']), true);
+  const csv = blobs[0].parts[0];
+  assert.ok(csv.startsWith('﻿'), 'the download carries the UTF-8 BOM');
+  assert.match(csv, /"חודש","בית","מנהל\/ת","ימי טיפול","ימים בחודש","ממוצע יומי","קיבולת","תפוסה %"/);
+  for (const v of ['8811', '5000', 'arfoni', 'capturedAt', '2026-09', '2026-04', 'nosuchhouse']) {
+    assert.ok(!csv.includes(v), `"${v}" reached the CSV`);
+  }
+  assert.match(csv, /"2026-08","רמות השבים","אורן","441","31","14\.2","20","71\.2"/);
+  assert.equal(csv.replace('﻿', '').trim().split('\r\n').length, 1 + 4 * 5, 'header + every settled cell');
+  const anchor = created.filter((el) => el.tagName === 'a').pop();
+  assert.equal(anchor.download, 'occupancy-2026-05_to_2026-08.csv');
+});
+
+test('occupancy: the ייצוא CSV button exports the houses on screen and is hidden when there is nothing to export', async () => {
+  const { ctx, byId, overview, blobs } = await withOccupancy();
+  assert.equal(overview.querySelector('[data-occupancy-export]').hidden, false);
+  vm.runInContext(`state.details.ramot = ${JSON.stringify(RAMOT_DETAIL)}`, ctx);
+  call(ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', ctx));
+  const panel = byId.get('panel-ramot');
+  panel.querySelector('[data-occupancy-export]').click();
+  const csv = blobs[blobs.length - 1].parts[0];
+  assert.equal(csv.replace('﻿', '').trim().split('\r\n').length, 1 + 4, 'a house tab exports its own house only');
+  assert.ok(!csv.includes('קיסריה עפרוני'));
+
+  // An empty (but successful) feed: an explicit "nothing yet" note, no button.
+  const empty = await withOccupancy({ rows: [] });
+  assert.equal(nodesWith(occBody(empty.overview), 'data-occupancy-table').length, 0);
+  assert.match(allText(occBody(empty.overview)), /אין נתונים — טרם נקלטו תפוסות חודשיות/);
+  assert.equal(empty.overview.querySelector('[data-occupancy-export]').hidden, true);
+});
+
+test('occupancy: the card is fetched once per calendar month and leaves every bonus figure untouched', async () => {
+  const { calls, fetchImpl } = occupancyFeed();
+  const { ctx, byId } = setup(fetchImpl);
+  vm.runInContext('state.overview = null; state.prevOverview = null; state.monthOverviews = {}; state.chartsByMonth = {}; state.details = {};', ctx);
+  vm.runInContext(`state.details.ramot = ${JSON.stringify(RAMOT_DETAIL)}`, ctx);
+  call(ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', ctx));
+  const panel = byId.get('panel-ramot');
+  assert.equal(calls.filter((c) => c.action === 'occupancySnapshots').length, 0,
+    'rendering a tab never fetches — loadOverview owns the request');
+  assert.equal(nodesWith(occBody(panel), 'data-occupancy-state')[0].getAttribute('data-occupancy-state'), 'loading');
+
+  await vm.runInContext('loadOverview', ctx)();
+  assert.equal(calls.filter((c) => c.action === 'occupancySnapshots').length, 1);
+  call(ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', ctx));
+  assert.equal(nodesWith(occBody(panel), 'data-occupancy-table').length, 1, 'the tab shows the card after the load');
+  const before = bonusSnapshot(ctx, panel);
+
+  await vm.runInContext('loadOverview', ctx)(); // the 60-second refresh
+  assert.equal(calls.filter((c) => c.action === 'occupancySnapshots').length, 1, 'cached for the month');
+  call(ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', ctx));
+  assert.deepEqual(bonusSnapshot(ctx, panel), before, 'the occupancy card must not move any bonus figure');
+
+  // A new calendar month re-fetches.
+  vm.runInContext('state.now = new Date(2026, 9, 2, 12)', ctx);
+  await call(ctx, 'ensureOccupancySnapshots_');
+  assert.equal(calls.filter((c) => c.action === 'occupancySnapshots').length, 2);
+});
+
+test('occupancy: static guards — the card, its script and the SW cache bump are in the shell', () => {
+  const html = pub('index.html');
+  assert.equal((html.match(/data-occupancy-body/g) || []).length, 2, 'the card sits on the overview AND in the house template');
+  assert.equal((html.match(/תפוסה חודשית \(סופי\)/g) || []).length, 2);
+  assert.equal((html.match(/ייצוא CSV/g) || []).length, 2);
+  const order = ['/bonus-view.js', '/occupancy-export.js', '/app.js'].map((s) => html.indexOf(`<script src="${s}">`));
+  assert.ok(order.every((i) => i >= 0) && order[0] < order[1] && order[1] < order[2], `script order wrong: ${order}`);
+  const sw = pub('sw.js');
+  assert.match(sw, /'\/occupancy-export\.js'/, 'SW shell must include /occupancy-export.js');
+  const m = sw.match(/const CACHE = 'ezone-managers-v(\d+)'/);
+  assert.ok(m && Number(m[1]) >= 13, 'SW cache must be bumped to v13+ (monthly-occupancy card)');
+  // Feed values reach the occupancy DOM through textContent only.
+  const js = pub('app.js');
+  const section = js.slice(js.indexOf("const OCCUPANCY_FLOOR_YM"), js.indexOf('function renderNextTierCard'));
+  assert.ok(section.length > 1000, 'the occupancy section must be found');
+  assert.doesNotMatch(section, /innerHTML\s*=(?!\s*'';)/, "the occupancy renderer may only clear innerHTML (= '') — every value goes in through textContent");
+  assert.match(section, /body\.innerHTML = '';/);
+  assert.doesNotMatch(section, /state\.(overview|monthOverviews|prevOverview|details|chartsByMonth|quarterWindow|bonusMonth|bonusHistory)\s*(=|\[[^\]]*\]\s*=)/,
+    'the occupancy code must never write a bonus state slice');
 });
