@@ -3,6 +3,65 @@
 
 ## Unreleased
 
+### Added — permanent «תפוסה חודשית (סופי)» view + CSV export (September 17, 2026)
+
+A permanent monthly-occupancy card, on the overview and on every house tab,
+plus a CSV export. Frontend only; **no Apps Script change in this repo, no new
+endpoint, env var or Railway variable** — the new backend action rides the
+existing `/api/sheets` → `APPS_SCRIPT_URL` proxy, whose query allowlist
+already passes `action`.
+
+**Why**: the "היסטוריית תפוסה" picker (Sep 10) shows one month of one house at
+a time, so comparing months across houses meant clicking through 5 houses ×
+N months. This card puts the whole settled history on screen at once and lets
+it leave the app as a spreadsheet.
+
+- **New**: `public/occupancy-export.js` — a PURE module (no DOM, no network)
+  holding the CSV format: UTF-8 BOM, Hebrew headers (`חודש, בית, מנהל/ת,
+  ימי טיפול, ימים בחודש, ממוצע יומי, קיבולת, תפוסה %`), the manager through
+  `BonusView.safeLabel`, CSV-injection neutralisation (a cell starting with
+  `=`, `+`, `-`, `@`, a tab or a CR is prefixed with an apostrophe), RFC-4180
+  quoting, locale-independent numbers, a missing figure written empty (never
+  `0`), and ONLY those eight columns — `capturedAt`, `houseId` and anything
+  the backend adds later are dropped. The download (`Blob` + `<a download>`,
+  `occupancy-<from>_to_<to>.csv`) stays in `app.js` so the module keeps
+  testable.
+- **Overview card**: rows = **settled** months, newest first, from the May
+  2026 quarterly anchor; columns = the five houses with labels from
+  `HOUSE_LABELS` only; cell = `occupancyPct%` with `ממוצע יומי/קיבולת`
+  beneath. Every row is labelled `<חודש> — סופי`; the running month is never a
+  row and `בתהליך` / `בדרך` / `חסרים` / `צפי` never appear.
+- **Every house tab**: the same card, that house's column only, rendered LAST
+  (after hero, KPIs, month split, tiers, breakdown).
+- **Data**: one `action=occupancySnapshots` request per page (boot — never on
+  the 60-second overview refresh). The backend id **`arfoni` maps to the
+  frontend key `efroni`**; an unknown house id, a malformed month, a month
+  before `2026-05` and the running/future months are dropped. A missing
+  month/house cell renders **`אין נתונים`** — never `0%`, never blank.
+- **Fail-closed**: a fetch error, an unknown action, a non-JSON body or a
+  payload without `rows` → an explicit error state
+  (`שגיאה בטעינת תפוסה חודשית: …`) with a **`נסו שוב`** retry button. No
+  silent fallback computation anywhere.
+- **Isolation**: own state slice (`state.occupancy` / `state.loadingOccupancy`)
+  — the bonus KPIs, hero, house cards and both existing month pickers are
+  untouched, and all their snapshot tests stay byte-for-byte green. Feed
+  values reach the DOM through `textContent` only (a static guard allows a
+  single `innerHTML` write, the host reset).
+- **Backend dependency**: the `occupancySnapshots` action ships in the parallel
+  **E-Zone-Dashboard** PR. Merge this one only AFTER that deploy; until then
+  the card shows its error state and nothing else is affected.
+- SW cache **v12 → v13** (`/occupancy-export.js` added to the shell).
+  Docs: `docs/occupancy-history-view.md` → "Monthly occupancy (permanent)",
+  `README.md`, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
+
+Tests 148 → **178** (+30): `test/occupancy-view.test.js` (18 — table model,
+`arfoni` mapping, missing cell, newest-first, no running month, loading /
+error / retry, empty payload, CSV export end to end, no bonus state written,
+`textContent`-only guard) and `test/occupancy-export.test.js` (11 — BOM,
+header order, injection, quotes, `safeLabel`, only the documented columns,
+file name, purity), plus one `test/sheets-proxy.test.js` case proving
+`occupancySnapshots` goes through the same proxy path as `managersOverview`.
+
 ### Changed — the app is fully open: no key, no cookie, patient names visible to everyone (September 12, 2026)
 
 Removes the `?key=` full-view link and the server-side patient-name redaction

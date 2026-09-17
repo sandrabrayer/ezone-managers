@@ -252,6 +252,37 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   is byte-for-byte unchanged (snapshot-tested). SW cache v10, tests 136.
   Details: `docs/bonus-month-labelling.md` → "Bonus history month picker".
 
+## Managers: monthly occupancy view + CSV export (September 17, 2026)
+
+- **Permanent «תפוסה חודשית (סופי)» card** — overview: a table of every
+  SETTLED month (newest first, from the May 2026 anchor) × the five houses
+  (labels from `HOUSE_LABELS` only), each cell the month's occupancy
+  percentage with `ממוצע יומי/קיבולת` beneath it; every house tab shows its
+  own column only. Always `סופי`, never `בתהליך`; **the running month is
+  never a row**. A missing month/house cell says `אין נתונים` — never `0%`.
+- **Data**: one `GET /api/sheets?action=occupancySnapshots` per page through
+  the EXISTING proxy / `APPS_SCRIPT_URL` path (the query allowlist already
+  passes `action`) — no new endpoint, env var or Railway variable. Rows are
+  `{ month, houseId, treatmentDays, daysInMonth, avgDaily, capacity,
+  occupancyPct, manager, capturedAt }`; the backend id **`arfoni` is mapped to
+  the frontend key `efroni`** and an unknown id is dropped. A failure, an
+  unknown action or a payload without `rows` → an explicit error state plus a
+  `נסו שוב` retry button, never a silent fallback computation.
+- **`ייצוא CSV`** — pure module `public/occupancy-export.js`: UTF-8 BOM,
+  Hebrew headers (`חודש, בית, מנהל/ת, ימי טיפול, ימים בחודש, ממוצע יומי,
+  קיבולת, תפוסה %`), manager through `BonusView.safeLabel`, CSV-injection
+  (`= + - @`, tab, CR) and quotes escaped, only those eight columns ever
+  written, downloaded as `occupancy-<from>_to_<to>.csv`.
+- **The bonus side is untouched**: own state slice (`state.occupancy`), feed
+  values rendered with `textContent` only, rendered last on the house tab;
+  every existing bonus snapshot test stays byte-for-byte green. SW cache v13,
+  tests 148 → **178**. Details: `docs/occupancy-history-view.md` → "Monthly
+  occupancy (permanent)".
+- **Backend dependency**: the `occupancySnapshots` action itself ships in the
+  parallel **E-Zone-Dashboard** PR (Apps Script). The managers PR must be
+  merged only AFTER that deploy; until then the card shows its error state and
+  nothing else in the app is affected.
+
 ## Managers: house roster (5 houses, current as of September 5, 2026)
 
 The Managers app (`ezone-managers`) covers FIVE houses. Hardcoded fallbacks
