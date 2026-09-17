@@ -57,6 +57,25 @@ test('sheets proxy (mocked upstream)', async (t) => {
     assert.equal(lastFetchUrl, 'https://apps-script.test/exec?action=managersOverview');
   });
 
+  await t.test('occupancySnapshots goes through the same proxy path as managersOverview', async () => {
+    // The monthly-occupancy card adds no endpoint and no env var: it is one
+    // more `action` on the existing APPS_SCRIPT_URL proxy.
+    mockUpstream('{"ok":true,"rows":[]}');
+    const r = await request(server, '/api/sheets?action=occupancySnapshots');
+    assert.equal(r.status, 200);
+    assert.equal(r.text, '{"ok":true,"rows":[]}');
+    assert.equal(lastFetchUrl, 'https://apps-script.test/exec?action=occupancySnapshots');
+    assert.equal(r.headers['cache-control'], 'no-store');
+  });
+
+  await t.test('an unknown action is passed through verbatim — the proxy invents no answer', async () => {
+    // Until the Dashboard Apps Script ships the action, the backend answers
+    // "unknown"; the proxy must relay that, not synthesise rows.
+    mockUpstream('{"ok":false,"error":"unknown action"}');
+    const r = await request(server, '/api/sheets?action=occupancySnapshots');
+    assert.equal(r.text, '{"ok":false,"error":"unknown action"}');
+  });
+
   await t.test('forwards ONLY allowlisted query keys (action, house, month)', async () => {
     mockUpstream('{}');
     await request(server,

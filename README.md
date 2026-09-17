@@ -8,8 +8,12 @@ It reads data via the existing E-Zone Apps Script endpoints — it never writes 
 
 - `GET /api/sheets?action=managersOverview` — all houses (currently 5) + bonus calculations
 - `GET /api/sheets?action=managersHouse&key=<houseKey>` — full detail for one house
+- `GET /api/sheets?action=occupancySnapshots` — the settled monthly occupancy
+  record, one row per month × house (`{ ok, rows:[…] }`)
 
-Both are proxied through `server.js` to the E-Zone Apps Script `/exec` endpoint.
+All three are proxied through `server.js` to the E-Zone Apps Script `/exec`
+endpoint — same proxy, same allowlisted query keys (`action`, `house`,
+`month`), no extra env var.
 
 The endpoint URL is configured via the `APPS_SCRIPT_URL` env var. It is **required** — there is no hardcoded fallback, and the server refuses to start if it is not set.
 
@@ -61,6 +65,24 @@ using only the existing `managersOverview&month=YYYY-MM` endpoint, cached
 per month in memory. `חזרה לחודש נוכחי` restores the live view. See
 `docs/bonus-month-labelling.md` → "Bonus history month picker".
 
+## Monthly occupancy (סופי)
+
+A permanent **«תפוסה חודשית (סופי)»** card on the overview and on every house
+tab: rows are settled months newest first from the May 2026 anchor, columns
+are the five houses (one on a house tab), and each cell shows the month's
+occupancy percentage over `ממוצע יומי / קיבולת`. A month a house has no
+snapshot for reads **«אין נתונים»**, never `0`; the running month is never
+shown, and every row is labelled `סופי`. A failed or unknown
+`occupancySnapshots` call renders an explicit error state with a
+**«נסה שוב»** button — never a silently computed fallback.
+
+**«ייצוא CSV»** downloads the houses on screen as
+`occupancy-<from>_to_<to>.csv`: UTF-8 BOM, Hebrew headers
+(`חודש, בית, מנהל/ת, ימי טיפול, ימים בחודש, ממוצע יומי, קיבולת, תפוסה %`),
+every field quoted and CSV-injection escaped (`=` `+` `-` `@` TAB CR). All of
+those rules live in the pure module `public/occupancy-export.js`. See
+`docs/occupancy-history-view.md` → "Monthly occupancy (permanent)".
+
 ## Local
 
 ```bash
@@ -91,7 +113,13 @@ render paths in a `vm` sandbox with a minimal fake DOM (`test/app-render.test.js
 occupancy-history month picker leaves every bonus figure unchanged, see
 `docs/occupancy-history-view.md`, and the bonus-history month picker renders
 a finished month settled-only while the running month stays byte-for-byte
-unchanged), and static UI guards (`test/ui-guards.test.js`).
+unchanged, and the permanent monthly-occupancy card: table build, the
+`arfoni` → `efroni` mapping, «אין נתונים» for a missing cell, newest-first
+months with no running month, the explicit error state and its retry button,
+and no backend field outside the documented nine reaching the DOM or the
+CSV), the CSV export rules — BOM, Hebrew headers, injection escaping, file
+name (`test/occupancy-export.test.js`) — and static UI guards
+(`test/ui-guards.test.js`).
 
 **Tests never call the live Apps Script backend**: all upstream HTTP is mocked
 in-process and all secrets are dummy values set inside the test files.

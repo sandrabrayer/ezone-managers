@@ -252,6 +252,36 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   is byte-for-byte unchanged (snapshot-tested). SW cache v10, tests 136.
   Details: `docs/bonus-month-labelling.md` → "Bonus history month picker".
 
+## Managers: monthly occupancy card + CSV export (September 17, 2026)
+
+- **Permanent «תפוסה חודשית (סופי)» card** on the overview (all five houses)
+  and on every house tab (that house only). Rows = settled months newest
+  first from the May 2026 anchor, each labelled `<חודש> — סופי`; columns =
+  the houses from `HOUSE_LABELS`; a cell = the month's occupancy percentage
+  over `ממוצע יומי / קיבולת`. A month a house has no snapshot for reads
+  `אין נתונים`, never `0`. **The running month is never shown** — it is
+  dropped on ingest, so nothing can be labelled `סופי` while it is still
+  accruing.
+- **Data: the new backend action `occupancySnapshots`** (added in the
+  E-Zone-Dashboard Apps Script), read through the existing `/api/sheets` →
+  `APPS_SCRIPT_URL` proxy exactly like `managersOverview`. Shape:
+  `{ ok:true, rows:[{ month, houseId, treatmentDays, daysInMonth, avgDaily,
+  capacity, occupancyPct, manager, capturedAt }] }`. **No new endpoint, no
+  server change, no Railway variable.** Fetched once per calendar month.
+  Backend `arfoni` → frontend `efroni` at the boundary; only those nine
+  fields are read, so no backend bonus field can reach the DOM or the CSV.
+- **Fail-closed**: a failed request, a non-`ok:true` body or an unknown action
+  render an explicit error state with a `נסה שוב` retry — never a silently
+  computed fallback. The Managers frontend can therefore be deployed before
+  or after the Dashboard change; **merge order is Dashboard first**.
+- **`ייצוא CSV`** exports the houses on screen as
+  `occupancy-<from>_to_<to>.csv` — UTF-8 BOM, Hebrew headers, CSV-injection
+  escaping (`= + - @` TAB CR) and full quoting. All of it in the new pure
+  module `public/occupancy-export.js`.
+- Bonus KPIs / hero / cards and both existing month pickers are unchanged
+  (snapshot-tested). SW cache v13, tests **170**. Details:
+  `docs/occupancy-history-view.md` → "Monthly occupancy (permanent)".
+
 ## Managers: house roster (5 houses, current as of September 5, 2026)
 
 The Managers app (`ezone-managers`) covers FIVE houses. Hardcoded fallbacks
