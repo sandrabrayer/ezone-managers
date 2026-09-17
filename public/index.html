@@ -96,6 +96,12 @@
         <div class="house-card is-skeleton-card"></div>
         <div class="house-card is-skeleton-card"></div>
       </div>
+
+      <!-- Monthly occupancy (permanent): settled months only, newest first,
+           one column per house. Its own feed (occupancySnapshots) and its own
+           state slice — it never touches the bonus KPIs / hero / cards above
+           (see docs/occupancy-history-view.md). Filled by JS. -->
+      <div class="card occupancy-card" id="occupancyCard"></div>
     </section>
 
     <!-- TABS 2-6: HOUSE DETAIL (shared template, populated by JS) -->
@@ -139,6 +145,9 @@
         </div>
         <div class="history-view" data-history-view hidden></div>
       </div>
+
+      <!-- Monthly occupancy (permanent) — this house only. Filled by JS. -->
+      <div class="card occupancy-card" data-occupancy-card></div>
 
       <div class="next-tier-card" data-next-tier-card>
         <div class="next-tier-header" data-next-tier-header>—</div>
@@ -224,6 +233,7 @@
 
   <script src="/lib/bonus-eligibility.js"></script>
   <script src="/bonus-view.js"></script>
+  <script src="/occupancy-export.js"></script>
   <script src="/app.js"></script>
   <!-- External, not inline: the CSP is script-src 'self' with no
        'unsafe-inline'. -->

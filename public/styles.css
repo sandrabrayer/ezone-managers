@@ -1385,3 +1385,58 @@ body::before {
 }
 .quarterly-months[hidden] { display: none; }
 .log-empty { font-size: 13px; color: var(--text-mute); padding: 8px 0; list-style: none; }
+
+/* ===== Monthly occupancy (permanent «תפוסה חודשית (סופי)» view) ===== */
+.occupancy-card { margin-top: 16px; }
+.occupancy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.occupancy-head .card-title { margin-bottom: 0; }
+.occupancy-body { min-height: 24px; }
+.occupancy-body .link-btn { margin-top: 6px; }
+/* The table can be wider than a phone: it scrolls inside the card instead of
+   pushing the page sideways (body has overflow-x: hidden). */
+.occupancy-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.occupancy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 420px;
+}
+.occupancy-table th,
+.occupancy-table td {
+  padding: 8px 10px;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.occupancy-table thead th {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line-strong);
+}
+.occupancy-table th.occ-col-month,
+.occupancy-table th.occ-month {
+  text-align: right;
+  font-weight: 800;
+}
+.occupancy-table th.occ-month { color: var(--text); }
+.occupancy-table tbody tr:last-child th,
+.occupancy-table tbody tr:last-child td { border-bottom: 0; }
+.occ-pct { font-size: 15px; font-weight: 800; color: var(--gold); }
+.occ-sub { font-size: 11px; color: var(--text-mute); margin-top: 2px; }
+.occ-none { font-size: 12px; color: var(--text-mute); }
+@media (max-width: 480px) {
+  .occupancy-table { font-size: 12px; min-width: 380px; }
+  .occupancy-table th, .occupancy-table td { padding: 7px 8px; }
+  .occ-pct { font-size: 14px; }
+}
