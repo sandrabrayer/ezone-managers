@@ -8,8 +8,10 @@ It reads data via the existing E-Zone Apps Script endpoints — it never writes 
 
 - `GET /api/sheets?action=managersOverview` — all houses (currently 5) + bonus calculations
 - `GET /api/sheets?action=managersHouse&key=<houseKey>` — full detail for one house
+- `GET /api/sheets?action=occupancySnapshots` — settled monthly occupancy per
+  house, for the permanent «תפוסה חודשית (סופי)» table (see below)
 
-Both are proxied through `server.js` to the E-Zone Apps Script `/exec` endpoint.
+All three are proxied through `server.js` to the E-Zone Apps Script `/exec` endpoint.
 
 The endpoint URL is configured via the `APPS_SCRIPT_URL` env var. It is **required** — there is no hardcoded fallback, and the server refuses to start if it is not set.
 
@@ -61,6 +63,23 @@ using only the existing `managersOverview&month=YYYY-MM` endpoint, cached
 per month in memory. `חזרה לחודש נוכחי` restores the live view. See
 `docs/bonus-month-labelling.md` → "Bonus history month picker".
 
+## Monthly occupancy (סופי) + CSV export
+
+A permanent **«תפוסה חודשית (סופי)»** card — on the overview a table of every
+**settled** month (newest first, from May 2026) × the five houses, each cell
+the month's occupancy percentage with `ממוצע יומי/קיבולת` beneath it; on a
+house tab the same card for that house alone. The running month is never a
+row and every row is labelled `סופי`. A missing month/house cell says
+`אין נתונים` — never `0%`. **«ייצוא CSV»** downloads the same figures as
+`occupancy-<from>_to_<to>.csv` (UTF-8 BOM, Hebrew headers, CSV-injection-safe;
+format in the pure module `public/occupancy-export.js`).
+
+Data: one `occupancySnapshots` request per page through the existing proxy —
+no new endpoint, env var or Railway variable. A failure, an unknown action or
+a malformed payload shows an explicit error state with a `נסו שוב` button and
+never a computed fallback. Details: `docs/occupancy-history-view.md` →
+"Monthly occupancy (permanent)".
+
 ## Local
 
 ```bash
@@ -91,7 +110,12 @@ render paths in a `vm` sandbox with a minimal fake DOM (`test/app-render.test.js
 occupancy-history month picker leaves every bonus figure unchanged, see
 `docs/occupancy-history-view.md`, and the bonus-history month picker renders
 a finished month settled-only while the running month stays byte-for-byte
-unchanged), and static UI guards (`test/ui-guards.test.js`).
+unchanged), the permanent monthly-occupancy view (`test/occupancy-view.test.js`
+— table model, `arfoni` → `efroni`, missing cell, newest-first, no running
+month, error state and retry, CSV export, no bonus state written) and its CSV
+format (`test/occupancy-export.test.js` — BOM, Hebrew headers, injection and
+quote escaping, only the documented columns), and static UI guards
+(`test/ui-guards.test.js`).
 
 **Tests never call the live Apps Script backend**: all upstream HTTP is mocked
 in-process and all secrets are dummy values set inside the test files.

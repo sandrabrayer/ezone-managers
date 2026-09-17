@@ -57,10 +57,10 @@ test('the patient name is still escaped before it reaches innerHTML', () => {
     'a raw name interpolation would let a spreadsheet cell inject markup');
 });
 
-test('SW cache version is v12+ (bumped whenever shell files change)', () => {
+test('SW cache version is v13+ (bumped whenever shell files change)', () => {
   const sw = pub('sw.js');
   const m = sw.match(/const CACHE = 'ezone-managers-v(\d+)'/);
-  assert.ok(m && Number(m[1]) >= 12);
+  assert.ok(m && Number(m[1]) >= 13);
 });
 
 test('top bar drops the "איזון" (E-ZONE) wordmark', () => {
