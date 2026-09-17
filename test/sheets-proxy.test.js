@@ -69,6 +69,15 @@ test('sheets proxy (mocked upstream)', async (t) => {
     assert.equal(qs.has('redirect'), false);
   });
 
+  await t.test('forwards the occupancySnapshots action (monthly occupancy view)', async () => {
+    mockUpstream('{"ok":true,"rows":[]}');
+    const r = await request(server, '/api/sheets?action=occupancySnapshots');
+    assert.equal(r.status, 200);
+    assert.equal(r.text, '{"ok":true,"rows":[]}');
+    assert.equal(lastFetchUrl, 'https://apps-script.test/exec?action=occupancySnapshots',
+      'the permanent occupancy view uses the SAME proxy path as managersOverview');
+  });
+
   await t.test('passes upstream non-200 status through', async () => {
     mockUpstream('{"error":"nope"}', { status: 500 });
     const r = await request(server, '/api/sheets?action=managersOverview');
