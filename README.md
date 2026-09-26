@@ -53,6 +53,19 @@ exposed to the browser. The bonus VIEW module (`public/bonus-view.js` — month
 labelling, wording, days-so-far) lives in `public/` and is served by the
 static mount; see `docs/bonus-month-labelling.md`.
 
+## House roster & manager names
+
+Five houses — `raanana`, `ramot`, `efroni`, `rehab`, `pardes`. A house's
+manager name comes from the live feed's `manager` field when that is a real
+name, otherwise from the hardcoded fallback in `HOUSE_LABELS`
+(`public/app.js`). The current names and the rename history live in the
+roster table of `EZONE-ECOSYSTEM-STATUS.md`; CI fails if code and doc drift
+(`test/house-coverage.test.js`, `test/ecosystem-status-doc.test.js`).
+
+To change a manager, update `HOUSE_LABELS` and the status-doc roster row +
+history line together, and bump the SW cache. That changes the fallback only:
+while the dashboard Apps Script still returns the old name, the app shows it.
+
 ## Bonus history
 
 A **"חודש בונוס"** picker on the overview and on every house tab lists the
