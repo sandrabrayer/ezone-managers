@@ -176,6 +176,11 @@ guard test asserts that), so the file format is unit-tested directly:
 - The manager goes through `BonusView.safeLabel` (a numeric string that leaked
   into the feed's `manager` never reaches the file); house labels come from
   `HOUSE_LABELS`.
+- The manager is the one the snapshot row carries, so a settled month is not
+  re-labelled by a later roster change (the Ra'anana manager change of
+  September 2026, שחר → דליה, does not touch a row that says שחר). Only a row
+  with no usable manager falls back to the CURRENT `HOUSE_LABELS` name — for a
+  month before a manager change, that is the newer manager.
 - **CSV injection** is neutralised: a cell starting with `=`, `+`, `-`, `@`, a
   tab or a CR is prefixed with an apostrophe; quotes / commas / newlines are
   RFC-4180 quoted (`"` doubled).

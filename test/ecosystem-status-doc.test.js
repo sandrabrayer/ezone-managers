@@ -52,10 +52,18 @@ test('status doc roster names and managers match HOUSE_LABELS exactly', () => {
 
 test('status doc carries the current managers by name', () => {
   const expected = {
-    raanana: 'שחר', ramot: 'אורן', efroni: 'חנן', rehab: 'רנטה', pardes: 'חן'
+    raanana: 'דליה', ramot: 'אורן', efroni: 'חנן', rehab: 'רנטה', pardes: 'חן'
   };
   const byKey = Object.fromEntries(rosterTable().map((r) => [r.key, r.manager]));
   assert.deepEqual(byKey, expected);
+});
+
+test('status doc manager history records raanana שחר → דליה (Sep 2026) and keeps the earlier changes', () => {
+  const section = doc.match(/## Managers: house roster[\s\S]*?(?=\n## )/);
+  assert.ok(section, 'doc must have a "## Managers: house roster" section');
+  assert.match(section[0], /raanana\s+שחר\s+→\s+דליה,\s+Sep\s+2026/);
+  assert.match(section[0], /raanana\s+עידו\s+→\s+שחר\s+\(Aug 24, 2026\)/, 'earlier raanana change kept');
+  assert.match(section[0], /ramot\s+שחר\s+→\s+אורן\s+\(Aug 25, 2026\)/, 'earlier ramot change kept');
 });
 
 test('status doc bonus model line covers Pardes', () => {

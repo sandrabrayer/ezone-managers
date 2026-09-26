@@ -133,6 +133,7 @@ const snap = (month, houseId, o = {}) => ({
  * assert on), plus the rows that must never be shown. */
 const ROWS = [
   snap('2026-08', 'ramot'),
+  // August 2026 was settled under שחר; the roster fallback is דליה since Sep 2026.
   snap('2026-08', 'raanana', { capacity: 14, avgDaily: 11.2, occupancyPct: 80, treatmentDays: 347, manager: 'שחר' }),
   snap('2026-08', 'arfoni', { capacity: 13, avgDaily: 9.1, occupancyPct: 70, treatmentDays: 282, manager: 'חנן' }),
   snap('2026-08', 'rehab', { capacity: 13, avgDaily: 10.4, occupancyPct: 80, treatmentDays: 322, manager: 'רנטה' }),
@@ -211,6 +212,16 @@ test('table model: figures come from the snapshot row, capacity falls back to HO
   assert.equal(Math.round(noCap.occupancyPct), 50, 'pct derived from avgDaily / capacity when the feed has none');
   assert.equal(call(ctx, 'occupancyRow_', { month: '2026-08', houseId: 'ramot' }), null,
     'a row with no occupancy figure at all is missing data, not 0%');
+});
+
+test('table model: the snapshot\'s own manager wins over the HOUSE_LABELS fallback; a blank or numeric one falls back to דליה', () => {
+  const { ctx } = setup();
+  const aug = call(ctx, 'occupancyTable_', ROWS, {}).byMonth['2026-08'].raanana;
+  assert.equal(aug.manager, 'שחר', 'the month\'s captured manager is kept — a settled month is not rewritten');
+  for (const manager of [undefined, '', '   ', 2577, '2,500 ₪']) {
+    const row = call(ctx, 'occupancyRow_', { month: '2026-08', houseId: 'raanana', avgDaily: 11.2, capacity: 14, manager });
+    assert.equal(row.manager, 'דליה', `feed manager ${JSON.stringify(manager)} → roster fallback`);
+  }
 });
 
 /* ── render ───────────────────────────────────────────────── */
@@ -355,7 +366,8 @@ test('CSV export: BOM, Hebrew headers, one line per rendered cell, named occupan
   const lines = out.csv.replace(/^﻿/, '').trim().split('\r\n');
   assert.equal(lines[0], 'חודש,בית,מנהל/ת,ימי טיפול,ימים בחודש,ממוצע יומי,קיבולת,תפוסה %');
   assert.equal(lines.length, 1 + 7, 'header + the seven months×houses that have data');
-  assert.equal(lines[1], '2026-08,רעננה אשר,שחר,347,31,11.2,14,80', 'column order follows the table');
+  assert.equal(lines[1], '2026-08,רעננה אשר,שחר,347,31,11.2,14,80',
+    'column order follows the table; the snapshot\'s manager (שחר) wins over the roster fallback (דליה)');
   assert.ok(lines.some((l) => l.startsWith('2026-08,קיסריה עפרוני,חנן,')), 'arfoni exported as עפרוני');
   assert.ok(!out.csv.includes('arfoni'), 'the backend id never reaches the file');
   assert.ok(!lines.some((l) => l.startsWith('2026-09')), 'the running month is not exported');

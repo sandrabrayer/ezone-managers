@@ -10,9 +10,11 @@ const HOUSE_KEYS = ['raanana', 'ramot', 'efroni', 'rehab', 'pardes'];
 /* `threshold` = end-of-month patients needed to be eligible for ANY bonus
    (the agreed model: Ramot 18, others 10). This is NOT the internal
    equilibrium point (11/8/8/7) — that point is internal-only and must not
-   gate the bonus. `capacity` is the physical bed count. */
+   gate the bonus. `capacity` is the physical bed count. `manager` is only a
+   FALLBACK: a real name in the feed's `manager` field takes precedence
+   (roster table + manager history: EZONE-ECOSYSTEM-STATUS.md). */
 const HOUSE_LABELS = {
-  raanana: { name: 'רעננה אשר',     manager: 'שחר',   type: 'בית מאזן',     threshold: 10, capacity: 14 },
+  raanana: { name: 'רעננה אשר',     manager: 'דליה',  type: 'בית מאזן',     threshold: 10, capacity: 14 },
   ramot:   { name: 'רמות השבים',    manager: 'אורן',  type: 'בית מאזן',     threshold: 17, capacity: 20 },
   efroni:  { name: 'קיסריה עפרוני', manager: 'חנן',   type: 'תחלואה כפולה', threshold: 10, capacity: 13 },
   rehab:   { name: 'קיסריה ריהאב',  manager: 'רנטה',  type: 'גמילה',        threshold: 10, capacity: 13 },

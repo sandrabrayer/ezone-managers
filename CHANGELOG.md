@@ -3,6 +3,48 @@
 
 ## Unreleased
 
+### Changed — רעננה אשר (raanana) manager: שחר → דליה (September 26, 2026)
+
+**Why**: Ra'anana Asher's house manager changed in September 2026. Without
+this update the app keeps naming שחר wherever the feed does not name the
+manager itself.
+
+- **Hardcoded fallback updated** — `HOUSE_LABELS.raanana.manager` in
+  `public/app.js` is now `דליה`. The live feed's `manager` field, when it is a
+  real name, **still takes precedence** (unchanged — now pinned by render
+  tests on the house card, winners banner and house-tab hero, and by a static
+  guard on all 7 fallback sites); a missing, blank or numeric value falls back
+  to the roster.
+  A comment on `HOUSE_LABELS` now says the `manager` field is a fallback only.
+- **Status doc** (`EZONE-ECOSYSTEM-STATUS.md` → "Managers: house roster"):
+  raanana row → `דליה`, manager history `raanana שחר → דליה, Sep 2026`, roster
+  dated September 26, 2026, plus a note that a roster rename changes the
+  fallback only — while the dashboard Apps Script still returns the old name,
+  the app shows it.
+- **Settled months are not re-labelled**: an `occupancySnapshots` row keeps the
+  manager it carries (the August 2026 fixture stays שחר); only a row with no
+  usable manager falls back to the current roster name. Documented in
+  `docs/occupancy-history-view.md`; `README.md` gains a short "House roster &
+  manager names" section.
+- No Apps Script, server, endpoint or env-var change. `lib/` holds no manager
+  names (checked).
+- SW cache **v13 → v14** (`app.js` changed). v13 is the highest cache version
+  on every branch and every PR head in this repo; the live `/sw.js` could not
+  be read from the Code session (network policy), so v14 is new relative to
+  anything Railway can be serving from this repo.
+
+Tests 178 → **185** (+7): `test/app-render.test.js` (+3 — with no feed
+manager the house card, winners banner and house-tab hero all show דליה; a
+blank or numeric feed manager falls back to דליה; a real feed name (שחר) still
+wins on all three), `test/house-coverage.test.js` (+2, one rewritten — all
+five managers pinned; both outgoing raanana managers עידו and שחר gone; a
+static guard that all 7 roster fallbacks in `app.js` come after
+`safeLabel(feed.manager)`), `test/ecosystem-status-doc.test.js` (+1, one
+updated — roster expects דליה; the history line is present and the earlier
+changes are kept), `test/occupancy-view.test.js` (+1 — the snapshot's own
+manager wins; blank / numeric → דליה). `test/bonus-view.test.js` fixtures now
+pass דליה; `test/ui-guards.test.js` SW floor v14.
+
 ### Added — permanent «תפוסה חודשית (סופי)» view + CSV export (September 17, 2026)
 
 A permanent monthly-occupancy card, on the overview and on every house tab,
