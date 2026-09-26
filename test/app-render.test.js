@@ -945,3 +945,53 @@ test('app.js: the client never asks for a login and sends no token', () => {
   assert.ok(!js.includes('Bearer'));
   assert.ok(js.includes('clearLegacySession'));
 });
+
+/* ── raanana manager: roster fallback דליה, the feed still wins ────── */
+/* Sep 2026: רעננה אשר's manager changed שחר → דליה. HOUSE_LABELS holds the
+ * FALLBACK only — a real name in the feed's `manager` field still takes
+ * precedence, and a missing, blank or numeric one falls back to the roster.
+ * Asserted on every running-month surface that names the manager: the house
+ * card, the winners banner and the house-tab hero. */
+const RAANANA_OVERVIEW = {
+  key: 'raanana', name: 'רעננה אשר', patientsNow: 11, capacity: 14,
+  avgDaily: 11.2, treatmentDays: 347,
+  currentMonth: { month: '2026-09', treatmentDaysSoFar: 88, daysInMonth: 30 },
+  bonus: { treatmentNights: 347, continuity: {} }
+};
+function raananaManagers(feedManager) {
+  const { ctx, byId } = setup();
+  const house = feedManager === undefined ? { ...RAANANA_OVERVIEW } : { ...RAANANA_OVERVIEW, manager: feedManager };
+  // August settled at 12.5/day and 388/300 days → tier 2, so raanana is a
+  // winners-banner row.
+  vm.runInContext(`state.prevOverview.byKey.raanana = { key: 'raanana', avgDaily: 12.5, treatmentDays: 388 };
+    state.housesById.raanana = ${JSON.stringify(house)};`, ctx);
+  const card = call(ctx, 'buildHouseCard', house).innerHTML;
+  call(ctx, 'renderWinnersBanner_', [house]);
+  call(ctx, 'renderHouseDetail', 'raanana', { ...house, month: '2026-09', dailyChart: CHART, activity: [] });
+  const hero = byId.get('panel-raanana').querySelector('[data-status-banner]').innerHTML;
+  const grab = (html, re, where) => {
+    const m = re.exec(html);
+    assert.ok(m, `${where} must name the manager`);
+    return m[1];
+  };
+  return {
+    card: grab(card, /hc-manager">מנהל\/ת: ([^<]*)</, 'house card'),
+    banner: grab(byId.get('winnersBanner').innerHTML, /wb-manager">מנהל\/ת: ([^<]*)</, 'winners banner'),
+    hero: grab(hero, /sb-sub">מנהל\/ת: ([^<·]*?) ·/, 'house-tab hero')
+  };
+}
+
+test('raanana manager: with no manager in the feed, card, winners banner and tab hero show the roster fallback דליה', () => {
+  assert.deepEqual(raananaManagers(undefined), { card: 'דליה', banner: 'דליה', hero: 'דליה' });
+});
+
+test('raanana manager: a blank or numeric feed manager is not a name — the roster fallback דליה is shown', () => {
+  for (const bad of ['', '   ', 2577, '2,500 ₪']) {
+    assert.deepEqual(raananaManagers(bad), { card: 'דליה', banner: 'דליה', hero: 'דליה' },
+      `feed manager ${JSON.stringify(bad)}`);
+  }
+});
+
+test('raanana manager: a real name in the feed still takes precedence over the roster (feed שחר → שחר, not דליה)', () => {
+  assert.deepEqual(raananaManagers('שחר'), { card: 'שחר', banner: 'שחר', hero: 'שחר' });
+});
