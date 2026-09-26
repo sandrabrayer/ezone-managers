@@ -283,7 +283,7 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   merged only AFTER that deploy; until then the card shows its error state and
   nothing else in the app is affected.
 
-## Managers: house roster (5 houses, current as of September 5, 2026)
+## Managers: house roster (5 houses, current as of September 26, 2026)
 
 The Managers app (`ezone-managers`) covers FIVE houses. Hardcoded fallbacks
 live in `HOUSE_LABELS` (`public/app.js`) and `HOUSE_BONUS`
@@ -294,7 +294,7 @@ table) drifts.
 
 | Key | House | Manager | Type | Eligibility threshold | Capacity |
 |---|---|---|---|---|---|
-| raanana | רעננה אשר | שחר | בית מאזן | 10 | 14 |
+| raanana | רעננה אשר | דליה | בית מאזן | 10 | 14 |
 | ramot | רמות השבים | אורן | בית מאזן | 17 | 20 |
 | efroni | קיסריה עפרוני | חנן | תחלואה כפולה | 10 | 13 |
 | rehab | קיסריה ריהאב | רנטה | גמילה | 10 | 13 |
@@ -304,7 +304,11 @@ table) drifts.
   parameters; the shared dashboard Apps Script must return `pardes` in
   `managersOverview` / `managersHouse` for its live data to appear.
 - Manager history: raanana עידו → שחר (Aug 24, 2026); ramot שחר → אורן
-  (Aug 25, 2026). Ra'anana's שחר and Ramot's former שחר are different people.
+  (Aug 25, 2026); raanana שחר → דליה, Sep 2026. Ra'anana's former שחר and
+  Ramot's former שחר are different people.
+- A rename here changes the FALLBACK only: while the dashboard Apps Script
+  feed still returns the old name in `manager`, the app keeps showing the old
+  name — the new one appears once the feed returns it, or returns no name.
 - Efroni's backend house-id is `arfoni` (data-entry app and backend agree);
   the frontend key is `efroni`.
 

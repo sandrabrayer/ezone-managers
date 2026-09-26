@@ -186,7 +186,7 @@ test('winners banner: no winner → "<month>: אף בית לא עמד בסף"; r
 
 test('winners banner: a winner row reads זכאי · מדרגה X · Y ₪ (+ quarterly when earned)', () => {
   const v = BV.winnersBannerView('2026-08', [
-    { name: 'רעננה אשר', manager: 'שחר', amount: 2500, tier: 2, quarterly: 5000 },
+    { name: 'רעננה אשר', manager: 'דליה', amount: 2500, tier: 2, quarterly: 5000 },
     { name: 'רמות השבים', manager: 'אורן', amount: 0, tier: 0, quarterly: 0 }
   ]);
   assert.equal(v.winners.length, 1);
@@ -208,7 +208,7 @@ test('house hero: headline is the SETTLED month; running month is the secondary 
 
 test('house hero: winner headline carries the month and the final result', () => {
   const settled = BV.settledMonthView({ key: 'raanana', ym: '2026-08', avgDaily: 12.5, treatmentDays: 388 }, noThreshold);
-  const h = BV.houseHeroView({ name: 'רעננה אשר', manager: 'שחר', settled, current: null });
+  const h = BV.houseHeroView({ name: 'רעננה אשר', manager: 'דליה', settled, current: null });
   assert.equal(h.headline, 'בונוס אוגוסט 2026 — סופי (לתשלום): זכאי · מדרגה 2 · 2,500 ₪');
   assert.equal(h.tone, 'above');
   assert.equal(h.secondary, '');
