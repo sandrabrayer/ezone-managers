@@ -257,3 +257,44 @@ test('quarterly pays 5000 only when all 3 finished months earned >= 2000', () =>
   const boundary = quarterlyStatus(win, { '2026-05': 1999, '2026-06': 2500, '2026-07': 3000 });
   assert.equal(boundary.earned, 0);
 });
+
+test('referral bonus is switched OFF by default: CONTINUITY_BONUS_ENABLED === false and continuityAmount pays 0', () => {
+  const BE = require('../lib/bonus-eligibility');
+  assert.equal(BE.CONTINUITY_BONUS_ENABLED, false, 'decision of 1 Oct 2026: occupancy bonuses only');
+  assert.equal(BE.continuityEnabled(), false);
+  const r = BE.continuityAmount({ maintenance: 2, day_2x: 1, day_daily: 1, total: 2577 }, true);
+  assert.equal(r.total, 0, 'not paid, even when eligible');
+  assert.equal(r.gross, 1700, 'the counts are still read (kept so it can be switched back on)');
+});
+
+test('quarterly check ignores referrals: a month counts only by its occupancy tier amount', () => {
+  const BE = require('../lib/bonus-eligibility');
+  // Tier 0 (avg 9.5 < 10) + plenty of referrals: the month still fails the >= 2,000 check.
+  const resolve = (x) => BE.thresholdOf(x);
+  const month = (avgDaily, treatmentDays) => BE.monthlyBonusAmount({ key: 'efroni', avgDaily, treatmentDays, bonus: { continuity: { maintenance: 9, day_2x: 9, day_daily: 9, total: 20000 } } }, resolve).amount;
+  assert.equal(month(9.5, 285), 0, 'referral data on the row never adds to the monthly amount');
+  for (const on of [false, true]) {
+    BE.CONTINUITY_BONUS_ENABLED = on;
+    try {
+      const q = BE.quarterlyStatus(['2026-08', '2026-09', '2026-10'], { '2026-08': month(11, 330), '2026-09': month(9.5, 285), '2026-10': month(12, 360) });
+      assert.equal(q.monthsMet, 2, `September fails on occupancy alone (switch ${on})`);
+      assert.equal(q.earned, 0);
+    } finally { BE.CONTINUITY_BONUS_ENABLED = false; }
+  }
+});
+
+test('continuityAmount (switch ON): referral counts × 100/500/1000, paid only when eligible; the feed total is never used', (t) => {
+  const BE = require('../lib/bonus-eligibility');
+  BE.CONTINUITY_BONUS_ENABLED = true;
+  t.after(() => { BE.CONTINUITY_BONUS_ENABLED = false; });
+  const { continuityAmount, CONTINUITY_RATES } = BE;
+  assert.deepEqual(CONTINUITY_RATES, { maintenance: 100, day_2x: 500, day_daily: 1000 });
+  const r = continuityAmount({ maintenance: 2, day_2x: 1, day_daily: 1, total: 2577 }, true);
+  assert.equal(r.gross, 1700);
+  assert.equal(r.total, 1700);
+  assert.equal(continuityAmount({ maintenance: 2, day_2x: 1 }, false).total, 0, 'not eligible → not paid');
+  assert.equal(continuityAmount({ maintenance: 2, day_2x: 1 }, false).gross, 700);
+  const junk = continuityAmount({ maintenance: '-3', day_2x: 'x', day_daily: 1.9 }, true);
+  assert.deepEqual([junk.maintenance, junk.day_2x, junk.day_daily, junk.total], [0, 0, 1, 1000]);
+  assert.equal(continuityAmount(null, true).total, 0);
+});

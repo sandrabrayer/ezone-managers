@@ -1,0 +1,95 @@
+{
+  "overview": {
+    "kpis": [
+      [
+        "kpiHousesAboveLabel",
+        "בתים עם בונוס מובטח — ספטמבר 2026 (בתהליך)"
+      ],
+      [
+        "kpiHousesAbove",
+        "0/1"
+      ],
+      [
+        "kpiActiveLabel",
+        "מטופלים פעילים"
+      ],
+      [
+        "kpiActive",
+        "13"
+      ],
+      [
+        "kpiBonusLabel",
+        "בונוס אוגוסט 2026 — סופי (לתשלום)"
+      ],
+      [
+        "kpiBonus",
+        "0 ₪"
+      ],
+      [
+        "kpiDaysLabel",
+        "יום בחודש — ספטמבר 2026"
+      ],
+      [
+        "kpiDaysLeft",
+        "8 מתוך 30"
+      ]
+    ],
+    "banner": "<div class=\"wb-head\"><span class=\"wb-trophy\">🏆</span>\n      <span class=\"wb-title\">בונוסים לתשלום — אוגוסט 2026 (סופי)</span></div><div class=\"wb-none\">אוגוסט 2026: אף בית לא עמד בסף</div><div class=\"wb-current\">⏳ ספטמבר 2026 — חודש נוכחי (בתהליך) · יום 8 מתוך 30</div>",
+    "cards": [
+      "\n    \n\n    <div class=\"hc-head\">\n      <div class=\"hc-head-text\">\n        <div class=\"hc-title\">רמות השבים</div>\n        <div class=\"hc-manager\">מנהל/ת: אורן</div>\n        <div class=\"hc-type\">בית מאזן</div>\n      </div>\n      <div class=\"progress-badge\">⏳ ספטמבר 2026 בתהליך</div>\n    </div>\n\n    <div class=\"hc-month hc-settled not-earned\" data-month-block=\"settled\">\n         <div class=\"hc-month-head\">\n           <span class=\"hc-month-title\">בונוס אוגוסט 2026 — סופי (לתשלום)</span>\n           <span class=\"hc-month-amt\">0 ₪</span>\n         </div>\n         <div class=\"hc-month-line\" data-settled-status>לא זכאי · המכסה לא הושלמה (441/510)</div>\n         <div class=\"hc-month-line dim\">ממוצע 14.7 מטופלים/יום · 441/510 ימי טיפול</div>\n       </div>\n    <div class=\"hc-month hc-current projection\" data-month-block=\"current\">\n         <div class=\"hc-month-head\">\n           <span class=\"hc-month-title\">ספטמבר 2026 — חודש נוכחי (בתהליך)</span>\n           <span class=\"hc-month-amt zero\">0 ₪</span>\n         </div>\n         <div class=\"hc-month-line\" data-current-actual>ימי טיפול עד כה: <b>102/510 ימי טיפול</b></div>\n         <div class=\"hc-month-line\" data-current-projection>צפי לסוף החודש: 383 ימי טיפול · מתחת לסף (17 מטופלים/יום)</div>\n         <div class=\"hc-month-line hc-tier-line\" data-tier-line>מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12.8</div>\n         \n       </div>\n\n    <div class=\"hc-stats\">\n      <div class=\"hc-occ\">13<small> / 20</small></div>\n      <div class=\"hc-bep\">זכאות לבונוס: <b>17</b> מטופלים/יום בממוצע</div>\n    </div>\n\n    <div class=\"bep-bar\">\n      <div class=\"bep-fill\" style=\"width:65%\"></div>\n      <div class=\"bep-marker\" style=\"right:85%\"><span>★</span><em>זכאות 17</em></div>\n    </div>\n\n    <div class=\"hc-nights\">\n      <span class=\"hc-nights-label\">ימי טיפול מתחילת החודש (ספטמבר 2026)</span>\n      <span class=\"hc-nights-value\" data-card-days>102 / 510</span>\n      \n    </div>\n  "
+    ]
+  },
+  "houseTab": {
+    "hero": "<div class=\"big-emoji\">⚠️</div>\n     <div>\n       <div class=\"sb-name\">רמות השבים</div>\n       <div class=\"sb-title\" data-hero-headline>אוגוסט 2026: לא זכאי · המכסה לא הושלמה (441/510)</div>\n       <div class=\"sb-sub\">מנהל/ת: אורן · ממוצע 14.7 מטופלים/יום · 441/510 ימי טיפול</div>\n       <div class=\"sb-current\" data-hero-current>⏳ ספטמבר 2026 — חודש נוכחי (בתהליך) · 102/510 ימי טיפול · צפי לסוף החודש: 383 ימי טיפול · מתחת לסף (17 מטופלים/יום) · מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12.8</div>\n     </div>",
+    "kpis": [
+      [
+        "entries",
+        "1"
+      ],
+      [
+        "exits",
+        "1"
+      ],
+      [
+        "treatmentDays",
+        "102"
+      ],
+      [
+        "bonus",
+        "0 ₪"
+      ],
+      [
+        "daysSoFar",
+        "102"
+      ],
+      [
+        "daysTarget",
+        "510"
+      ],
+      [
+        "daysProjection",
+        "383"
+      ],
+      [
+        "bonusTotal",
+        "0 ₪"
+      ]
+    ],
+    "bonusNote": "צפי לסוף החודש: 383 ימי טיפול · מתחת לסף (17 מטופלים/יום) · מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12.8",
+    "monthSplit": "<div class=\"ms-row ms-prev ms-headline\">\n         <span class=\"ms-tag\">בונוס אוגוסט 2026 — סופי (לתשלום)</span>\n         <span class=\"ms-amt zero\">0 ₪</span>\n         <span class=\"ms-sub\">לא זכאי · המכסה לא הושלמה (441/510) · ממוצע 14.7 מטופלים/יום</span>\n       </div><div class=\"ms-row ms-cur\">\n         <span class=\"ms-tag\">ספטמבר 2026 — חודש נוכחי (בתהליך)</span>\n         <span class=\"ms-amt zero\">0 ₪</span>\n         <span class=\"ms-sub\">ימי טיפול עד כה: <b>102/510 ימי טיפול</b><br>צפי לסוף החודש: 383 ימי טיפול · מתחת לסף (17 מטופלים/יום)<br>מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12.8</span>\n       </div>",
+    "tierCurrent": "מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12.8",
+    "quarterlyNote": "בונוס יציבות 5,000 ₪ — נדרשים 3 חודשים רצופים מעל הסף · יחושב בסוף הרבעון (אוגוסט 2026 · ספטמבר 2026 · אוקטובר 2026)",
+    "breakdown": [
+      "<div class=\"bk-left\"> <span class=\"bk-label\">בונוס מדרגה 1 (17 מטופלים)</span> <span class=\"bk-formula\">נדרש ממוצע 17 מטופלים/יום</span> </div> <span class=\"bk-amount\">0 ₪</span>",
+      "<div class=\"bk-left\"> <span class=\"bk-label\">בונוס מדרגה 2 (19 מטופלים)</span> <span class=\"bk-formula\">נדרש ממוצע 19 מטופלים/יום</span> </div> <span class=\"bk-amount\">0 ₪</span>",
+      "<div class=\"bk-left\"> <span class=\"bk-label\">בונוס מדרגה 3 (20 מטופלים)</span> <span class=\"bk-formula\">נדרש ממוצע 20 מטופלים/יום</span> </div> <span class=\"bk-amount\">0 ₪</span>",
+      "<div class=\"bk-left\"> <span class=\"bk-label\">בונוס יציבות רבעוני</span> <span class=\"bk-formula\">0/3 חודשים שעמדו בסף · יחושב בסוף הרבעון (אוגוסט 2026 · ספטמבר 2026 · אוקטובר 2026)</span> </div> <span class=\"bk-amount\">0 ₪</span>"
+    ],
+    "entries": [
+      "<span class=\"log-date\">3/9</span> <span class=\"log-name\">ישראל ישראלי</span>"
+    ],
+    "exits": [
+      "<span class=\"log-date\">5/9</span> <span class=\"log-name\">דנה כהן</span>"
+    ]
+  }
+}

@@ -283,6 +283,42 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   merged only AFTER that deploy; until then the card shows its error state and
   nothing else in the app is affected.
 
+## Managers: settled month shows its own house data (October 1, 2026)
+
+- **Bug (1 Oct 2026, first day September was settled)**: picking September in
+  the bonus-history picker showed `אין נתוני כניסות / יציאות / הפניות
+  לספטמבר 2026`, no patient names, and a 0 ₪ referral line. The settled house
+  tab was built from the `managersOverview&month=` row only (no activity /
+  chart / referral counts) and the "no data" strings were hardcoded; the
+  month's own house payload was never requested.
+- **Fix (frontend only)**: each opened house tab also loads
+  `managersHouse&house=<key>&month=YYYY-MM` — the dashboard's `managersHouse_`
+  already honours `month` for a past month. Accepted only when its `month`
+  matches; `efroni` is sent as `efroni` (the dashboard maps it to `arfoni`);
+  cached in `state.settledDetails`, never in the running month's state.
+  Loading / error are explicit states (`שגיאה בטעינת כניסות ל…`, KPIs `—`),
+  never `אין נתונים`; a failed house is retried on re-select.
+- **Referral bonus disabled by decision (1 Oct 2026); switch: CONTINUITY_BONUS_ENABLED in lib/bonus-eligibility.js.** Managers get occupancy bonuses only, in the running month
+  and in finished months:
+  - no total includes referrals;
+  - the «בונוס הפניות להמשך טיפול» line is hidden;
+  - the running month no longer adds the Dashboard's referral total.
+
+  The counts fetch and `continuityAmount` are kept for re-enabling.
+- A month row without `avgDaily` / `treatmentDays` is "missing", never
+  `לא זכאי · 0 ₪`.
+- The tier / gate figures were already a real computation from the month's
+  raw `avgDaily` / `treatmentDays` (same Patients-sheet computation as the
+  house payload) — only the referral line was a missing-data artifact.
+- Allowed dashboard actions for Managers: **`managersOverview`,
+  `managersHouse`, `occupancySnapshots` only** (all others need a key the
+  app does not have). No new endpoint, no Apps Script change. Running month
+  unchanged apart from the removed referral line and totals without
+  referrals (golden snapshot `test/fixtures/running-month.snapshot.json`).
+  SW cache v14, tests 178 → 192.
+  Details: `docs/bonus-month-labelling.md` → "Settled month — the house's
+  own data"; `CHANGELOG-settled-month-house-data.md`.
+
 ## Managers: house roster (5 houses, current as of September 5, 2026)
 
 The Managers app (`ezone-managers`) covers FIVE houses. Hardcoded fallbacks

@@ -7,11 +7,19 @@ It reads data via the existing E-Zone Apps Script endpoints — it never writes 
 ## Endpoints consumed
 
 - `GET /api/sheets?action=managersOverview` — all houses (currently 5) + bonus calculations
-- `GET /api/sheets?action=managersHouse&key=<houseKey>` — full detail for one house
+- `GET /api/sheets?action=managersHouse&house=<houseKey>[&month=YYYY-MM]` — full
+  detail for one house (entries/exits with patient names, referrals, daily
+  chart); with `month=` for a FINISHED month picked in the bonus-history
+  picker. `houseKey` is the frontend key (`efroni`, `pardes`, …) — the
+  dashboard maps `efroni` to its Patients-sheet id `arfoni` itself.
+- `GET /api/sheets?action=managersOverview&month=YYYY-MM` — one finished
+  month's raw figures per house (settled bonus, quarterly window)
 - `GET /api/sheets?action=occupancySnapshots` — settled monthly occupancy per
   house, for the permanent «תפוסה חודשית (סופי)» table (see below)
 
-All three are proxied through `server.js` to the E-Zone Apps Script `/exec` endpoint.
+All of them are proxied through `server.js` to the E-Zone Apps Script `/exec`
+endpoint. **These three actions are the only ones the app may call** — every
+other dashboard action needs a key the Managers app does not have.
 
 The endpoint URL is configured via the `APPS_SCRIPT_URL` env var. It is **required** — there is no hardcoded fallback, and the server refuses to start if it is not set.
 
@@ -59,9 +67,18 @@ A **"חודש בונוס"** picker on the overview and on every house tab lists 
 running month (default) and every finished month back to May 2026, the
 quarterly anchor. A finished month renders the whole page settled
 (`יולי 2026 — סופי`: tier reached, amount, gate result, quarterly window),
-using only the existing `managersOverview&month=YYYY-MM` endpoint, cached
-per month in memory. `חזרה לחודש נוכחי` restores the live view. See
-`docs/bonus-month-labelling.md` → "Bonus history month picker".
+from the existing `managersOverview&month=YYYY-MM` (figures, settled bonus)
+and, for every opened house tab, `managersHouse&house=<key>&month=YYYY-MM`
+(that month's entries, exits, patient names, referrals and daily chart) —
+both cached per month in memory. A fetch that is running or failed renders an
+explicit loading / error state, never «אין נתונים». `חזרה לחודש נוכחי`
+restores the live view. See `docs/bonus-month-labelling.md` → "Bonus history
+month picker" and "Settled month — the house's own data".
+
+**Referral bonus disabled by decision (1 Oct 2026); switch:
+`CONTINUITY_BONUS_ENABLED` in `lib/bonus-eligibility.js`.** Managers get
+occupancy bonuses only. No total includes referrals, and the «בונוס הפניות
+להמשך טיפול» line is not shown, in the running month or in finished months.
 
 ## Monthly occupancy (סופי) + CSV export
 
@@ -110,7 +127,9 @@ render paths in a `vm` sandbox with a minimal fake DOM (`test/app-render.test.js
 occupancy-history month picker leaves every bonus figure unchanged, see
 `docs/occupancy-history-view.md`, and the bonus-history month picker renders
 a finished month settled-only while the running month stays byte-for-byte
-unchanged), the permanent monthly-occupancy view (`test/occupancy-view.test.js`
+unchanged; a finished month's house tab shows that month's entries, exits,
+names and referrals from `managersHouse&month=`, with explicit error states and
+the `efroni` / `pardes` keys), the permanent monthly-occupancy view (`test/occupancy-view.test.js`
 — table model, `arfoni` → `efroni`, missing cell, newest-first, no running
 month, error state and retry, CSV export, no bonus state written) and its CSV
 format (`test/occupancy-export.test.js` — BOM, Hebrew headers, injection and

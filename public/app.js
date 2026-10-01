@@ -2,7 +2,9 @@
    Talks to /api/sheets which proxies to the existing Apps Script.
    Endpoints:
      /api/sheets?action=managersOverview
-     /api/sheets?action=managersHouse&house=<houseKey>
+     /api/sheets?action=managersHouse&house=<houseKey>[&month=YYYY-MM]
+     (+ managersOverview&month=YYYY-MM for finished months, occupancySnapshots)
+   No other Apps Script action is ever called: these three are the open ones.
 */
 
 const HOUSE_KEYS = ['raanana', 'ramot', 'efroni', 'rehab', 'pardes'];
@@ -90,6 +92,17 @@ const state = {
   bonusMonth: null,
   bonusHistory: {},
   loadingBonusHistory: {},
+  /* Bonus-history picker, house tab: the selected FINISHED month's own
+   * house payload — `managersHouse&house=<key>&month=YYYY-MM` — for the
+   * blocks a month overview row does not carry (entries / exits with patient
+   * names, referrals, daily chart). Its own slice: never state.details, so
+   * the running month cannot be touched by it.
+   *   settledDetails['YYYY-MM'][key] = { ok:true, entries, exits, entriesCount,
+   *                                      exitsCount, continuity, dailyChart }
+   *                                  | { ok:false, error }
+   *   loadingSettledDetails['key:YYYY-MM'] = in-flight promise */
+  settledDetails: {},
+  loadingSettledDetails: {},
   /* Monthly occupancy snapshots — DISPLAY ONLY, its own slice, never read by
    * the bonus / KPI / hero / house-card code.
    *   occupancy.status = 'idle' | 'loading' | 'ok' | 'error'
@@ -378,14 +391,16 @@ function treatmentNightsOf(h) {
   return h?.treatmentDays ?? 0;
 }
 
-function continuityCounts(b) {
-  const c = (b && b.continuity) || {};
-  return {
-    maintenance: c.maintenance ?? 0,
-    day_2x:      c.day_2x ?? 0,
-    day_daily:   c.day_daily ?? 0,
-    total:       c.total ?? 0
-  };
+/* Referral («הפניות להמשך טיפול») bonus for one house — running AND finished
+ * months go through here. Computed locally from the raw COUNTS only
+ * (BonusEligibility.continuityAmount); the feed's own `continuity.total` is
+ * never read. While BonusEligibility.CONTINUITY_BONUS_ENABLED is false (the
+ * decision of 1 Oct 2026) the total is 0 and the line is not rendered. */
+function referralBonus_(counts, eligible) {
+  return window.BonusEligibility.continuityAmount(counts || {}, !!eligible);
+}
+function referralsEnabled_() {
+  return window.BonusEligibility.continuityEnabled() === true;
 }
 
 /* ============================================================
@@ -475,7 +490,8 @@ async function fetchMonthOverview_(ym) {
   const md = await fetchJson(`/api/sheets?action=managersOverview&month=${encodeURIComponent(ym)}`);
   const byKey = {};
   (Array.isArray(md.houses) ? md.houses : []).forEach(ph => {
-    if (ph && ph.key) byKey[ph.key] = ph;
+    // Backend ids map to frontend keys ('arfoni' → 'efroni'); any other id is kept as is.
+    if (ph && ph.key) byKey[houseKeyOf_(ph.key) || ph.key] = ph;
   });
   return byKey;
 }
@@ -777,9 +793,9 @@ function buildHouseCard(h) {
 
   const status = monthlyStatus(h);   // days-so-far computed ONCE here
   const cur = status.view;           // null when the overview month is finished
-  const cont = continuityCounts(h.bonus || {});
   const quartly = quarterlyEarnedAmount(h);
   const secured = status.state === 'locked' || (status.state === 'finished' && status.amount > 0);
+  const cont = referralBonus_(h.bonus && h.bonus.continuity, secured);
   const isProjection = status.state === 'projection';
   const nowYM = h.month || state.overview?.month || currentMonthYM_();
   const nowLabel = BV.monthLabel(nowYM);
@@ -1002,7 +1018,9 @@ function renderHouseDetail(key, data) {
   setStatLabel(panel, 'treatmentDays', cur ? `ימי טיפול עד כה — ${viewingLabel} (בתהליך)` : `ימי טיפול — ${viewingLabel}`);
   setStat(panel, 'treatmentDays', fmtInt(nights));
 
-  const cont = continuityCounts(merged.bonus || {});
+  // Referrals: local, counts only, paid only once the occupancy bonus is
+  // secured; 0 while the referral bonus is switched off.
+  const cont = referralBonus_(merged.bonus && merged.bonus.continuity, paid);
   const quartly = quarterlyEarnedAmount(merged);
   // Only secured monthly (locked/finished) + actually-earned quarterly.
   const totalBonus = status.amount + (cont.total || 0) + (quartly || 0);
@@ -1228,13 +1246,26 @@ function settledHouseFor_(key, ym) {
     capacity: Number(live.capacity) || 0
   };
   if (!ph) return { ...base, missing: true };
+  // A row without numeric figures is MISSING data, not a zero month: coercing
+  // an absent treatmentDays to 0 would render "לא זכאי · 0 ₪" for a house
+  // that may well have earned its bonus.
+  const avgDaily = rawNumber_(ph.avgDaily);
+  const treatmentDays = rawNumber_(ph.treatmentDays);
+  if (avgDaily === null || treatmentDays === null) return { ...base, missing: true };
   const occ = historyEntry_(key, ym);
   return {
     ...base,
-    avgDaily: Number(ph.avgDaily) || 0,
-    treatmentDays: Number(ph.treatmentDays) || 0,
+    avgDaily,
+    treatmentDays,
     dailyChart: monthChart_(ph.dailyChart, ym) || (occ && occ.ok ? occ.dailyChart : null)
   };
+}
+
+/* A raw feed number, or null when the field is absent / blank / not a number. */
+function rawNumber_(v) {
+  if (v === null || v === undefined || (typeof v === 'string' && !v.trim())) return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 /* settledMonthView for a settledHouseFor_ object (null when missing). */
@@ -1284,10 +1315,86 @@ async function selectBonusMonth_(ym) {
   const nowYM = historyNowYM_();
   const target = isValidYM_(ym) && bonusMonths_(nowYM).includes(String(ym)) ? String(ym) : nowYM;
   state.bonusMonth = target === nowYM ? null : target;
+  // A month whose house payload failed is retried on (re-)selection.
+  const failed = state.settledDetails[target] || {};
+  Object.keys(failed).forEach(k => { if (failed[k] && !failed[k].ok) delete failed[k]; });
   rerenderAll_();
   if (!state.bonusMonth) return;
-  const requests = await loadBonusMonth_(target);
-  if (requests > 0 && state.bonusMonth === target) rerenderAll_();
+  const opened = openedHouseKeys_();
+  const [requests, houseRequests] = await Promise.all([
+    loadBonusMonth_(target),
+    Promise.all(opened.map(k => loadSettledHouse_(k, target))).then(r => r.filter(Boolean).length)
+  ]);
+  if ((requests > 0 || houseRequests > 0) && state.bonusMonth === target) rerenderAll_();
+}
+
+/* House tabs that have been opened (their panel holds the template). */
+function openedHouseKeys_() {
+  return HOUSE_KEYS.filter(key => {
+    const panel = document.getElementById(`panel-${key}`);
+    return !!(panel && (panel.getAttribute('data-rendered') || panel.firstChild));
+  });
+}
+
+/* Fetch (once) a FINISHED month's house payload for one house:
+ * `managersHouse&house=<key>&month=YYYY-MM` — an existing, open action, no
+ * new endpoint. The house key is the FRONTEND key (efroni, pardes, …): the
+ * dashboard's managersHouse_ maps efroni → the Patients sheet's `arfoni`
+ * itself and answers `unknown_house` for `arfoni`. FAIL-CLOSED:
+ *   - the response must be for the requested month (a backend that ignored
+ *     `month` would otherwise show September's patients under another
+ *     month) and, when it names a house, for the requested house;
+ *   - only whitelisted raw fields are kept: entry / exit rows dated inside
+ *     the month, the referral COUNTS, the daily chart;
+ *   - any failure is cached as { ok:false, error } and rendered as an
+ *     explicit error state, retried on the next selection.
+ * Resolves to true when a request was made. */
+async function loadSettledHouse_(key, ym) {
+  if (!HOUSE_KEYS.includes(key) || !isValidYM_(ym)) return false;
+  const have = (state.settledDetails[ym] || {})[key];
+  if (have && have.ok) return false;
+  const slot = `${key}:${ym}`;
+  if (state.loadingSettledDetails[slot]) return state.loadingSettledDetails[slot];
+  const run = (async () => {
+    let entry;
+    try {
+      const d = await fetchJson(`/api/sheets?action=managersHouse&house=${encodeURIComponent(key)}&month=${encodeURIComponent(ym)}`);
+      if (!d || d.month !== ym) {
+        throw new Error(`התקבלו נתונים לחודש אחר (${String(d && d.month || '?')})`);
+      }
+      if (d.key && houseKeyOf_(d.key) !== key) throw new Error('התקבלו נתונים לבית אחר');
+      // No activity list = the names were not delivered: an error, not "none".
+      if (!Array.isArray(d.activity)) throw new Error('רשימת הכניסות והיציאות לא התקבלה');
+      const inMonth = a => a && typeof a.date === 'string' && a.date.slice(0, 7) === ym;
+      const activity = d.activity.filter(inMonth);
+      const row = a => ({ date: a.date, name: typeof a.name === 'string' ? a.name : '' });
+      const entries = activity.filter(a => a.kind === 'entry').map(row);
+      const exits = activity.filter(a => a.kind === 'exit').map(row);
+      const c = (d.bonus && d.bonus.continuity) || {};
+      entry = {
+        ok: true,
+        entries,
+        exits,
+        // Counts = the rows listed, so the KPI and the log can never disagree.
+        entriesCount: entries.length,
+        exitsCount: exits.length,
+        continuity: { maintenance: c.maintenance, day_2x: c.day_2x, day_daily: c.day_daily },
+        dailyChart: monthChart_(d.dailyChart, ym)
+      };
+    } catch (e) {
+      console.error(`settled house ${key} ${ym} failed`, e);
+      entry = { ok: false, error: (e && e.message) || 'שגיאה' };
+    }
+    if (!state.settledDetails[ym]) state.settledDetails[ym] = {};
+    state.settledDetails[ym][key] = entry;
+    return true;
+  })();
+  state.loadingSettledDetails[slot] = run;
+  try { return await run; } finally { delete state.loadingSettledDetails[slot]; }
+}
+
+function settledHouseEntry_(key, ym) {
+  return (state.settledDetails[ym] || {})[key] || null;
 }
 
 /* Re-render the overview and every house tab that has been opened. Back on
@@ -1611,6 +1718,16 @@ function renderHouseDetailSettled_(panel, key, ym) {
   const s = settledViewFor_(h);
   const banner = panel.querySelector('[data-status-banner]');
 
+  // The month's own house payload (entries / exits / names / referrals /
+  // chart). Requested here when missing — a tab opened while a finished month
+  // is selected — and the tab re-rendered when it lands.
+  if (!settledHouseEntry_(key, ym) && !state.loadingSettledDetails[`${key}:${ym}`]) {
+    loadSettledHouse_(key, ym).then(made => {
+      if (made && state.bonusMonth === ym) renderHouseDetailSettled_(panel, key, ym);
+    });
+  }
+  const sh = settledHouseEntry_(key, ym);
+
   if (!entry || !entry.ok || !s) {
     const stateName = !entry ? 'loading' : !entry.ok ? 'error' : 'missing';
     const msg = !entry ? `טוען ${label}…`
@@ -1624,6 +1741,7 @@ function renderHouseDetailSettled_(panel, key, ym) {
          <div class="sb-sub">${manager ? 'מנהל/ת: ' + manager : ''}</div>
        </div>`;
     blankDetailFigures_(panel, label);
+    renderSettledLogs_(panel, sh, label);
     renderHistoryPicker_(panel, key);
     renderHistoryView_(panel, key);
     renderOccupancyCard_(panel.querySelector('[data-occupancy-card]'), [key]);
@@ -1638,9 +1756,15 @@ function renderHouseDetailSettled_(panel, key, ym) {
   const target = status.target;
   const nights = s.treatmentDays;         // finished month: days-so-far = the full-month total
   const cfg = tierCfgFor_(key, monthlyResult);
-  const cont = continuityCounts({});      // no referral data in a month overview row
+  // Referrals: the COUNTS from the month's own house payload; the amount is
+  // computed locally (lib/bonus-eligibility.js), paid only if the house was
+  // eligible that month. Unknown until that payload has loaded.
+  const cont = sh && sh.ok
+    ? referralBonus_(sh.continuity, s.eligible)
+    : { maintenance: 0, day_2x: 0, day_daily: 0, total: 0 };
+  const contState = !sh ? 'loading' : sh.ok ? 'ok' : 'error';
   const quartly = quarterlyLocal_(key, ym).earned;
-  const totalBonus = s.amount + quartly;
+  const totalBonus = s.amount + quartly + cont.total;
 
   // Hero: the selected month, final state ("יולי 2026 — סופי: …").
   const hero = BV.houseHeroView({ name, manager, settled: s, prevYm: ym, current: null, selected: true });
@@ -1652,9 +1776,10 @@ function renderHouseDetailSettled_(panel, key, ym) {
        <div class="sb-sub">${hero.sub}</div>
      </div>`;
 
-  // KPIs — every label names the month; no entries/exits in a month overview.
-  setStat(panel, 'entries', '—');
-  setStat(panel, 'exits', '—');
+  // KPIs — every label names the month; entries / exits from the month's own
+  // house payload ("—" while loading or on error, never a guessed 0).
+  setStat(panel, 'entries', sh && sh.ok ? fmtInt(sh.entriesCount) : '—');
+  setStat(panel, 'exits', sh && sh.ok ? fmtInt(sh.exitsCount) : '—');
   setStatLabel(panel, 'treatmentDays', `ימי טיפול — ${label} (סופי)`);
   setStat(panel, 'treatmentDays', fmtInt(nights));
   const bonusEl = panel.querySelector('[data-stat="bonus"]');
@@ -1662,8 +1787,21 @@ function renderHouseDetailSettled_(panel, key, ym) {
   bonusEl.classList.remove('is-skeleton');
   bonusEl.textContent = fmtCurrency(totalBonus);
   bonusEl.classList.toggle('gold', totalBonus > 0);
-  const fallbackEl = panel.querySelector('[data-bonus-fallback-note]');
-  if (fallbackEl) { fallbackEl.textContent = ''; fallbackEl.remove(); } // no projection on a finished month
+  // No projection on a finished month. The note slot is used only to say the
+  // total is incomplete while the referral figures are loading / failed —
+  // and only while the referral bonus is switched on.
+  let fallbackEl = panel.querySelector('[data-bonus-fallback-note]');
+  if (referralsEnabled_() && contState !== 'ok') {
+    if (!fallbackEl) {
+      fallbackEl = document.createElement('div');
+      fallbackEl.setAttribute('data-bonus-fallback-note', '');
+      fallbackEl.className = 'bonus-fallback-note';
+      bonusEl.parentNode.appendChild(fallbackEl);
+    }
+    fallbackEl.textContent = contState === 'loading'
+      ? 'לא כולל בונוס הפניות — טוען…'
+      : 'לא כולל בונוס הפניות — הנתונים לא נטענו';
+  } else if (fallbackEl) { fallbackEl.textContent = ''; fallbackEl.remove(); }
 
   renderMonthSplit_(panel, bonusEl, merged, s);
 
@@ -1683,29 +1821,56 @@ function renderHouseDetailSettled_(panel, key, ym) {
   setStat(panel, 'daysTarget', fmtInt(target));
   setStat(panel, 'daysProjection', s.gatePassed ? 'הושלמה' : 'לא הושלמה');
 
-  const chart = Array.isArray(h.dailyChart) ? h.dailyChart : [];
+  const chart = Array.isArray(h.dailyChart) && h.dailyChart.length ? h.dailyChart
+    : (sh && sh.ok && Array.isArray(sh.dailyChart) ? sh.dailyChart : []);
   renderDailySpark(panel, chart, threshold, capacity);
   if (!chart.length) {
     const host = panel.querySelector('[data-daily-spark]');
-    if (host) host.innerHTML = `<div class="history-empty" data-bonus-history-state="no-chart">אין נתוני תפוסה יומית ל${label}</div>`;
+    // «אין נתוני…» only when the month's payload arrived without a chart; a
+    // fetch still running or failed says so.
+    if (host) {
+      host.innerHTML = !sh
+        ? `<div class="history-empty" data-bonus-history-state="chart-loading">טוען תפוסה יומית — ${label}…</div>`
+        : !sh.ok
+          ? `<div class="history-empty error" data-bonus-history-state="chart-error">שגיאה בטעינת התפוסה היומית ל${label}: ${escapeHtml_(sh.error)}</div>`
+          : `<div class="history-empty" data-bonus-history-state="no-chart">אין נתוני תפוסה יומית ל${label}</div>`;
+    }
   }
 
   const ctx = { key, cfg, target, nights, tier: s.tier, occ: s.avgDaily, monthlyResult, status, settled: s };
   renderTierTrack(panel, ctx);
   renderQuarterlyTrack(panel, merged, cfg, target);
-  renderBreakdown(panel, merged, { ...ctx, above: s.amount > 0, cont, quartly, totalBonus });
+  renderBreakdown(panel, merged, { ...ctx, above: s.amount > 0, cont, contState, contError: sh && !sh.ok ? sh.error : '', quartly, totalBonus });
 
-  const entriesUl = panel.querySelector('[data-log="entries"]');
-  const exitsUl = panel.querySelector('[data-log="exits"]');
-  renderEntries(entriesUl, []);
-  renderExits(exitsUl, []);
-  entriesUl.innerHTML = `<li class="log-empty">אין נתוני כניסות ל${label}</li>`;
-  exitsUl.innerHTML = `<li class="log-empty">אין נתוני יציאות ל${label}</li>`;
+  renderSettledLogs_(panel, sh, label);
 
   // Occupancy-history card: independent of the bonus picker, rendered as is.
   renderHistoryPicker_(panel, key);
   renderHistoryView_(panel, key);
   renderOccupancyCard_(panel.querySelector('[data-occupancy-card]'), [key]);
+}
+
+/* Entry / exit logs of a FINISHED month, from its own house payload.
+ * Three explicit states — never «אין נתונים» for data that was not fetched:
+ *   loading → «טוען כניסות — <חודש>…»
+ *   error   → «שגיאה בטעינת כניסות ל<חודש>: …»
+ *   ok      → the rows (names escaped by activityRowHtml), or, when the
+ *             month really had none, «לא היו כניסות ב<חודש>». */
+function renderSettledLogs_(panel, sh, label) {
+  [['entries', 'כניסות', sh && sh.ok ? sh.entries : null],
+   ['exits', 'יציאות', sh && sh.ok ? sh.exits : null]].forEach(([name, word, list]) => {
+    const ul = panel.querySelector(`[data-log="${name}"]`);
+    if (!ul) return;
+    if (!sh) {
+      ul.innerHTML = `<li class="log-empty" data-settled-log="loading">טוען ${word} — ${label}…</li>`;
+    } else if (!sh.ok) {
+      ul.innerHTML = `<li class="log-empty error" data-settled-log="error">שגיאה בטעינת ${word} ל${label}: ${escapeHtml_(sh.error)}</li>`;
+    } else if (!list.length) {
+      ul.innerHTML = `<li class="log-empty" data-settled-log="empty">לא היו ${word} ב${label}</li>`;
+    } else {
+      renderActivityLog(ul, list);
+    }
+  });
 }
 
 /* ============================================================
@@ -2482,8 +2647,13 @@ function renderBreakdown(panel, data, ctx) {
     if (ctx.cont.day_2x)      parts.push(`${ctx.cont.day_2x} יום 2/שבוע × 500`);
     if (ctx.cont.day_daily)   parts.push(`${ctx.cont.day_daily} יום יומי × 1,000`);
     if (parts.length) return parts.join(' · ');
-    return sv ? `אין נתוני הפניות ל${sv.label}` : 'אין הפניות פעילות החודש';
+    if (sv && ctx.contState === 'loading') return `טוען הפניות — ${sv.label}…`;
+    if (sv && ctx.contState === 'error') return `שגיאה בטעינת הפניות ל${sv.label}: ${escapeHtml_(ctx.contError)}`;
+    return sv ? `לא היו הפניות פעילות ב${sv.label}` : 'אין הפניות פעילות החודש';
   })();
+  // Referral amount is unknown (not 0) while the settled month's payload is
+  // loading or failed.
+  const contUnknown = !!sv && (ctx.contState === 'loading' || ctx.contState === 'error');
 
   // Quarterly line — LOCAL standing (anchored window), no backend fields.
   const q = quarterlyLocal_(data.key, historyYMOf_(data));
@@ -2502,13 +2672,16 @@ function renderBreakdown(panel, data, ctx) {
       zero: !ctx.quartly,
       gold: ctx.quartly > 0
     },
-    {
+    // «בונוס הפניות להמשך טיפול» — not rendered at all while the referral
+    // bonus is switched off (BonusEligibility.CONTINUITY_BONUS_ENABLED).
+    ...(referralsEnabled_() ? [{
       label: 'בונוס הפניות להמשך טיפול',
       formula: continuityFormula,
       amount: ctx.cont.total,
+      amountText: contUnknown ? '—' : undefined,
       zero: !ctx.cont.total,
       gold: ctx.cont.total > 0
-    }
+    }] : [])
   ];
 
   // The monthly bonus is the SINGLE-best tier reached — dim lower tier rows
@@ -2526,7 +2699,7 @@ function renderBreakdown(panel, data, ctx) {
         <span class="bk-label">${item.label}</span>
         <span class="bk-formula">${item.formula}</span>
       </div>
-      <span class="bk-amount">${fmtCurrency(item.amount)}</span>
+      <span class="bk-amount">${item.amountText || fmtCurrency(item.amount)}</span>
     `;
     ul.appendChild(li);
   });
