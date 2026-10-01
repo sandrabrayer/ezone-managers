@@ -131,6 +131,9 @@ function setup(fetchImpl) {
   return s;
 }
 const call = (ctx, fn, ...args) => vm.runInContext(fn, ctx)(...args);
+/* The referral bonus is switched OFF in lib (decision of 1 Oct 2026). Tests
+ * that exercise the referral math switch it back on in their own sandbox. */
+const enableReferrals = (ctx) => vm.runInContext('BonusEligibility.CONTINUITY_BONUS_ENABLED = true', ctx);
 const FORBIDDEN = ['בדרך', 'בתהליך', 'חסרים'];
 const block = (html, name) => {
   const start = html.indexOf(`data-month-block="${name}"`);
@@ -691,8 +694,9 @@ test('bonus picker: overview and house tab list the running month plus every fin
   assert.equal(later[16], '2026-05');
 });
 
-test('bonus picker: a finished month renders the overview and the house tab SETTLED — tier, amount, gate result, quarterly window — with no running-month wording', async () => {
+test('bonus picker: a finished month renders the overview and the house tab SETTLED — tier, amount, gate result, quarterly window — with no running-month wording (referral bonus switched ON)', async () => {
   const { ctx, byId, panel, calls } = await bootWithHistory();
+  enableReferrals(ctx);
 
   await call(ctx, 'selectBonusMonth_', 'ramot' && '2026-07');
 
@@ -1057,8 +1061,9 @@ const allTextOf = (el) => {
 };
 const logNames = (ul) => ul.children.map((li) => /log-name">([^<]*)</.exec(li.innerHTML)[1]);
 
-test('settled Sep 2026 (1 Oct): the house tab renders admissions, discharges, referrals and patient names from managersHouse&month=2026-09', async () => {
+test('settled Sep 2026 (1 Oct): the house tab renders admissions, discharges, referrals and patient names from managersHouse&month=2026-09 (referral bonus switched ON)', async () => {
   const { ctx, calls, panel } = await bootOct();
+  enableReferrals(ctx);
   await call(ctx, 'selectBonusMonth_', '2026-09');
 
   // One house request per opened tab, for the selected month, with the FRONTEND key.
@@ -1103,8 +1108,9 @@ test('settled Sep 2026: a tab opened while September is selected fetches its own
   assert.deepEqual(logNames(panel('pardes').querySelector('[data-log="entries"]')), ['תמר אלון']);
 });
 
-test('settled Sep 2026: a failed house fetch is an explicit error state — never «אין נתונים», never a guessed 0 — and is retried on re-select', async () => {
+test('settled Sep 2026: a failed house fetch is an explicit error state — never «אין נתונים», never a guessed 0 — and is retried on re-select (referral bonus switched ON)', async () => {
   const { ctx, calls, panel, heal } = await bootOct({ failHouse: 'efroni' });
+  enableReferrals(ctx);
   await call(ctx, 'selectBonusMonth_', '2026-09');
   const ef = panel('efroni');
   assert.match(ef.querySelector('[data-log="entries"]').innerHTML, /log-empty error" data-settled-log="error">שגיאה בטעינת כניסות לספטמבר 2026: upstream down</);
@@ -1192,4 +1198,114 @@ test('running month on 1 Oct 2026 is byte-for-byte unchanged after picking Septe
   await call(ctx, 'selectBonusMonth_', '2026-10');
   assert.deepEqual(snap(), before);
   assert.equal(vm.runInContext('Object.keys(state.settledDetails["2026-09"]).sort().join()', ctx), 'efroni,pardes');
+});
+
+/* ── referral bonus switched OFF (decision of 1 Oct 2026) ─────────────────
+ * BonusEligibility.CONTINUITY_BONUS_ENABLED = false: no total includes
+ * referrals — running or settled — the «בונוס הפניות להמשך טיפול» line is not
+ * rendered, the «לא כולל בונוס הפניות» note never appears, and no backend
+ * referral figure reaches a total or the DOM. */
+const REFERRAL_FEED = { maintenance: 2, day_2x: 1, day_daily: 0, total: 1777 }; // 1777: a backend-only figure
+const noReferralText = (text, where) => {
+  assert.doesNotMatch(text, /הפניות/, `${where}: no referral line / note / extra`);
+  assert.doesNotMatch(text, /1777|1,777|תחזוקתי × 100/, `${where}: no backend referral figure, no referral formula`);
+};
+
+test('referrals OFF — running month: the house tab and card never add the feed\'s referral total; the referral line is absent', () => {
+  const { ctx } = setup();
+  assert.equal(vm.runInContext('BonusEligibility.CONTINUITY_BONUS_ENABLED', ctx), false);
+  // Day 28: tier 2 locked (532 ≥ 510, avg 19) — and the feed carries referrals.
+  vm.runInContext('state.now = new Date(2026, 8, 28, 12)', ctx);
+  const chart = Array.from({ length: 28 }, (_, i) => ({ date: `2026-09-${String(i + 1).padStart(2, '0')}`, count: 19 }));
+  const detail = { ...RAMOT_DETAIL, dailyChart: chart, bonus: { ...RAMOT_DETAIL.bonus, continuity: REFERRAL_FEED } };
+  vm.runInContext(`state.details.ramot = ${JSON.stringify(detail)}`, ctx);
+  call(ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', ctx));
+  const panel = vm.runInContext('document.getElementById("panel-ramot")', ctx);
+  assert.equal(panel.querySelector('[data-stat="bonus"]').textContent, '2,500 ₪', 'tier 2 only — not + 1,777 (feed) or + 1,000 (counts)');
+  assert.equal(panel.querySelector('[data-stat="bonusTotal"]').textContent, '2,500 ₪');
+  const bk = panel.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
+  assert.equal(bk.length, 4, '3 tiers + quarterly; no referral line');
+  noReferralText(bk.join('\n') + panel.querySelector('[data-status-banner]').innerHTML + panel.querySelector('[data-month-split]').innerHTML, 'house tab');
+  const card = call(ctx, 'buildHouseCard', { ...RAMOT_OVERVIEW, dailyChart: chart, bonus: { continuity: REFERRAL_FEED } }).innerHTML;
+  noReferralText(card, 'house card');
+});
+
+test('referrals OFF — settled Sep 2026: totals are occupancy-only, no referral line, no note; entries/exits/names still render', async () => {
+  const { ctx, panel } = await bootOct({ failHouse: 'pardes' });
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  const ef = panel('efroni');
+  assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '2,000 ₪', 'tier 1 only — referral counts 2×100 + 1×500 are not paid');
+  assert.equal(ef.querySelector('[data-stat="bonusTotal"]').textContent, '2,000 ₪');
+  assert.equal(ef.querySelector('[data-breakdown]').children.length, 4);
+  noReferralText(allTextOf(ef), 'efroni tab');
+  // The entries/exits/names fix is untouched.
+  assert.deepEqual(logNames(ef.querySelector('[data-log="entries"]')), ['אבי גל', 'נועה ברק']);
+  assert.deepEqual(logNames(ef.querySelector('[data-log="exits"]')), ['רון שגיא']);
+  // A failed house payload: explicit errors for the logs, but no referral line and no note.
+  const pa = panel('pardes');
+  assert.match(pa.querySelector('[data-log="entries"]').innerHTML, /data-settled-log="error">שגיאה בטעינת כניסות לספטמבר 2026/);
+  assert.equal(pa.querySelector('[data-stat="bonus"]').textContent, '2,500 ₪');
+  assert.equal(pa.querySelector('[data-bonus-fallback-note]').textContent, '', 'no «לא כולל בונוס הפניות» note');
+  noReferralText(allTextOf(pa), 'pardes tab');
+});
+
+test('referrals OFF — overview KPIs, winners banner, network chart and quarterly never include referrals (running and settled)', async () => {
+  const { ctx, byId } = await bootOct();
+  // Running month (October): the headline money KPI is September's settled tier total.
+  const tiers = '11,500 ₪'; // raanana 2,000 + ramot 2,000 + efroni 2,000 + rehab 3,000 + pardes 2,500
+  assert.equal(byId.get('kpiBonus').textContent, tiers);
+  noReferralText(byId.get('winnersBanner').innerHTML + byId.get('networkSpark').innerHTML + byId.get('houseGrid').children.map((c) => c.innerHTML).join(''), 'running overview');
+  // Settled September.
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  assert.equal(byId.get('kpiBonus').textContent, tiers);
+  noReferralText(byId.get('winnersBanner').innerHTML + byId.get('houseGrid').children.map((c) => c.innerHTML).join(''), 'settled overview');
+  // Quarterly (Aug–Oct as of Sep): month marks come from tier amounts only.
+  assert.equal(vm.runInContext('JSON.stringify(quarterlyLocal_("efroni", "2026-09").byMonth)', ctx), '{"2026-08":0,"2026-09":2000}');
+});
+
+/* ── running-month golden snapshot ────────────────────────────────────────
+ * The whole running-month page (overview + Ramot tab, 8 Sep 2026, a feed that
+ * carries referral counts AND a backend referral total) against a stored
+ * snapshot. Regenerate deliberately with UPDATE_SNAPSHOT=1. */
+const SNAPSHOT_FILE = process.env.SNAPSHOT_OUT || path.join(__dirname, 'fixtures', 'running-month.snapshot.json');
+function runningMonthPage() {
+  const s = setup();
+  const ov = { ...STATE.overview, houses: [{ ...RAMOT_OVERVIEW, bonus: { ...RAMOT_OVERVIEW.bonus, continuity: REFERRAL_FEED } }] };
+  vm.runInContext(`state.overview = ${JSON.stringify(ov)}; state.housesById.ramot = state.overview.houses[0];`, s.ctx);
+  const detail = { ...RAMOT_DETAIL, bonus: { ...RAMOT_DETAIL.bonus, continuity: REFERRAL_FEED },
+    activity: [{ date: '2026-09-03', kind: 'entry', name: 'ישראל ישראלי' }, { date: '2026-09-05', kind: 'exit', name: 'דנה כהן' }] };
+  vm.runInContext(`state.details.ramot = ${JSON.stringify(detail)}`, s.ctx);
+  call(s.ctx, 'renderOverview', vm.runInContext('state.overview', s.ctx));
+  call(s.ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', s.ctx));
+  const id = (k) => s.byId.get(k);
+  const panel = id('panel-ramot');
+  const q = (sel) => panel.querySelector(sel);
+  return {
+    overview: {
+      kpis: ['kpiHousesAboveLabel', 'kpiHousesAbove', 'kpiActiveLabel', 'kpiActive', 'kpiBonusLabel', 'kpiBonus', 'kpiDaysLabel', 'kpiDaysLeft'].map((k) => [k, id(k).textContent]),
+      banner: id('winnersBanner').innerHTML,
+      cards: id('houseGrid').children.map((c) => c.innerHTML)
+    },
+    houseTab: {
+      hero: q('[data-status-banner]').innerHTML,
+      kpis: ['entries', 'exits', 'treatmentDays', 'bonus', 'daysSoFar', 'daysTarget', 'daysProjection', 'bonusTotal'].map((n) => [n, q(`[data-stat="${n}"]`).textContent]),
+      bonusNote: q('[data-bonus-fallback-note]').textContent,
+      monthSplit: q('[data-month-split]').innerHTML,
+      tierCurrent: q('[data-tier-current]').textContent,
+      quarterlyNote: q('[data-quarterly-note]').textContent,
+      breakdown: q('[data-breakdown]').children.map((li) => li.innerHTML.replace(/\s+/g, ' ').trim()),
+      entries: q('[data-log="entries"]').children.map((li) => li.innerHTML.replace(/\s+/g, ' ').trim()),
+      exits: q('[data-log="exits"]').children.map((li) => li.innerHTML.replace(/\s+/g, ' ').trim())
+    }
+  };
+}
+
+test('running month: golden snapshot (referral line removed, totals without referrals — the only change of 1 Oct 2026)', () => {
+  const page = runningMonthPage();
+  if (process.env.UPDATE_SNAPSHOT) {
+    fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(page, null, 2) + '\n');
+    return;
+  }
+  assert.deepEqual(page, JSON.parse(fs.readFileSync(SNAPSHOT_FILE, 'utf8')));
+  noReferralText(JSON.stringify(page), 'running month');
 });

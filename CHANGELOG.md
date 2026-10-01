@@ -3,6 +3,27 @@
 
 ## Unreleased
 
+### Changed — referral bonus switched off (October 1, 2026)
+
+**What**: Referral bonus disabled by decision (1 Oct 2026); switch: CONTINUITY_BONUS_ENABLED in lib/bonus-eligibility.js. Managers get occupancy bonuses only.
+- No total includes referrals, in the running month or in finished months:
+  KPIs, breakdown, hero, card, overview, banner, quarterly.
+- The «בונוס הפניות להמשך טיפול» line, the card's «הפניות» extra and the
+  «לא כולל בונוס הפניות» note are not rendered.
+- The running month no longer adds the Dashboard's referral total. No
+  backend referral number reaches a total or the DOM.
+
+**Why**: Sandra's decision.
+
+**Kept**: the counts fetch and `continuityAmount`, so the bonus can be
+switched back on.
+
+**Tests**: 186 → 192. The 4 referral tests run with the flag on. The
+running-month golden snapshot `test/fixtures/running-month.snapshot.json`
+was updated deliberately; its only differences are the removed referral line
+and totals without referrals. SW stays v14. Details:
+`CHANGELOG-settled-month-house-data.md`.
+
 ### Fixed — a finished month's house tab shows its own admissions, discharges, names and referrals (October 1, 2026)
 
 **What**: picking a finished month (seen on 1 Oct 2026 for September) showed

@@ -298,9 +298,14 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   cached in `state.settledDetails`, never in the running month's state.
   Loading / error are explicit states (`שגיאה בטעינת כניסות ל…`, KPIs `—`),
   never `אין נתונים`; a failed house is retried on re-select.
-- Settled referral bonus computed locally (`continuityAmount` in
-  `lib/bonus-eligibility.js`: counts × 100/500/1,000, only when eligible);
-  a month row without `avgDaily` / `treatmentDays` is "missing", never
+- **Referral bonus disabled by decision (1 Oct 2026); switch: CONTINUITY_BONUS_ENABLED in lib/bonus-eligibility.js.** Managers get occupancy bonuses only, in the running month
+  and in finished months:
+  - no total includes referrals;
+  - the «בונוס הפניות להמשך טיפול» line is hidden;
+  - the running month no longer adds the Dashboard's referral total.
+
+  The counts fetch and `continuityAmount` are kept for re-enabling.
+- A month row without `avgDaily` / `treatmentDays` is "missing", never
   `לא זכאי · 0 ₪`.
 - The tier / gate figures were already a real computation from the month's
   raw `avgDaily` / `treatmentDays` (same Patients-sheet computation as the
@@ -308,7 +313,9 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
 - Allowed dashboard actions for Managers: **`managersOverview`,
   `managersHouse`, `occupancySnapshots` only** (all others need a key the
   app does not have). No new endpoint, no Apps Script change. Running month
-  byte-for-byte unchanged (snapshot-tested). SW cache v14, tests 178 → 186.
+  unchanged apart from the removed referral line and totals without
+  referrals (golden snapshot `test/fixtures/running-month.snapshot.json`).
+  SW cache v14, tests 178 → 192.
   Details: `docs/bonus-month-labelling.md` → "Settled month — the house's
   own data"; `CHANGELOG-settled-month-house-data.md`.
 

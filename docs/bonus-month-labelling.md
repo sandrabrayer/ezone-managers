@@ -147,7 +147,7 @@ picker: `shortTitle` = `יולי 2026 — סופי`, `gateText` =
 | Next-tier card | shown | **hidden** and blanked (`[hidden]`, CSS `display:none`) |
 | Tier track | `מדרגה הבאה … ממוצע נוכחי` | `מדרגה 2 הושגה ✓ · יולי 2026 (סופי) · ממוצע 19.2 מטופלים/יום` or `לא הושגה מדרגה · … (סף 17)` |
 | Quarterly | running window | the **selected month's window** as of that month + `[data-quarterly-months]`: `מאי 2026 ✓ · יוני 2026 ✗ · יולי 2026 ✓` (`(לאחר החודש שנבחר)` for later months) |
-| Breakdown | `✓ מובטח`, `אין הפניות פעילות החודש` | `✓ הושג`, the month's referral counts × rates (`לא היו הפניות פעילות ביולי 2026` when there were none; `—` + error text when not loaded), quarterly line for the selected window |
+| Breakdown | `✓ מובטח`, tiers + quarterly (referral line hidden — switched off) | `✓ הושג`, tiers + quarterly line for the selected window (referral line hidden — switched off) |
 | Logs | entries / exits | the month's entries / exits with patient names (escaped); `לא היו כניסות ביולי 2026` when there were none; explicit loading / error rows otherwise |
 
 The forbidden list for a picked month is the settled list **plus** `צפי`,
@@ -206,15 +206,24 @@ per house × month, cached in its own slice `state.settledDetails` — never
   dashboard maps `efroni` → `arfoni` itself and answers `unknown_house` for
   `arfoni`; a key outside `HOUSE_KEYS` or a malformed month is never sent;
 - every block has three explicit states: loading (`טוען כניסות — …`), error
-  (`שגיאה בטעינת כניסות ל…: …`, KPIs `—`, referral amount `—`, and a note
-  `לא כולל בונוס הפניות — הנתונים לא נטענו` under the bonus KPI), and data —
+  (`שגיאה בטעינת כניסות ל…: …`, KPIs `—`), and data —
   with `לא היו כניסות ב…` only when the payload confirms there were none. A
   failed house is retried on the next selection; the others are not refetched.
 
-**Referral bonus of a settled month** is computed locally
-(`BonusEligibility.continuityAmount`: counts × 100 / 500 / 1,000, paid only
-when the house was eligible that month); the feed's own `total` is never read.
-The settled KPI / breakdown total is tier + quarterly + referrals.
+**Referral bonus — switched off.** Referral bonus disabled by decision (1 Oct 2026); switch: CONTINUITY_BONUS_ENABLED in lib/bonus-eligibility.js. While
+`CONTINUITY_BONUS_ENABLED` is `false`:
+- managers get occupancy bonuses only, in the running month and in finished
+  months;
+- no total includes referrals (house KPI, breakdown, hero, card, overview,
+  banner, quarterly);
+- the «בונוס הפניות להמשך טיפול» line, the card's «הפניות» extra and the
+  «לא כולל בונוס הפניות» note are not rendered;
+- the running month no longer adds the Dashboard's `continuity.total`.
+
+The counts are still fetched and `continuityAmount` (counts × 100 / 500 /
+1,000, local, never the feed's `total`) is kept for switching it back on.
+Both views then go through `referralBonus_` in `app.js`. The running-month
+golden snapshot is `test/fixtures/running-month.snapshot.json`.
 
 **Missing figures are missing, not zero.** A month row whose `avgDaily` or
 `treatmentDays` is absent / blank is treated as missing data
@@ -255,7 +264,9 @@ already loaded (`state.historyByMonth`) but never requests one itself.
 | Settled branches: `renderMonthSplit_(…, settledOverride)`, `renderTierTrack` (`ctx.settled`), `renderQuarterlyTrack` (`asOf`, `quarterMonthsText_`), `renderBreakdown` (`ctx.settled`), `quarterlyLocal_(key, asOfYM)` | `public/app.js` |
 | Styles `.bonus-month-bar`, `.link-btn`, `.quarterly-months`, `.log-empty`, `[hidden]` guards | `public/styles.css` |
 | Settled house payload: `state.settledDetails`, `loadSettledHouse_`, `settledHouseEntry_`, `openedHouseKeys_`, `renderSettledLogs_`, `rawNumber_` | `public/app.js`, "Bonus history" section |
-| Referral math `continuityAmount`, `CONTINUITY_RATES` | `lib/bonus-eligibility.js` |
+| Referral switch `CONTINUITY_BONUS_ENABLED` (false), `continuityEnabled`, `continuityAmount`, `CONTINUITY_RATES` | `lib/bonus-eligibility.js` |
+| `referralBonus_`, `referralsEnabled_` (running + settled) | `public/app.js` |
+| Running-month golden snapshot | `test/fixtures/running-month.snapshot.json` (`UPDATE_SNAPSHOT=1` to regenerate deliberately) |
 | Tests | `test/bonus-view.test.js` (3), `test/app-render.test.js` ("bonus picker: …", 8; "settled Sep 2026: …" / "house keys: …" / "settled month: …" / "running month on 1 Oct 2026 …", 7), `test/bonus-eligibility.test.js` (`continuityAmount`) |
 
 ### Security

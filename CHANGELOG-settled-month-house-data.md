@@ -4,6 +4,9 @@ _October 1, 2026 — frontend only (`public/app.js`, `public/styles.css`,
 `public/sw.js` v13 → v14, `lib/bonus-eligibility.js`). No Apps Script change,
 no new endpoint, env var or secret._
 
+> **Referral bonus disabled by decision (1 Oct 2026); switch: CONTINUITY_BONUS_ENABLED in lib/bonus-eligibility.js.** Managers get occupancy bonuses only, in the running month
+> and in finished months. See "Referral bonus disabled" at the end.
+
 ## Symptom
 
 On 1 Oct 2026 — the first day September 2026 was a finished ("settled") month
@@ -71,7 +74,8 @@ simply never asked for it. **No Dashboard change is needed.**
 - **Referral amount** (settled month) is computed locally:
   `BonusEligibility.continuityAmount` in `lib/bonus-eligibility.js`, counts ×
   100 / 500 / 1,000, paid only when the house was eligible that month. The
-  feed's `total` is never read. KPI total = tier + quarterly + referrals.
+  feed's `total` is never read. **Superseded the same day: the referral bonus
+  is switched off — see the last section.**
 - **Missing figures**: `settledHouseFor_` treats a row without numeric
   `avgDaily` / `treatmentDays` as missing (`הנתונים לא זמינים לבית זה`).
 - **`fetchMonthOverview_`** maps a backend `arfoni` row to `efroni`.
@@ -118,3 +122,68 @@ without referrals).
 fetched from the Code session (the sandbox proxy refused the Railway host).
 v13 is what `main` ships (Railway deploys `main`; status doc: "SW cache v13"
 on Sep 17), so v14 is the next version.
+
+## Referral bonus disabled (decision, 1 Oct 2026)
+
+**Referral bonus disabled by decision (1 Oct 2026); switch: CONTINUITY_BONUS_ENABLED in lib/bonus-eligibility.js.**
+
+Sandra's decision: the referral bonus («בונוס הפניות להמשך טיפול») is **not
+paid for now**. Managers get occupancy bonuses only, in the running month and
+in finished months.
+
+- **The switch:** `CONTINUITY_BONUS_ENABLED = false` in
+  `lib/bonus-eligibility.js`. It lives on the exported object and is read at
+  call time. While it is `false`:
+  - `continuityAmount` returns `total: 0`;
+  - no total includes referrals: house-tab KPI, breakdown total, hero, house
+    card, overview KPIs, winners banner, network chart;
+  - the quarterly ≥ 2,000 check uses the occupancy tier amount only (it
+    always did: `monthlyBonusAmount`).
+- **Running month:** it no longer adds the Dashboard's `bonus.continuity.total`.
+  Both views now go through one helper, `referralBonus_` in `app.js`, which
+  uses the counts and local math only. No backend referral number reaches
+  any total or the DOM.
+- **UI:**
+  - the «בונוס הפניות להמשך טיפול» breakdown line and the running card's
+    «הפניות …» extra are not rendered;
+  - the «לא כולל בונוס הפניות» note is gone.
+- **Kept, so it can be switched back on:** the referral counts are still
+  fetched with the month's house payload, and `continuityAmount` is
+  unchanged. When re-enabled, a running month pays referrals only once its
+  occupancy bonus is secured; a finished month pays them only if the house
+  was eligible.
+- **Unchanged:** the entries / exits / names fix above.
+- **SW:** stays v14.
+
+### Running-month snapshot: the deliberate update
+
+A stored golden snapshot, `test/fixtures/running-month.snapshot.json`, now
+pins the whole running-month page: the overview plus the Ramot tab on
+8 Sep 2026, with a feed that carries referral counts and a backend referral
+total of 1,777. Compared with the same page rendered by the previous commit
+(`617a03f`), the **only** differences are:
+
+| Where | Before | After |
+|---|---|---|
+| House card, running block | `הפניות 1,777 ₪` | (line removed) |
+| House tab KPI «מובטח עד כה» | `1,777 ₪` (the backend's total) | `0 ₪` |
+| Breakdown total | `1,777 ₪` | `0 ₪` |
+| Breakdown | 5 lines, incl. `בונוס הפניות להמשך טיפול … 1,777 ₪` | 4 lines (referral line removed) |
+
+Regenerate it deliberately with `UPDATE_SNAPSHOT=1 npm test`.
+
+### Tests: 186 → 192
+
+- The 4 existing referral tests now switch the flag **on** inside their own
+  sandbox and pass unchanged: July settled view; Sep settled view; fetch
+  failure plus the note; `continuityAmount`.
+- New:
+  - the flag is off by default and pays 0;
+  - the quarterly check ignores referrals (flag on and off);
+  - running month: KPI and breakdown total are the tier only, no referral
+    line, and the card has no «הפניות»;
+  - settled Sep 2026: totals are occupancy-only, no referral line, no note,
+    and entries / exits / names still render;
+  - overview KPI, banner, network chart and quarterly marks have no
+    referrals (running and settled);
+  - the running-month golden snapshot.

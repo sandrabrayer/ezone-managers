@@ -391,14 +391,16 @@ function treatmentNightsOf(h) {
   return h?.treatmentDays ?? 0;
 }
 
-function continuityCounts(b) {
-  const c = (b && b.continuity) || {};
-  return {
-    maintenance: c.maintenance ?? 0,
-    day_2x:      c.day_2x ?? 0,
-    day_daily:   c.day_daily ?? 0,
-    total:       c.total ?? 0
-  };
+/* Referral («הפניות להמשך טיפול») bonus for one house — running AND finished
+ * months go through here. Computed locally from the raw COUNTS only
+ * (BonusEligibility.continuityAmount); the feed's own `continuity.total` is
+ * never read. While BonusEligibility.CONTINUITY_BONUS_ENABLED is false (the
+ * decision of 1 Oct 2026) the total is 0 and the line is not rendered. */
+function referralBonus_(counts, eligible) {
+  return window.BonusEligibility.continuityAmount(counts || {}, !!eligible);
+}
+function referralsEnabled_() {
+  return window.BonusEligibility.continuityEnabled() === true;
 }
 
 /* ============================================================
@@ -791,9 +793,9 @@ function buildHouseCard(h) {
 
   const status = monthlyStatus(h);   // days-so-far computed ONCE here
   const cur = status.view;           // null when the overview month is finished
-  const cont = continuityCounts(h.bonus || {});
   const quartly = quarterlyEarnedAmount(h);
   const secured = status.state === 'locked' || (status.state === 'finished' && status.amount > 0);
+  const cont = referralBonus_(h.bonus && h.bonus.continuity, secured);
   const isProjection = status.state === 'projection';
   const nowYM = h.month || state.overview?.month || currentMonthYM_();
   const nowLabel = BV.monthLabel(nowYM);
@@ -1016,7 +1018,9 @@ function renderHouseDetail(key, data) {
   setStatLabel(panel, 'treatmentDays', cur ? `ימי טיפול עד כה — ${viewingLabel} (בתהליך)` : `ימי טיפול — ${viewingLabel}`);
   setStat(panel, 'treatmentDays', fmtInt(nights));
 
-  const cont = continuityCounts(merged.bonus || {});
+  // Referrals: local, counts only, paid only once the occupancy bonus is
+  // secured; 0 while the referral bonus is switched off.
+  const cont = referralBonus_(merged.bonus && merged.bonus.continuity, paid);
   const quartly = quarterlyEarnedAmount(merged);
   // Only secured monthly (locked/finished) + actually-earned quarterly.
   const totalBonus = status.amount + (cont.total || 0) + (quartly || 0);
@@ -1756,7 +1760,7 @@ function renderHouseDetailSettled_(panel, key, ym) {
   // computed locally (lib/bonus-eligibility.js), paid only if the house was
   // eligible that month. Unknown until that payload has loaded.
   const cont = sh && sh.ok
-    ? window.BonusEligibility.continuityAmount(sh.continuity, s.eligible)
+    ? referralBonus_(sh.continuity, s.eligible)
     : { maintenance: 0, day_2x: 0, day_daily: 0, total: 0 };
   const contState = !sh ? 'loading' : sh.ok ? 'ok' : 'error';
   const quartly = quarterlyLocal_(key, ym).earned;
@@ -1784,9 +1788,10 @@ function renderHouseDetailSettled_(panel, key, ym) {
   bonusEl.textContent = fmtCurrency(totalBonus);
   bonusEl.classList.toggle('gold', totalBonus > 0);
   // No projection on a finished month. The note slot is used only to say the
-  // total is incomplete while the referral figures are loading / failed.
+  // total is incomplete while the referral figures are loading / failed —
+  // and only while the referral bonus is switched on.
   let fallbackEl = panel.querySelector('[data-bonus-fallback-note]');
-  if (contState !== 'ok') {
+  if (referralsEnabled_() && contState !== 'ok') {
     if (!fallbackEl) {
       fallbackEl = document.createElement('div');
       fallbackEl.setAttribute('data-bonus-fallback-note', '');
@@ -2667,14 +2672,16 @@ function renderBreakdown(panel, data, ctx) {
       zero: !ctx.quartly,
       gold: ctx.quartly > 0
     },
-    {
+    // «בונוס הפניות להמשך טיפול» — not rendered at all while the referral
+    // bonus is switched off (BonusEligibility.CONTINUITY_BONUS_ENABLED).
+    ...(referralsEnabled_() ? [{
       label: 'בונוס הפניות להמשך טיפול',
       formula: continuityFormula,
       amount: ctx.cont.total,
       amountText: contUnknown ? '—' : undefined,
       zero: !ctx.cont.total,
       gold: ctx.cont.total > 0
-    }
+    }] : [])
   ];
 
   // The monthly bonus is the SINGLE-best tier reached — dim lower tier rows

@@ -75,6 +75,11 @@ explicit loading / error state, never «אין נתונים». `חזרה לחו�
 restores the live view. See `docs/bonus-month-labelling.md` → "Bonus history
 month picker" and "Settled month — the house's own data".
 
+**Referral bonus disabled by decision (1 Oct 2026); switch:
+`CONTINUITY_BONUS_ENABLED` in `lib/bonus-eligibility.js`.** Managers get
+occupancy bonuses only. No total includes referrals, and the «בונוס הפניות
+להמשך טיפול» line is not shown, in the running month or in finished months.
+
 ## Monthly occupancy (סופי) + CSV export
 
 A permanent **«תפוסה חודשית (סופי)»** card — on the overview a table of every
