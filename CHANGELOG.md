@@ -3,6 +3,32 @@
 
 ## Unreleased
 
+### Fixed — a finished month's house tab shows its own admissions, discharges, names and referrals (October 1, 2026)
+
+**What**: picking a finished month (seen on 1 Oct 2026 for September) showed
+`אין נתוני כניסות / יציאות / הפניות לספטמבר 2026`, no patient names and a 0 ₪
+referral line. Each opened house tab now also loads
+`managersHouse&house=<key>&month=YYYY-MM` and renders that month's entries,
+exits (names escaped), counts, referrals and daily chart. Loading and failure
+are explicit states, never «אין נתונים». The settled referral amount is
+computed locally (`BonusEligibility.continuityAmount`), and a month row
+without figures is "missing" instead of `לא זכאי · 0 ₪`.
+
+**Why**: the settled path read only the `managersOverview&month=` row, which
+has no activity, chart or referral counts, and hardcoded the "no data"
+strings. The dashboard's `managersHouse_` already honours `month=`. No
+endpoint, env var or Apps Script change; only the open actions
+(`managersOverview`, `managersHouse`, `occupancySnapshots`) are called.
+Running month byte-for-byte unchanged. SW cache v13 → v14.
+
+**Tests**: 178 → 186 (+8): 7 render tests (Sep 2026 settled view from the
+payload, a tab opened mid-selection, fetch failure → error state + retry,
+wrong-month payload rejected, `efroni` / `arfoni` / `pardes` keys, missing
+figures ≠ 0 ₪, running-month snapshot on 1 Oct) and 1 `continuityAmount`
+unit test. Two existing bonus-picker tests updated: they asserted the old
+"no house request" / «אין נתוני הפניות» behaviour. Details:
+`CHANGELOG-settled-month-house-data.md`.
+
 ### Added — permanent «תפוסה חודשית (סופי)» view + CSV export (September 17, 2026)
 
 A permanent monthly-occupancy card, on the overview and on every house tab,

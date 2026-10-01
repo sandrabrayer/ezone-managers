@@ -599,12 +599,34 @@ function bonusHistoryFeed({ failMonth = null } = {}) {
         ...(key === 'ramot' ? MONTH_ROWS.ramot[month] || MONTH_ROWS.other : MONTH_ROWS.other),
         ...BACKEND_JUNK
       })) };
-    } else if (action === 'managersHouse') body = { ok: true, ...overviewHouse(house), month: '2026-09', dailyChart: CHART, activity: [] };
+    } else if (action === 'managersHouse' && month) body = settledHousePayload(house, month);
+    else if (action === 'managersHouse') body = { ok: true, ...overviewHouse(house), month: '2026-09', dailyChart: CHART, activity: [] };
     else body = { ok: false, error: 'unexpected call' };
     return { status: 200, ok: true, text: async () => JSON.stringify(body) };
   };
   return { calls, fetchImpl };
 }
+/* What the dashboard's managersHouse_ returns for `month=YYYY-MM` (see
+ * apps-script/Code.gs → managersHouse_ / computeMonthStats_): that month's
+ * activity with patient names, entries/exits counts, daily chart and the
+ * referral counts — plus backend bonus junk that must never be rendered. */
+function settledHousePayload(house, month) {
+  return {
+    ok: true, month, key: house, name: 'x', manager: 'אורן', capacity: 20, patientsNow: 14,
+    avgDaily: 19.2, treatmentDays: 560, entriesMonth: 2, exitsMonth: 1,
+    dailyChart: chartFor(month),
+    activity: [
+      { date: `${month}-21`, kind: 'exit', name: 'דנה לוי' },
+      { date: `${month}-12`, kind: 'entry', name: 'יוסי כהן' },
+      { date: `${month}-03`, kind: 'entry', name: 'משה <b>רז</b>' },
+      { date: '2026-01-05', kind: 'entry', name: 'מחוץ לחודש' }
+    ],
+    entries: [],
+    bonus: { continuity: { maintenance: 1, day_2x: 1, day_daily: 0, total: STRAY }, ...BACKEND_JUNK },
+    ...BACKEND_JUNK
+  };
+}
+const houseCalls = (calls) => calls.filter((c) => c.action === 'managersHouse');
 const monthCalls = (calls) => calls.filter((c) => c.action === 'managersOverview' && c.month).map((c) => c.month).sort();
 const FORBIDDEN_HISTORY = [...FORBIDDEN, 'צפי', 'ממוצע נוכחי', 'מובטח'];
 
@@ -674,10 +696,11 @@ test('bonus picker: a finished month renders the overview and the house tab SETT
 
   await call(ctx, 'selectBonusMonth_', 'ramot' && '2026-07');
 
-  // Data: the selected month + the finished months of its window, via the existing month fetch only.
+  // Data: the selected month + the finished months of its window, plus that
+  // month's own house payload for the opened tab — existing actions only.
   assert.deepEqual(monthCalls(calls), ['2026-05', '2026-06', '2026-07']);
-  assert.equal(calls.filter((c) => c.action === 'managersHouse').length, 0, 'no house requests');
-  assert.equal(calls.length, 3);
+  assert.deepEqual(houseCalls(calls), [{ action: 'managersHouse', month: '2026-07', house: 'ramot' }], 'one house request: the opened tab, for the selected month');
+  assert.equal(calls.length, 4);
 
   // Overview.
   assert.equal(byId.get('monthTag').textContent, 'יולי 2026 — סופי');
@@ -718,8 +741,9 @@ test('bonus picker: a finished month renders the overview and the house tab SETT
   assert.equal(panel.querySelector('[data-stat-label="treatmentDays"]').textContent, 'ימי טיפול — יולי 2026 (סופי)');
   assert.equal(panel.querySelector('[data-stat="treatmentDays"]').textContent, '560', 'days-so-far of a finished month = full-month total');
   assert.equal(panel.querySelector('[data-stat-label="bonus"]').textContent, 'בונוס יולי 2026 — סופי');
-  assert.equal(panel.querySelector('[data-stat="bonus"]').textContent, '2,500 ₪');
-  assert.equal(panel.querySelector('[data-stat="entries"]').textContent, '—');
+  assert.equal(panel.querySelector('[data-stat="bonus"]').textContent, '3,100 ₪', 'tier 2,500 + referrals 600 (as the running month adds referrals)');
+  assert.equal(panel.querySelector('[data-stat="entries"]').textContent, '2');
+  assert.equal(panel.querySelector('[data-stat="exits"]').textContent, '1');
   const split = panel.querySelector('[data-month-split]').innerHTML;
   assert.match(split, /ms-tag">יולי 2026 — סופי<[\s\S]*?ms-amt gold">2,500 ₪<[\s\S]*?זכאי · מדרגה 2 · 2,500 ₪ · ממוצע 19\.2 מטופלים\/יום · 560\/510 ימי טיפול · המכסה הושלמה/);
   assert.equal((split.match(/ms-row/g) || []).length, 1, 'one settled row, no running row');
@@ -730,7 +754,7 @@ test('bonus picker: a finished month renders the overview and the house tab SETT
   assert.equal(panel.querySelector('[data-stat-label="daysProjection"]').textContent, 'המכסה');
   assert.equal(panel.querySelector('[data-stat="daysProjection"]').textContent, 'הושלמה');
   assert.equal(panel.querySelector('[data-bep-fill]').style.width, '100%');
-  assert.match(panel.querySelector('[data-daily-spark]').innerHTML, /data-bonus-history-state="no-chart">אין נתוני תפוסה יומית ליולי 2026/);
+  assert.doesNotMatch(panel.querySelector('[data-daily-spark]').innerHTML, /no-chart/, 'the chart comes from the month\'s own house payload');
   assert.equal(panel.querySelector('[data-next-tier-card]').hidden, true, 'the "missing for next tier" card is hidden on a finished month');
   assert.equal(panel.querySelector('[data-tier-current]').textContent, 'מדרגה 2 הושגה ✓ · יולי 2026 (סופי) · ממוצע 19.2 מטופלים/יום');
   assert.equal(panel.querySelector('[data-tier-current]').className, 'tier-current gold');
@@ -745,9 +769,12 @@ test('bonus picker: a finished month renders the overview and the house tab SETT
   assert.match(bk[1][1], /בונוס מדרגה 2 \(19 מטופלים\)[\s\S]*2,500 ₪ ✓ הושג · 560\/510 ימי טיפול/);
   assert.match(bk[1][0], /gold/);
   assert.match(bk[3][1], /2\/3 חודשים שעמדו בסף · יחושב בסוף הרבעון \(מאי 2026 · יוני 2026 · יולי 2026\)/);
-  assert.match(bk[4][1], /אין נתוני הפניות ליולי 2026/);
-  assert.equal(panel.querySelector('[data-stat="bonusTotal"]').textContent, '2,500 ₪');
-  assert.match(panel.querySelector('[data-log="entries"]').innerHTML, /log-empty/);
+  // Referrals: counts from the payload, amount computed locally (1×100 + 1×500), never the feed's total.
+  assert.match(bk[4][1], /1 תחזוקתי × 100 · 1 יום 2\/שבוע × 500[\s\S]*bk-amount">600 ₪</);
+  assert.equal(panel.querySelector('[data-stat="bonusTotal"]').textContent, '3,100 ₪');
+  const entriesLog = panel.querySelector('[data-log="entries"]');
+  assert.deepEqual(entriesLog.children.map((li) => /log-name">([^<]*)</.exec(li.innerHTML)[1]), ['יוסי כהן', 'משה &lt;b&gt;רז&lt;/b&gt;'], 'names, newest first, escaped; rows outside July dropped');
+  assert.match(panel.querySelector('[data-log="exits"]').children[0].innerHTML, /דנה לוי/);
 
   // Nothing rendered for the selected month says בתהליך / בדרך / חסרים / צפי / ממוצע נוכחי / מובטח,
   // and no backend bonus figure leaks. (The pickers' own option lists are the only place the
@@ -821,12 +848,16 @@ test('bonus picker: the running month is byte-for-byte unchanged after picking a
 });
 
 test('bonus picker: months are cached in memory — re-selecting, a month of the same window, and last month cost no request', async () => {
-  const { ctx, byId, calls } = await bootWithHistory();
+  const { ctx, byId, calls: allCalls } = await bootWithHistory();
+  // Overview requests only; the opened tab's per-month house payload is
+  // covered by its own test below.
+  const calls = { get length() { return allCalls.filter((c) => c.action === 'managersOverview').length; } };
   await call(ctx, 'selectBonusMonth_', '2026-07');
-  assert.deepEqual(monthCalls(calls), ['2026-05', '2026-06', '2026-07']);
+  assert.deepEqual(monthCalls(allCalls), ['2026-05', '2026-06', '2026-07']);
   await call(ctx, 'selectBonusMonth_', '2026-09');
   await call(ctx, 'selectBonusMonth_', '2026-07');
   assert.equal(calls.length, 3, 're-selecting July is a cache hit');
+  assert.equal(houseCalls(allCalls).length, 1, 'the July house payload is cached too');
   await call(ctx, 'selectBonusMonth_', '2026-06');
   await call(ctx, 'selectBonusMonth_', '2026-05');
   assert.equal(calls.length, 3, 'June and May were loaded with July');
@@ -838,9 +869,9 @@ test('bonus picker: months are cached in memory — re-selecting, a month of the
   // The cache survives the 60-second refresh (which resets monthOverviews).
   await call(ctx, 'selectBonusMonth_', '2026-09');
   await vm.runInContext('loadOverview', ctx)();
-  calls.length = 0;
+  allCalls.length = 0;
   await call(ctx, 'selectBonusMonth_', '2026-07');
-  assert.equal(calls.length, 0, 'no refetch after a refresh');
+  assert.equal(allCalls.length, 0, 'no refetch after a refresh');
   assert.equal(byId.get('kpiBonus').textContent, '10,500 ₪');
   assert.equal(vm.runInContext('Object.keys(state.bonusHistory).sort().join(",")', ctx), '2026-05,2026-06,2026-07,2026-08');
 });
@@ -944,4 +975,221 @@ test('app.js: the client never asks for a login and sends no token', () => {
   assert.ok(!js.includes('/api/login'));
   assert.ok(!js.includes('Bearer'));
   assert.ok(js.includes('clearLegacySession'));
+});
+
+/* ── settled month, house tab: the month's OWN house payload (1 Oct 2026) ──
+ * On 1 Oct 2026 September became a finished month. Picking it rendered
+ * «אין נתוני כניסות/יציאות/הפניות לספטמבר 2026» and no names: the settled
+ * path never requested `managersHouse&month=2026-09`, although the dashboard's
+ * managersHouse_ answers it (activity with names, entries/exits, referral
+ * counts, daily chart). These tests pin the fix. */
+const OCT_HOUSES = ['raanana', 'ramot', 'efroni', 'rehab', 'pardes'];
+const SEP_ROWS = {
+  raanana: { avgDaily: 10.2, treatmentDays: 306 },
+  ramot:   { avgDaily: 17.5, treatmentDays: 525 },
+  efroni:  { avgDaily: 11.5, treatmentDays: 345 },
+  rehab:   { avgDaily: 13.0, treatmentDays: 390 },
+  pardes:  { avgDaily: 12.4, treatmentDays: 372 }
+};
+const SEP_NAMES = {
+  efroni: { entries: ['נועה ברק', 'אבי גל'], exits: ['רון שגיא'] },
+  pardes: { entries: ['תמר אלון'], exits: [] }
+};
+function octFeed({ failHouse = null, wrongMonthHouse = null, noActivityHouse = null, arfoniRow = false, houseKeyArfoni = false, dropDays = null } = {}) {
+  const calls = [];
+  let failing = failHouse;
+  const fetchImpl = async (url) => {
+    const u = new URL(url, 'http://x');
+    const action = u.searchParams.get('action'), month = u.searchParams.get('month'), house = u.searchParams.get('house');
+    calls.push({ action, month, house });
+    let body;
+    if (action === 'managersOverview' && !month) {
+      body = { ok: true, month: '2026-10', totals: { activePatients: 60 },
+        houses: OCT_HOUSES.map((key) => ({ key, patientsNow: 11, capacity: key === 'ramot' ? 20 : 13, avgDaily: 11, treatmentDays: 11, ...BACKEND_JUNK })) };
+    } else if (action === 'managersOverview') {
+      body = { ok: true, month, houses: OCT_HOUSES.map((key) => {
+        const row = { key: arfoniRow && key === 'efroni' ? 'arfoni' : key, ...(month === '2026-09' ? SEP_ROWS[key] : { avgDaily: 9, treatmentDays: 270 }), ...BACKEND_JUNK };
+        if (month === '2026-09' && dropDays === key) delete row.treatmentDays;
+        return row;
+      }) };
+    } else if (action === 'managersHouse' && !OCT_HOUSES.includes(house)) {
+      body = { ok: false, error: 'unknown_house', house }; // what managersHouse_ answers for 'arfoni'
+    } else if (action === 'managersHouse' && !month) {
+      body = { ok: true, key: house, month: '2026-10', capacity: 13, patientsNow: 11,
+        dailyChart: [{ date: '2026-10-01', count: 11 }],
+        activity: [{ date: '2026-10-01', kind: 'entry', name: 'כניסת אוקטובר' }], bonus: { continuity: {} } };
+    } else if (action === 'managersHouse') {
+      if (failing === house) throw new Error('upstream down');
+      const n = SEP_NAMES[house] || { entries: [], exits: [] };
+      body = {
+        ok: true, month: wrongMonthHouse === house ? '2026-10' : month,
+        key: houseKeyArfoni && house === 'efroni' ? 'arfoni' : house,
+        ...SEP_ROWS[house], entriesMonth: n.entries.length, exitsMonth: n.exits.length,
+        dailyChart: Array.from({ length: 30 }, (_, i) => ({ date: `2026-09-${String(i + 1).padStart(2, '0')}`, count: 11 + (i % 2) })),
+        activity: [
+          ...n.entries.map((name, i) => ({ date: `2026-09-${String(10 + i).padStart(2, '0')}`, kind: 'entry', name })),
+          ...n.exits.map((name) => ({ date: '2026-09-25', kind: 'exit', name }))
+        ],
+        bonus: { continuity: house === 'efroni' ? { maintenance: 2, day_2x: 1, day_daily: 0, total: STRAY } : {}, ...BACKEND_JUNK },
+        ...BACKEND_JUNK
+      };
+      if (noActivityHouse === house) delete body.activity;
+    } else body = { ok: false, error: 'unexpected call' };
+    return { status: 200, ok: true, text: async () => JSON.stringify(body) };
+  };
+  return { calls, fetchImpl, heal: () => { failing = null; } };
+}
+async function bootOct(opts, tabs = ['efroni', 'pardes']) {
+  const feed = octFeed(opts);
+  const s = makeSandbox(feed.fetchImpl);
+  vm.runInContext('state.now = new Date(2026, 9, 1, 9, 0, 0);', s.ctx); // 1 Oct 2026
+  await vm.runInContext('loadOverview', s.ctx)();
+  for (const key of tabs) call(s.ctx, 'renderHouseDetail', key, vm.runInContext(`state.details.${key}`, s.ctx));
+  feed.calls.length = 0;
+  const panel = (key) => s.byId.get(`panel-${key}`);
+  return { ...s, ...feed, panel };
+}
+const allTextOf = (el) => {
+  const out = [];
+  const walk = (e) => { out.push(e.innerHTML, e.textContent); e.children.forEach(walk); e._sub.forEach((sub, sel) => { if (sel !== '[data-bonus-month]' && sel !== '[data-history-month]') walk(sub); }); };
+  walk(el);
+  return out.join('\n');
+};
+const logNames = (ul) => ul.children.map((li) => /log-name">([^<]*)</.exec(li.innerHTML)[1]);
+
+test('settled Sep 2026 (1 Oct): the house tab renders admissions, discharges, referrals and patient names from managersHouse&month=2026-09', async () => {
+  const { ctx, calls, panel } = await bootOct();
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+
+  // One house request per opened tab, for the selected month, with the FRONTEND key.
+  assert.deepEqual(houseCalls(calls).map((c) => `${c.house}:${c.month}`).sort(), ['efroni:2026-09', 'pardes:2026-09']);
+  assert.ok(calls.every((c) => ['managersOverview', 'managersHouse'].includes(c.action)), 'only the open actions are called');
+
+  const ef = panel('efroni');
+  assert.equal(ef.querySelector('[data-stat="entries"]').textContent, '2');
+  assert.equal(ef.querySelector('[data-stat="exits"]').textContent, '1');
+  assert.deepEqual(logNames(ef.querySelector('[data-log="entries"]')), ['אבי גל', 'נועה ברק'], 'September admissions, newest first');
+  assert.deepEqual(logNames(ef.querySelector('[data-log="exits"]')), ['רון שגיא']);
+  // Settled bonus: avg 11.5 ≥ 10, 345 ≥ 300 → tier 1, 2,000 ₪; referrals 2×100 + 1×500 = 700 (local math, not the feed's total).
+  assert.equal(/data-hero-headline>([^<]*)</.exec(ef.querySelector('[data-status-banner]').innerHTML)[1], 'ספטמבר 2026 — סופי: זכאי · מדרגה 1 · 2,000 ₪');
+  const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
+  assert.match(bk[4], /2 תחזוקתי × 100 · 1 יום 2\/שבוע × 500[\s\S]*bk-amount">700 ₪</);
+  assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '2,700 ₪');
+  assert.equal(ef.querySelector('[data-stat="bonusTotal"]').textContent, '2,700 ₪');
+  assert.doesNotMatch(ef.querySelector('[data-daily-spark]').innerHTML, /no-chart/, 'September daily chart from the payload');
+
+  const pa = panel('pardes');
+  assert.deepEqual(logNames(pa.querySelector('[data-log="entries"]')), ['תמר אלון']);
+  assert.match(pa.querySelector('[data-log="exits"]').innerHTML, /data-settled-log="empty">לא היו יציאות בספטמבר 2026</, 'a month with none, confirmed by the data');
+  assert.match(pa.querySelector('[data-breakdown]').children[4].innerHTML, /לא היו הפניות פעילות בספטמבר 2026[\s\S]*0 ₪/);
+  assert.equal(/data-hero-headline>([^<]*)</.exec(pa.querySelector('[data-status-banner]').innerHTML)[1], 'ספטמבר 2026 — סופי: זכאי · מדרגה 2 · 2,500 ₪');
+
+  for (const key of ['efroni', 'pardes']) {
+    const text = allTextOf(panel(key));
+    assert.doesNotMatch(text, /אין נתוני (כניסות|יציאות|הפניות)/, `${key}: no «אין נתוני…» for data the backend has`);
+    assert.doesNotMatch(text, /כניסת אוקטובר|2577|2,577/, `${key}: no October row and no backend figure`);
+    for (const w of FORBIDDEN_HISTORY) assert.ok(!text.includes(w), `${key}: a settled month never says "${w}"`);
+  }
+});
+
+test('settled Sep 2026: a tab opened while September is selected fetches its own month payload', async () => {
+  const { ctx, calls, panel } = await bootOct({}, ['efroni']);
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  calls.length = 0;
+  call(ctx, 'renderHouseDetail', 'pardes', {});
+  assert.match(panel('pardes').querySelector('[data-log="entries"]').innerHTML, /data-settled-log="loading">טוען כניסות — ספטמבר 2026…</);
+  await vm.runInContext('Promise.all(Object.values(state.loadingSettledDetails))', ctx);
+  assert.deepEqual(houseCalls(calls), [{ action: 'managersHouse', month: '2026-09', house: 'pardes' }]);
+  assert.deepEqual(logNames(panel('pardes').querySelector('[data-log="entries"]')), ['תמר אלון']);
+});
+
+test('settled Sep 2026: a failed house fetch is an explicit error state — never «אין נתונים», never a guessed 0 — and is retried on re-select', async () => {
+  const { ctx, calls, panel, heal } = await bootOct({ failHouse: 'efroni' });
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  const ef = panel('efroni');
+  assert.match(ef.querySelector('[data-log="entries"]').innerHTML, /log-empty error" data-settled-log="error">שגיאה בטעינת כניסות לספטמבר 2026: upstream down</);
+  assert.match(ef.querySelector('[data-log="exits"]').innerHTML, /data-settled-log="error">שגיאה בטעינת יציאות לספטמבר 2026: upstream down</);
+  assert.equal(ef.querySelector('[data-stat="entries"]').textContent, '—');
+  assert.equal(ef.querySelector('[data-stat="exits"]').textContent, '—');
+  const ref = ef.querySelector('[data-breakdown]').children[4].innerHTML;
+  assert.match(ref, /שגיאה בטעינת הפניות לספטמבר 2026: upstream down[\s\S]*bk-amount">—</, 'referral amount unknown, not 0 ₪');
+  assert.equal(ef.querySelector('[data-bonus-fallback-note]').textContent, 'לא כולל בונוס הפניות — הנתונים לא נטענו');
+  assert.match(ef.querySelector('[data-daily-spark]').innerHTML, /data-bonus-history-state="chart-error">שגיאה בטעינת התפוסה היומית לספטמבר 2026: upstream down/);
+  assert.doesNotMatch(allTextOf(ef), /אין נתוני/);
+  // The tier figures come from the month overview, which did load.
+  assert.match(ef.querySelector('[data-status-banner]').innerHTML, /זכאי · מדרגה 1 · 2,000 ₪/);
+  // Pardes is unaffected.
+  assert.deepEqual(logNames(panel('pardes').querySelector('[data-log="entries"]')), ['תמר אלון']);
+
+  heal();
+  calls.length = 0;
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  assert.deepEqual(houseCalls(calls).map((c) => c.house), ['efroni'], 'only the failed house is retried');
+  assert.deepEqual(logNames(ef.querySelector('[data-log="entries"]')), ['אבי גל', 'נועה ברק']);
+  assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '2,700 ₪');
+  assert.equal(ef.querySelector('[data-bonus-fallback-note]').textContent, '', 'note cleared once referrals are known');
+});
+
+test('settled Sep 2026: a house payload for the wrong month, or without its activity list, is an error — never shown under September, never "none"', async () => {
+  const { ctx, panel } = await bootOct({ wrongMonthHouse: 'efroni', noActivityHouse: 'pardes' });
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  const ef = panel('efroni');
+  assert.match(ef.querySelector('[data-log="entries"]').innerHTML, /data-settled-log="error">שגיאה בטעינת כניסות לספטמבר 2026: התקבלו נתונים לחודש אחר \(2026-10\)</);
+  assert.equal(ef.querySelector('[data-stat="entries"]').textContent, '—');
+  const pa = panel('pardes');
+  assert.match(pa.querySelector('[data-log="exits"]').innerHTML, /data-settled-log="error">שגיאה בטעינת יציאות לספטמבר 2026: רשימת הכניסות והיציאות לא התקבלה</);
+  assert.equal(pa.querySelector('[data-stat="entries"]').textContent, '—', 'entriesMonth alone is not shown as a count');
+});
+
+test('house keys: efroni is requested as "efroni" (never "arfoni"), pardes as "pardes"; backend "arfoni" rows and payloads map to efroni', async () => {
+  // Overview row AND house payload keyed 'arfoni' (the Patients-sheet id).
+  const { ctx, calls, panel } = await bootOct({ arfoniRow: true, houseKeyArfoni: true });
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  assert.deepEqual(houseCalls(calls).map((c) => c.house).sort(), ['efroni', 'pardes']);
+  assert.ok(!calls.some((c) => c.house === 'arfoni'), 'managersHouse_ answers unknown_house for arfoni');
+  const ef = panel('efroni');
+  assert.match(ef.querySelector('[data-status-banner]').innerHTML, /ספטמבר 2026 — סופי: זכאי · מדרגה 1 · 2,000 ₪/, 'the arfoni overview row is efroni\'s row');
+  assert.deepEqual(logNames(ef.querySelector('[data-log="entries"]')), ['אבי גל', 'נועה ברק'], 'an arfoni-keyed payload is accepted for efroni');
+  // A key outside the roster is never requested.
+  calls.length = 0;
+  assert.equal(await call(ctx, 'loadSettledHouse_', 'arfoni', '2026-09'), false);
+  assert.equal(await call(ctx, 'loadSettledHouse_', 'pardes', '2026-9'), false);
+  assert.equal(calls.length, 0);
+});
+
+test('settled month: an overview row without treatmentDays is MISSING data, not "לא זכאי · 0 ₪"', async () => {
+  const { ctx, panel, byId } = await bootOct({ dropDays: 'rehab' }, ['rehab']);
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  const hero = panel('rehab').querySelector('[data-status-banner]').innerHTML;
+  assert.match(hero, /data-bonus-history-state="missing">ספטמבר 2026 — סופי: הנתונים לא זמינים לבית זה/);
+  assert.doesNotMatch(hero, /לא זכאי|0 ₪/);
+  assert.equal(panel('rehab').querySelector('[data-stat="bonus"]').textContent, '—');
+  const card = byId.get('houseGrid').children.find((c) => c.getAttribute('data-house-card') === 'rehab');
+  assert.doesNotMatch(card.innerHTML, /לא זכאי/);
+});
+
+test('running month on 1 Oct 2026 is byte-for-byte unchanged after picking September and returning; the settled payload never enters state.details', async () => {
+  const { ctx, byId, panel } = await bootOct();
+  const snap = () => ({
+    detail: ['efroni', 'pardes'].map((k) => ({
+      hero: panel(k).querySelector('[data-status-banner]').innerHTML,
+      entries: panel(k).querySelector('[data-log="entries"]').innerHTML,
+      entriesKids: panel(k).querySelector('[data-log="entries"]').children.map((li) => li.innerHTML),
+      exits: panel(k).querySelector('[data-log="exits"]').children.map((li) => li.innerHTML),
+      kpis: ['entries', 'exits', 'treatmentDays', 'bonus', 'bonusTotal'].map((n) => panel(k).querySelector(`[data-stat="${n}"]`).textContent),
+      split: panel(k).querySelector('[data-month-split]').innerHTML,
+      breakdown: panel(k).querySelector('[data-breakdown]').children.map((li) => li.innerHTML)
+    })),
+    kpi: byId.get('kpiBonus').textContent,
+    banner: byId.get('winnersBanner').innerHTML,
+    cards: byId.get('houseGrid').children.map((c) => c.innerHTML),
+    state: vm.runInContext('JSON.stringify({ o: state.overview, m: state.monthOverviews, p: state.prevOverview, c: state.chartsByMonth, d: state.details, q: state.quarterWindow })', ctx)
+  });
+  const before = snap();
+  assert.deepEqual(before.detail[0].entriesKids.length, 1, 'running month shows the October admission');
+  await call(ctx, 'selectBonusMonth_', '2026-09');
+  assert.notDeepEqual(snap().detail, before.detail);
+  await call(ctx, 'selectBonusMonth_', '2026-10');
+  assert.deepEqual(snap(), before);
+  assert.equal(vm.runInContext('Object.keys(state.settledDetails["2026-09"]).sort().join()', ctx), 'efroni,pardes');
 });

@@ -257,3 +257,16 @@ test('quarterly pays 5000 only when all 3 finished months earned >= 2000', () =>
   const boundary = quarterlyStatus(win, { '2026-05': 1999, '2026-06': 2500, '2026-07': 3000 });
   assert.equal(boundary.earned, 0);
 });
+
+test('continuityAmount: referral counts × 100/500/1000, paid only when eligible; the feed total is never used', () => {
+  const { continuityAmount, CONTINUITY_RATES } = require('../lib/bonus-eligibility');
+  assert.deepEqual(CONTINUITY_RATES, { maintenance: 100, day_2x: 500, day_daily: 1000 });
+  const r = continuityAmount({ maintenance: 2, day_2x: 1, day_daily: 1, total: 2577 }, true);
+  assert.equal(r.gross, 1700);
+  assert.equal(r.total, 1700);
+  assert.equal(continuityAmount({ maintenance: 2, day_2x: 1 }, false).total, 0, 'not eligible → not paid');
+  assert.equal(continuityAmount({ maintenance: 2, day_2x: 1 }, false).gross, 700);
+  const junk = continuityAmount({ maintenance: '-3', day_2x: 'x', day_daily: 1.9 }, true);
+  assert.deepEqual([junk.maintenance, junk.day_2x, junk.day_daily, junk.total], [0, 0, 1, 1000]);
+  assert.equal(continuityAmount(null, true).total, 0);
+});
