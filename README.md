@@ -145,3 +145,8 @@ every push to `main` (Node 18/20/22).
 ## Deploy
 
 Procfile + `railway.json` included — push to Railway and it runs `node server.js` on port `$PORT`.
+
+`GET /api/version` returns `{commit, builtAt}` (`no-store`): `commit` is
+Railway's `RAILWAY_GIT_COMMIT_SHA` (`"unknown"` when unset), so a deploy can be
+confirmed by comparing it with the merge SHA. `GET /healthz` is the Railway
+health check.

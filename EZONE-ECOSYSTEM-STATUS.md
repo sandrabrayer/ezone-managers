@@ -319,6 +319,15 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   Details: `docs/bonus-month-labelling.md` → "Settled month — the house's
   own data"; `CHANGELOG-settled-month-house-data.md`.
 
+## Managers: `GET /api/version` + self-merge rules (October 8, 2026)
+
+- New public endpoint `GET /api/version` → `{commit, builtAt}`, `no-store`.
+  `commit` = Railway's built-in `RAILWAY_GIT_COMMIT_SHA` (hex-validated, else
+  `"unknown"`). No new Railway variable. Used to confirm a merge reached prod.
+- `CLAUDE.md` now authorizes Claude to merge its own Managers PRs on green CI
+  and to verify the deploy via `/api/version`. Production URL still unrecorded.
+- Lockfile: proxy-addr 2.0.8 (critical advisory fixed). Tests 192 → 197, SW v14.
+
 ## Managers: house roster (5 houses, current as of September 5, 2026)
 
 The Managers app (`ezone-managers`) covers FIVE houses. Hardcoded fallbacks

@@ -3,6 +3,28 @@
 
 ## Unreleased
 
+### Added — autonomous-work rules in CLAUDE.md + `GET /api/version` (October 8, 2026)
+
+**What**:
+- `CLAUDE.md` rewritten for autonomous Claude Code work: a "Repo facts"
+  table (deployed branch `main`, production URL unknown, no Apps Script
+  deploy in this repo, `npm test`, `/api/version`), and rules for language,
+  per-change checklist, git, self-merge on green CI, post-merge deploy
+  verification, and the final report.
+- `GET /api/version` — public, `Cache-Control: no-store`, returns only
+  `{commit, builtAt}`. `commit` is `RAILWAY_GIT_COMMIT_SHA` (a Railway-provided
+  variable; no new variable to set) when it is a hex SHA, else `"unknown"`;
+  `builtAt` is the process start time.
+- `package-lock.json`: `npm audit fix` — proxy-addr 2.0.7 → 2.0.8 (critical
+  GHSA-jqcg-44mw-7w3h), body-parser 1.20.5 → 1.20.8. One moderate `qs`
+  advisory remains (pinned by express 4.22.1); 0 high / 0 critical.
+
+**Why**: lets Claude verify that a merge actually reached production, and
+records the repo's rules for unattended sessions.
+
+**Tests**: 192 → 197 (`test/version.test.js`). Nothing under `public/`
+changed, so the SW cache stays v14.
+
 ### Changed — referral bonus switched off (October 1, 2026)
 
 **What**: Referral bonus disabled by decision (1 Oct 2026); switch: CONTINUITY_BONUS_ENABLED in lib/bonus-eligibility.js. Managers get occupancy bonuses only.

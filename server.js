@@ -111,6 +111,19 @@ app.get('/lib/bonus-eligibility.js', (_req, res) => {
 
 app.get('/healthz', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
+// ---- deploy verification ----
+// Public on purpose: lets anyone confirm which commit Railway is serving.
+// Returns ONLY the commit SHA (Railway's RAILWAY_GIT_COMMIT_SHA, validated as
+// hex so no arbitrary env text is ever echoed) and the process start time.
+const BUILT_AT = new Date().toISOString();
+const SHA_RE = /^[0-9a-f]{7,40}$/i;
+
+app.get('/api/version', (_req, res) => {
+  const sha = String(process.env.RAILWAY_GIT_COMMIT_SHA || '');
+  res.set('Cache-Control', 'no-store');
+  res.json({ commit: SHA_RE.test(sha) ? sha.toLowerCase() : 'unknown', builtAt: BUILT_AT });
+});
+
 // ---- Apps Script proxy ----
 const ALLOWED_QUERY_KEYS = new Set(['action', 'house', 'month']);
 
