@@ -49,8 +49,29 @@ test('index.html has a tab and a panel for every house key', () => {
   }
 });
 
-test('pardes bonus parameters are copied from efroni exactly', () => {
-  assert.deepEqual(HOUSE_BONUS.pardes, HOUSE_BONUS.efroni);
+test('every rule set covers exactly HOUSE_KEYS', () => {
+  const { RULE_SETS } = require('../lib/bonus-eligibility');
+  for (const set of RULE_SETS) {
+    assert.deepEqual(Object.keys(set.houses).sort(), [...KEYS].sort(), `rule set from ${set.from}`);
+  }
+});
+
+test('current first tiers (from Oct 2026): ramot 14, raanana 10, efroni 9, rehab 9, pardes 7; tiers 2/3 unchanged', () => {
+  const first = Object.fromEntries(Object.entries(HOUSE_BONUS).map(([k, v]) => [k, v.threshold]));
+  assert.deepEqual(first, { ramot: 14, raanana: 10, efroni: 9, rehab: 9, pardes: 7 });
+  const upper = (k) => HOUSE_BONUS[k].tiers.slice(0, 2).map((t) => [t.patients, t.amount]);
+  assert.deepEqual(upper('ramot'), [[20, 3000], [19, 2500]]);
+  assert.deepEqual(upper('raanana'), [[14, 3000], [12, 2500]]);
+  for (const k of ['efroni', 'rehab', 'pardes']) assert.deepEqual(upper(k), [[13, 3000], [12, 2500]], k);
+});
+
+test('HOUSE_LABELS threshold fallbacks match the current first tiers', () => {
+  const labels = appJs.match(/const HOUSE_LABELS = \{([\s\S]*?)\n\};/)[1];
+  for (const key of KEYS) {
+    const row = labels.match(new RegExp(`${key}:\\s*\\{[^}]*threshold:\\s*(\\d+)`));
+    assert.ok(row, `HOUSE_LABELS.${key} must declare a threshold`);
+    assert.equal(Number(row[1]), HOUSE_BONUS[key].threshold, key);
+  }
 });
 
 test("managers: raanana is שחר, ramot is אורן, pardes is חן", () => {

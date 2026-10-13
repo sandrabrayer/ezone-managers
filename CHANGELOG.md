@@ -3,6 +3,60 @@
 
 ## Unreleased
 
+### Changed — lower first bonus tier + outpatient day-package bonus, from October 2026 (October 13, 2026)
+
+**What** (Sandra's decision, 13 Oct 2026; effective for **October 2026 and
+every later month** — nothing earlier changes):
+- **Lower first tier** (tier 1 = 2,000 ₪; the treatment-days gate is the
+  first tier × 30):
+
+  | House | Up to Sep 2026 | From Oct 2026 |
+  |---|---|---|
+  | רמות השבים (`ramot`) | 17 → gate 510 | **14 → gate 420** |
+  | קיסריה עפרוני (`efroni`) | 10 → gate 300 | **9 → gate 270** |
+  | קיסריה ריהאב (`rehab`) | 10 → gate 300 | **9 → gate 270** |
+  | רעננה הפרדס (`pardes`) | 10 → gate 300 | **7 → gate 210** |
+  | רעננה אשר (`raanana`) | 10 → gate 300 | 10 → gate 300 (unchanged) |
+
+  Tiers 2 and 3 (2,500 / 3,000 ₪) and their patient counts are unchanged.
+- **Outpatient day-package bonus** («בונוס הפניות להמשך טיפול»): 300 ₪ per
+  outpatient from the manager's house in a day package (`day_2x` or
+  `day_daily`) per month. `maintenance` pays 0. Paid whether or not the house
+  earned its occupancy bonus. It does **not** count toward the quarterly
+  5,000 ₪ check (still occupancy amount ≥ 2,000 in each month).
+- **Month-aware rules**: `lib/bonus-eligibility.js` now holds `RULE_SETS`
+  (from 2026-05: the original rules, no referral bonus; from 2026-10: the new
+  rules). Every calculation uses the rule set of the month it evaluates (the
+  house object's `ym`, then `month`), so August / September results and the
+  Aug–Oct quarterly marks for August and September are exactly as before.
+  `HOUSE_BONUS` = the current rule set. New exports: `RULE_SETS`,
+  `ruleSetFor`, `rulesFor`, `monthOf`, `referralRuleFor`.
+- `CONTINUITY_BONUS_ENABLED` / `CONTINUITY_RATES` are replaced by the
+  month-aware referral rule plus one kill switch,
+  `REFERRAL_BONUS_KILL_SWITCH` (false; true forces the referral bonus to 0
+  and hides its line in every month). `continuityAmount(counts, eligible,
+  ym)` now takes the month and also returns `payableCount` / `unitRate`.
+- UI: every threshold and gate comes from the displayed month's rules
+  (cards, hero, tier track, days bar, occupancy history). The referral line
+  reads `N מטופלים בחבילה יומית × 300 ₪`; the settled money KPI, the winners
+  banner (a referral-only manager is a winner), settled cards and the house
+  tab add the referral bonus; the running month shows it under
+  `(בתהליך)`. `HOUSE_LABELS` threshold fallbacks = the new values.
+
+**Why**: Sandra wants the managers to reach their bonuses, and to reward
+referring discharged patients to outpatient day packages.
+
+**Data source**: referral counts come from the dashboard Apps Script's
+"Outpatients" sheet (`house_of_origin`, `therapy_type`, `start_date`,
+`end_date`); a row that overlaps the month counts as a full month. No backend
+change, no new endpoint.
+
+**Tests**: 197 → 224. September 2026 renders byte-identically (the
+running-month golden snapshot is unchanged). The three render tests that
+switched the old referral bonus on for July / September now assert that
+those months pay no referral bonus; the old-rule library tests are pinned to
+September 2026. SW cache v14 → v15.
+
 ### Added — autonomous-work rules in CLAUDE.md + `GET /api/version` (October 8, 2026)
 
 **What**:

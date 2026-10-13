@@ -75,10 +75,31 @@ explicit loading / error state, never «אין נתונים». `חזרה לחו�
 restores the live view. See `docs/bonus-month-labelling.md` → "Bonus history
 month picker" and "Settled month — the house's own data".
 
-**Referral bonus disabled by decision (1 Oct 2026); switch:
-`CONTINUITY_BONUS_ENABLED` in `lib/bonus-eligibility.js`.** Managers get
-occupancy bonuses only. No total includes referrals, and the «בונוס הפניות
-להמשך טיפול» line is not shown, in the running month or in finished months.
+## Bonus rules (month-aware)
+
+The rules live in `RULE_SETS` in `lib/bonus-eligibility.js`. A month is
+judged by the latest rule set that started on or before it, so a rule change
+never rewrites a settled month.
+
+| House | First tier / gate up to Sep 2026 | From Oct 2026 |
+|---|---|---|
+| רמות השבים | 17 / 510 | **14 / 420** |
+| רעננה אשר | 10 / 300 | 10 / 300 |
+| קיסריה עפרוני | 10 / 300 | **9 / 270** |
+| קיסריה ריהאב | 10 / 300 | **9 / 270** |
+| רעננה הפרדס | 10 / 300 | **7 / 210** |
+
+Tier 1 pays 2,000 ₪ once the treatment-days gate (first tier × 30) is met;
+tiers 2 and 3 (2,500 / 3,000 ₪) are unchanged. Quarterly: 5,000 ₪ when the
+occupancy bonus was ≥ 2,000 ₪ in each month of the window.
+
+**Outpatient day-package bonus («בונוס הפניות להמשך טיפול»), from Oct 2026:**
+300 ₪ per outpatient from the house in a day package (two days a week or
+daily) per month; maintenance pays 0. Paid whether or not the occupancy bonus
+was earned; not part of the quarterly check. None before Oct 2026. Counts come
+from the dashboard's "Outpatients" sheet (any overlap with the month counts as
+a full month). Kill switch: `REFERRAL_BONUS_KILL_SWITCH` in
+`lib/bonus-eligibility.js`.
 
 ## Monthly occupancy (סופי) + CSV export
 

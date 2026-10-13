@@ -9,24 +9,39 @@
 
 const HOUSE_KEYS = ['raanana', 'ramot', 'efroni', 'rehab', 'pardes'];
 
-/* `threshold` = end-of-month patients needed to be eligible for ANY bonus
-   (the agreed model: Ramot 18, others 10). This is NOT the internal
-   equilibrium point (11/8/8/7) — that point is internal-only and must not
-   gate the bonus. `capacity` is the physical bed count. */
+/* `threshold` = FALLBACK only: the CURRENT first-tier average (rules from
+   Oct 2026: Ramot 14, Ra'anana 10, Efroni 9, Rehab 9, Pardes 7). The real
+   threshold is month-aware and always comes from BonusEligibility (an
+   August month is still judged by the old rules). `capacity` is the
+   physical bed count. */
 const HOUSE_LABELS = {
   raanana: { name: 'רעננה אשר',     manager: 'שחר',   type: 'בית מאזן',     threshold: 10, capacity: 14 },
-  ramot:   { name: 'רמות השבים',    manager: 'אורן',  type: 'בית מאזן',     threshold: 17, capacity: 20 },
-  efroni:  { name: 'קיסריה עפרוני', manager: 'חנן',   type: 'תחלואה כפולה', threshold: 10, capacity: 13 },
-  rehab:   { name: 'קיסריה ריהאב',  manager: 'רנטה',  type: 'גמילה',        threshold: 10, capacity: 13 },
-  pardes:  { name: 'רעננה הפרדס',   manager: 'חן',    type: 'תחלואה כפולה', threshold: 10, capacity: 13 }
+  ramot:   { name: 'רמות השבים',    manager: 'אורן',  type: 'בית מאזן',     threshold: 14, capacity: 20 },
+  efroni:  { name: 'קיסריה עפרוני', manager: 'חנן',   type: 'תחלואה כפולה', threshold: 9, capacity: 13 },
+  rehab:   { name: 'קיסריה ריהאב',  manager: 'רנטה',  type: 'גמילה',        threshold: 9, capacity: 13 },
+  pardes:  { name: 'רעננה הפרדס',   manager: 'חן',    type: 'תחלואה כפולה', threshold: 7, capacity: 13 }
 };
 
-/* Bonus-eligibility threshold for a house (end-of-month patient count).
-   Prefers the canonical per-house config in BonusEligibility, then explicit
-   payload fields, then the HOUSE_LABELS fallback. */
+/* The month a house object is shown for (YYYY-MM): its own `ym` / `month`,
+   else the overview's month, else today. The bonus RULES are month-aware, so
+   every rule lookup goes through this. */
+function ymOfHouse_(h) {
+  const own = window.BonusEligibility?.monthOf?.(h);
+  return own || state.overview?.month || currentMonthYM_();
+}
+/* `h` with its month pinned (as `ym`) for a BonusEligibility call. */
+function atYM_(h, ym) {
+  if (!h) return h;
+  return { ...h, ym: ym || ymOfHouse_(h) };
+}
+
+/* Bonus-eligibility threshold (first-tier average) for a house in the month
+   it is shown for. Prefers the canonical month-aware rules in
+   BonusEligibility, then explicit payload fields, then the HOUSE_LABELS
+   fallback. */
 function resolveThreshold(h) {
   if (!h) return 0;
-  const fromLib = window.BonusEligibility?.thresholdOf?.(h);
+  const fromLib = window.BonusEligibility?.thresholdOf?.(atYM_(h));
   if (Number.isFinite(fromLib) && fromLib > 0) return fromLib;
   if (Number.isFinite(h.bonusThreshold)) return h.bonusThreshold;
   if (Number.isFinite(h.threshold)) return h.threshold;
@@ -191,6 +206,7 @@ function renderWinnersBanner_(houses) {
       manager: BV.safeLabel(h.manager) || HOUSE_LABELS[h.key]?.manager || '',
       amount: p ? p.amount : 0,
       tier: p ? p.tier : 0,
+      referral: p ? settledReferralFor_(h.key, prevYM, p.eligible) : 0,
       quarterly: q.earned
     };
   });
@@ -224,7 +240,7 @@ function settledAmountFor_(key, ym) {
   const ph = byKey ? byKey[key] : null;
   if (!ph) return null;
   const r = window.BonusEligibility.monthlyBonusAmount(
-    { key, avgDaily: Number(ph.avgDaily) || 0, treatmentDays: Number(ph.treatmentDays) || 0 },
+    { key, ym, avgDaily: Number(ph.avgDaily) || 0, treatmentDays: Number(ph.treatmentDays) || 0 },
     resolveThreshold, daysInMonthFromLabel(ym)
   );
   return r.amount;
@@ -391,16 +407,26 @@ function treatmentNightsOf(h) {
   return h?.treatmentDays ?? 0;
 }
 
-/* Referral («הפניות להמשך טיפול») bonus for one house — running AND finished
- * months go through here. Computed locally from the raw COUNTS only
- * (BonusEligibility.continuityAmount); the feed's own `continuity.total` is
- * never read. While BonusEligibility.CONTINUITY_BONUS_ENABLED is false (the
- * decision of 1 Oct 2026) the total is 0 and the line is not rendered. */
-function referralBonus_(counts, eligible) {
-  return window.BonusEligibility.continuityAmount(counts || {}, !!eligible);
+/* Referral («הפניות להמשך טיפול») bonus for one house in month `ym` —
+ * running AND finished months go through here. Computed locally from the raw
+ * COUNTS only (BonusEligibility.continuityAmount); the feed's own
+ * `continuity.total` / `rates` are never read. The rule is month-aware:
+ * nothing before Oct 2026; from Oct 2026 300 ₪ per day-package outpatient,
+ * independent of the occupancy bonus. */
+function referralBonus_(counts, eligible, ym) {
+  return window.BonusEligibility.continuityAmount(counts || {}, !!eligible, ym);
 }
-function referralsEnabled_() {
-  return window.BonusEligibility.continuityEnabled() === true;
+function referralsEnabled_(ym) {
+  return window.BonusEligibility.continuityEnabled(ym) === true;
+}
+/* Settled referral amount for a house in a FINISHED month, from that month's
+ * overview row (counts only). 0 when the row is missing or the month has no
+ * referral bonus. */
+function settledReferralFor_(key, ym, eligible) {
+  const byKey = monthByKey_(ym);
+  const ph = byKey ? byKey[key] : null;
+  const counts = ph && ph.bonus ? ph.bonus.continuity : null;
+  return referralBonus_(counts, eligible, ym).total;
 }
 
 /* ============================================================
@@ -562,9 +588,12 @@ function renderOverview(data) {
   // Headline money KPI: the SETTLED bonuses to pay for the month that
   // finished, computed locally per house from last month's raw figures.
   const prevYM = state.prevOverview ? state.prevOverview.month : prevMonthYM_(nowYM);
+  // Occupancy bonus + the outpatient referral bonus of that month (from Oct
+  // 2026; 0 before). Quarterly is shown separately in the winners banner.
   const prevTotal = houses.reduce((s, h) => {
     const p = prevMonthSettled_(h.key);
-    return s + (p ? p.amount : 0);
+    if (!p) return s;
+    return s + p.amount + settledReferralFor_(h.key, prevYM, p.eligible);
   }, 0);
   const daysInMonth = daysInMonthFromLabel(nowYM);
   const dayOfMonth = Math.min(daysInMonth, now_().getDate());
@@ -641,7 +670,7 @@ function renderNetworkSpark(houses) {
 }
 
 function qualifiesMonthly(h) {
-  return window.BonusEligibility.qualifiesMonthly(h, resolveThreshold);
+  return window.BonusEligibility.qualifiesMonthly(atYM_(h), resolveThreshold);
 }
 
 function monthDaysOf(h) {
@@ -656,7 +685,7 @@ function monthDaysOf(h) {
     average daily occupancy; it is paid only if treatment-days met the fixed
     house gate (threshold × 30). Returns the full BonusEligibility result. */
 function monthlyBonusResult(h) {
-  return window.BonusEligibility.monthlyBonusAmount(h, resolveThreshold, monthDaysOf(h));
+  return window.BonusEligibility.monthlyBonusAmount(atYM_(h), resolveThreshold, monthDaysOf(h));
 }
 
 /* SINGLE source of truth for "treatment-days so far this month".
@@ -795,9 +824,9 @@ function buildHouseCard(h) {
   const cur = status.view;           // null when the overview month is finished
   const quartly = quarterlyEarnedAmount(h);
   const secured = status.state === 'locked' || (status.state === 'finished' && status.amount > 0);
-  const cont = referralBonus_(h.bonus && h.bonus.continuity, secured);
-  const isProjection = status.state === 'projection';
   const nowYM = h.month || state.overview?.month || currentMonthYM_();
+  const cont = referralBonus_(h.bonus && h.bonus.continuity, secured, nowYM);
+  const isProjection = status.state === 'projection';
   const nowLabel = BV.monthLabel(nowYM);
 
   const card = document.createElement('div');
@@ -813,6 +842,7 @@ function buildHouseCard(h) {
 
   // ── Block 1: settled previous month (final state only) ──
   const prev = prevMonthSettled_(key);
+  const prevReferral = prev ? settledReferralFor_(key, prev.month, prev.eligible) : 0;
   const settledBlock = prev
     ? `<div class="hc-month hc-settled ${prev.amount > 0 ? 'earned' : 'not-earned'}" data-month-block="settled">
          <div class="hc-month-head">
@@ -820,7 +850,8 @@ function buildHouseCard(h) {
            <span class="hc-month-amt">${fmtCurrency(prev.amount)}</span>
          </div>
          <div class="hc-month-line" data-settled-status>${prev.statusText}</div>
-         <div class="hc-month-line dim">ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום · ${fmtInt(prev.treatmentDays)}/${fmtInt(prev.gate)} ימי טיפול</div>
+         <div class="hc-month-line dim">ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום · ${fmtInt(prev.treatmentDays)}/${fmtInt(prev.gate)} ימי טיפול</div>${prevReferral > 0 ? `
+         <div class="hc-month-line" data-settled-referral>בונוס הפניות ${fmtCurrency(prevReferral)}</div>` : ''}
        </div>`
     : `<div class="hc-month hc-settled not-earned" data-month-block="settled">
          <div class="hc-month-head">
@@ -984,7 +1015,7 @@ function renderHouseDetail(key, data) {
   const paid = (status.state === 'finished' && status.amount > 0) || status.state === 'locked';
   const above = eligible;
 
-  const cfg = tierCfgFor_(key, monthlyResult);
+  const cfg = tierCfgFor_(key, monthlyResult, viewingYM);
 
   const activity = Array.isArray(data.activity) ? data.activity : [];
   const entries = activity.filter(a => a.kind === 'entry');
@@ -1018,9 +1049,9 @@ function renderHouseDetail(key, data) {
   setStatLabel(panel, 'treatmentDays', cur ? `ימי טיפול עד כה — ${viewingLabel} (בתהליך)` : `ימי טיפול — ${viewingLabel}`);
   setStat(panel, 'treatmentDays', fmtInt(nights));
 
-  // Referrals: local, counts only, paid only once the occupancy bonus is
-  // secured; 0 while the referral bonus is switched off.
-  const cont = referralBonus_(merged.bonus && merged.bonus.continuity, paid);
+  // Referrals: local, counts only, month-aware (from Oct 2026: 300 ₪ per
+  // day-package outpatient, independent of the occupancy bonus).
+  const cont = referralBonus_(merged.bonus && merged.bonus.continuity, paid, viewingYM);
   const quartly = quarterlyEarnedAmount(merged);
   // Only secured monthly (locked/finished) + actually-earned quarterly.
   const totalBonus = status.amount + (cont.total || 0) + (quartly || 0);
@@ -1092,7 +1123,7 @@ function renderHouseDetail(key, data) {
   renderQuarterlyTrack(panel, merged, cfg, target);
 
   // Bonus breakdown (educational)
-  renderBreakdown(panel, merged, { above, tier: tier.tier, cfg, target, nights, occ, cont, quartly, totalBonus, monthlyResult, status });
+  renderBreakdown(panel, merged, { ym: viewingYM, above, tier: tier.tier, cfg, target, nights, occ, cont, quartly, totalBonus, monthlyResult, status });
 
   // Logs
   renderEntries(panel.querySelector('[data-log="entries"]'), entries);
@@ -1112,9 +1143,10 @@ function setStatLabel(panel, name, text) {
 }
 
 /* Compatibility config for the detail-page visualizations. Tier patient
- * counts come from the canonical per-house table. Quarterly is unchanged. */
-function tierCfgFor_(key, monthlyResult) {
-  const houseCfg = (window.BonusEligibility.HOUSE_BONUS || {})[key] || null;
+ * counts come from the canonical per-house table OF THAT MONTH (the rules
+ * are month-aware). Quarterly is unchanged. */
+function tierCfgFor_(key, monthlyResult, ym) {
+  const houseCfg = window.BonusEligibility.rulesFor(key, ym) || null;
   const tierTable = (houseCfg && Array.isArray(houseCfg.tiers)) ? houseCfg.tiers.slice() : [];
   return {
     base: monthlyResult.amount || (tierTable.length ? tierTable[tierTable.length - 1].amount : 0),
@@ -1487,7 +1519,11 @@ function renderOverviewSettled_(ym) {
   const views = houses.map(settledViewFor_);
   const known = views.filter(Boolean);
   const earned = known.filter(v => v.amount > 0).length;
-  const total = known.reduce((s, v) => s + v.amount, 0);
+  // Occupancy + that month's referral bonus (0 before Oct 2026).
+  const total = houses.reduce((s, h, i) => {
+    const v = views[i];
+    return v ? s + v.amount + settledReferralFor_(h.key, ym, v.eligible) : s;
+  }, 0);
   const avgTotal = known.reduce((s, v) => s + v.avgDaily, 0);
   const dim = daysInMonthFromLabel(ym);
 
@@ -1516,6 +1552,7 @@ function renderWinnersBannerSettled_(ym, houses, views) {
       manager: BV.safeLabel(h.manager) || HOUSE_LABELS[h.key]?.manager || '',
       amount: v ? v.amount : 0,
       tier: v ? v.tier : 0,
+      referral: v ? settledReferralFor_(h.key, ym, v.eligible) : 0,
       quarterly: q.earned
     };
   });
@@ -1615,6 +1652,7 @@ function buildSettledHouseCard_(h) {
   } else {
     const earned = s.amount > 0;
     const q = quarterlyLocal_(key, h.month);
+    const referral = settledReferralFor_(key, h.month, s.eligible);
     const avg = s.avgDaily;
     const denominator = cap || Math.max(avg, threshold) || 1;
     const fillPct = Math.min(100, (avg / denominator) * 100);
@@ -1635,7 +1673,8 @@ function buildSettledHouseCard_(h) {
           <span class="hc-month-amt">${fmtCurrency(s.amount)}</span>
         </div>
         <div class="hc-month-line" data-settled-status>${s.statusText}</div>
-        <div class="hc-month-line dim">ממוצע ${fmtNum1_(avg)} מטופלים/יום · ${s.gateText}</div>
+        <div class="hc-month-line dim">ממוצע ${fmtNum1_(avg)} מטופלים/יום · ${s.gateText}</div>${referral > 0 ? `
+        <div class="hc-month-line" data-settled-referral>בונוס הפניות ${fmtCurrency(referral)}</div>` : ''}
         ${q.earned > 0 ? `<div class="hc-month-line dim">רבעוני ${fmtCurrency(q.earned)}</div>` : ''}
       </div>
 
@@ -1755,13 +1794,13 @@ function renderHouseDetailSettled_(panel, key, ym) {
   const status = monthlyStatus(merged);   // 'finished' — merged.month is the selected month
   const target = status.target;
   const nights = s.treatmentDays;         // finished month: days-so-far = the full-month total
-  const cfg = tierCfgFor_(key, monthlyResult);
+  const cfg = tierCfgFor_(key, monthlyResult, ym);
   // Referrals: the COUNTS from the month's own house payload; the amount is
-  // computed locally (lib/bonus-eligibility.js), paid only if the house was
-  // eligible that month. Unknown until that payload has loaded.
+  // computed locally (lib/bonus-eligibility.js) with that month's rule.
+  // Unknown until that payload has loaded.
   const cont = sh && sh.ok
-    ? referralBonus_(sh.continuity, s.eligible)
-    : { maintenance: 0, day_2x: 0, day_daily: 0, total: 0 };
+    ? referralBonus_(sh.continuity, s.eligible, ym)
+    : { maintenance: 0, day_2x: 0, day_daily: 0, payableCount: 0, unitRate: 0, total: 0 };
   const contState = !sh ? 'loading' : sh.ok ? 'ok' : 'error';
   const quartly = quarterlyLocal_(key, ym).earned;
   const totalBonus = s.amount + quartly + cont.total;
@@ -1791,7 +1830,7 @@ function renderHouseDetailSettled_(panel, key, ym) {
   // total is incomplete while the referral figures are loading / failed —
   // and only while the referral bonus is switched on.
   let fallbackEl = panel.querySelector('[data-bonus-fallback-note]');
-  if (referralsEnabled_() && contState !== 'ok') {
+  if (referralsEnabled_(ym) && contState !== 'ok') {
     if (!fallbackEl) {
       fallbackEl = document.createElement('div');
       fallbackEl.setAttribute('data-bonus-fallback-note', '');
@@ -1840,7 +1879,7 @@ function renderHouseDetailSettled_(panel, key, ym) {
   const ctx = { key, cfg, target, nights, tier: s.tier, occ: s.avgDaily, monthlyResult, status, settled: s };
   renderTierTrack(panel, ctx);
   renderQuarterlyTrack(panel, merged, cfg, target);
-  renderBreakdown(panel, merged, { ...ctx, above: s.amount > 0, cont, contState, contError: sh && !sh.ok ? sh.error : '', quartly, totalBonus });
+  renderBreakdown(panel, merged, { ...ctx, ym, above: s.amount > 0, cont, contState, contError: sh && !sh.ok ? sh.error : '', quartly, totalBonus });
 
   renderSettledLogs_(panel, sh, label);
 
@@ -2043,7 +2082,7 @@ function renderHistoryView_(panel, key) {
     return;
   }
   const h = state.housesById[key] || { key };
-  const threshold = resolveThreshold(h);
+  const threshold = resolveThreshold(atYM_({ ...h, key }, ym)); // that month's rules
   const capacity = resolveCapacity(h);
   const settled = BV.settledMonthView(
     { key, ym, avgDaily: entry.avgDaily, treatmentDays: entry.treatmentDays },
@@ -2641,14 +2680,16 @@ function renderBreakdown(panel, data, ctx) {
     };
   });
 
+  const bkYM = ctx.ym || ymOfHouse_(data);
   const continuityFormula = (() => {
-    const parts = [];
-    if (ctx.cont.maintenance) parts.push(`${ctx.cont.maintenance} תחזוקתי × 100`);
-    if (ctx.cont.day_2x)      parts.push(`${ctx.cont.day_2x} יום 2/שבוע × 500`);
-    if (ctx.cont.day_daily)   parts.push(`${ctx.cont.day_daily} יום יומי × 1,000`);
-    if (parts.length) return parts.join(' · ');
+    const c = ctx.cont || {};
     if (sv && ctx.contState === 'loading') return `טוען הפניות — ${sv.label}…`;
     if (sv && ctx.contState === 'error') return `שגיאה בטעינת הפניות ל${sv.label}: ${escapeHtml_(ctx.contError)}`;
+    if (c.payableCount > 0) {
+      return c.unitRate > 0
+        ? `${fmtInt(c.payableCount)} מטופלים בחבילה יומית × ${fmtCurrency(c.unitRate)}`
+        : `${fmtInt(c.payableCount)} מטופלים בחבילה יומית`;
+    }
     return sv ? `לא היו הפניות פעילות ב${sv.label}` : 'אין הפניות פעילות החודש';
   })();
   // Referral amount is unknown (not 0) while the settled month's payload is
@@ -2672,9 +2713,9 @@ function renderBreakdown(panel, data, ctx) {
       zero: !ctx.quartly,
       gold: ctx.quartly > 0
     },
-    // «בונוס הפניות להמשך טיפול» — not rendered at all while the referral
-    // bonus is switched off (BonusEligibility.CONTINUITY_BONUS_ENABLED).
-    ...(referralsEnabled_() ? [{
+    // «בונוס הפניות להמשך טיפול» — rendered only for a month whose rules
+    // have a referral bonus (from Oct 2026) and while the kill switch is off.
+    ...(referralsEnabled_(bkYM) ? [{
       label: 'בונוס הפניות להמשך טיפול',
       formula: continuityFormula,
       amount: ctx.cont.total,

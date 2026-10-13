@@ -136,12 +136,57 @@ test('current month average is capped at capacity (front-dated stays cannot proj
 /* ── tier badge rules ────────────────────────────────────── */
 test('tierBadgeView: achieved only when an achieved tier is passed in', () => {
   assert.equal(BV.tierBadgeView({ key: 'ramot', achievedTier: 1, achievedAmount: 2000 }).text, 'מדרגה 1 · 2,000 ₪');
-  const b = BV.tierBadgeView({ key: 'ramot', avgDaily: 12 });
+  // Sep 2026 = the original rules (Ramot first tier 17).
+  const b = BV.tierBadgeView({ key: 'ramot', ym: '2026-09', avgDaily: 12 });
   assert.equal(b.achieved, false);
   assert.equal(b.text, 'מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12');
-  assert.equal(BV.tierBadgeView({ key: 'ramot', avgDaily: 17 }).text, 'מדרגה הבאה: 2 (19 מטופלים/יום) · ממוצע נוכחי 17');
-  assert.equal(BV.tierBadgeView({ key: 'ramot', avgDaily: 19.5 }).text, 'מדרגה הבאה: 3 (20 מטופלים/יום) · ממוצע נוכחי 19.5');
-  assert.equal(BV.tierBadgeView({ key: 'raanana', avgDaily: 9 }).text, 'מדרגה הבאה: 1 (10 מטופלים/יום) · ממוצע נוכחי 9');
+  assert.equal(BV.tierBadgeView({ key: 'ramot', ym: '2026-09', avgDaily: 17 }).text, 'מדרגה הבאה: 2 (19 מטופלים/יום) · ממוצע נוכחי 17');
+  assert.equal(BV.tierBadgeView({ key: 'ramot', ym: '2026-09', avgDaily: 19.5 }).text, 'מדרגה הבאה: 3 (20 מטופלים/יום) · ממוצע נוכחי 19.5');
+  assert.equal(BV.tierBadgeView({ key: 'raanana', ym: '2026-09', avgDaily: 9 }).text, 'מדרגה הבאה: 1 (10 מטופלים/יום) · ממוצע נוכחי 9');
+});
+
+test('tierBadgeView / tiersAscFor follow the month: Oct 2026 has the lower first tiers', () => {
+  assert.equal(BV.tierBadgeView({ key: 'ramot', ym: '2026-10', avgDaily: 12 }).text, 'מדרגה הבאה: 1 (14 מטופלים/יום) · ממוצע נוכחי 12');
+  assert.equal(BV.tierBadgeView({ key: 'ramot', ym: '2026-10', avgDaily: 14 }).text, 'מדרגה הבאה: 2 (19 מטופלים/יום) · ממוצע נוכחי 14');
+  assert.equal(BV.tierBadgeView({ key: 'pardes', ym: '2026-10', avgDaily: 6 }).text, 'מדרגה הבאה: 1 (7 מטופלים/יום) · ממוצע נוכחי 6');
+  assert.deepEqual(BV.tiersAscFor('efroni', '2026-10').map((t) => t.patients), [9, 12, 13]);
+  assert.deepEqual(BV.tiersAscFor('efroni', '2026-09').map((t) => t.patients), [10, 12, 13]);
+  assert.deepEqual(BV.tiersAscFor('efroni').map((t) => t.patients), [9, 12, 13], 'no month → current rules');
+});
+
+test('settledMonthView: Sep 2026 is judged by the old rules, Oct 2026 by the new ones', () => {
+  const sep = BV.settledMonthView({ key: 'ramot', ym: '2026-09', avgDaily: 15, treatmentDays: 450 });
+  assert.equal(sep.amount, 0);
+  assert.equal(sep.statusText, 'לא זכאי · המכסה לא הושלמה (450/510)');
+  const oct = BV.settledMonthView({ key: 'ramot', ym: '2026-10', avgDaily: 15, treatmentDays: 450 });
+  assert.equal(oct.amount, 2000);
+  assert.equal(oct.statusText, 'זכאי · מדרגה 1 · 2,000 ₪');
+  assert.equal(oct.gate, 420);
+  assert.equal(oct.threshold, 14);
+  const pardes = BV.settledMonthView({ key: 'pardes', ym: '2026-10', avgDaily: 7.4, treatmentDays: 222 });
+  assert.equal(pardes.gateText, '222/210 ימי טיפול · המכסה הושלמה');
+  assert.equal(pardes.amount, 2000);
+});
+
+test('currentMonthView: Oct 2026 running month uses the new gate (Ramot 420)', () => {
+  const v = BV.currentMonthView({ key: 'ramot', ym: '2026-10', daysSoFar: 180, elapsedDays: 12, daysInMonth: 31, capacity: 20 });
+  assert.equal(v.gate, 420);
+  assert.equal(v.actualText, '180/420 ימי טיפול');
+  assert.equal(v.threshold, 14);
+  assert.equal(v.projectedTier, 1, 'avg 15 → tier 1 under the new rules');
+});
+
+test('winnersBannerView: a referral-only manager is a winner; totals add occupancy + referral + quarterly', () => {
+  const v = BV.winnersBannerView('2026-10', [
+    { name: 'א', manager: 'מ1', amount: 0, tier: 0, referral: 600, quarterly: 0 },
+    { name: 'ב', manager: 'מ2', amount: 2000, tier: 1, referral: 300, quarterly: 5000 },
+    { name: 'ג', manager: 'מ3', amount: 0, tier: 0, referral: 0, quarterly: 0 }
+  ], null);
+  assert.equal(v.winners.length, 2);
+  assert.equal(v.winners[0].total, 600);
+  assert.equal(v.winners[0].text, 'בונוס הפניות 600 ₪');
+  assert.equal(v.winners[1].total, 7300);
+  assert.equal(v.winners[1].text, 'זכאי · מדרגה 1 · 2,000 ₪ · בונוס הפניות 300 ₪ · כולל בונוס רבעוני 5,000 ₪');
 });
 
 /* ── days so far: ONE computation ────────────────────────── */

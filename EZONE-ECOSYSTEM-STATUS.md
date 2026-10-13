@@ -328,7 +328,25 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   and to verify the deploy via `/api/version`. Production URL still unrecorded.
 - Lockfile: proxy-addr 2.0.8 (critical advisory fixed). Tests 192 → 197, SW v14.
 
-## Managers: house roster (5 houses, current as of September 5, 2026)
+## Managers: lower first tier + outpatient day-package bonus (October 13, 2026)
+
+- **Effective from October 2026; earlier months unchanged.** Bonus rules are
+  now month-aware (`RULE_SETS` in `lib/bonus-eligibility.js`): a month is
+  judged by the latest rule set that started on or before it.
+- First tier / treatment-days gate from Oct 2026: Ramot 14 / 420, Efroni 9 /
+  270, Rehab 9 / 270, Pardes 7 / 210, Ra'anana 10 / 300 (unchanged). Up to
+  Sep 2026: Ramot 17 / 510, others 10 / 300. Tiers 2 and 3 unchanged.
+- Outpatient day-package bonus from Oct 2026: 300 ₪ per outpatient from the
+  house in a day package (`day_2x` / `day_daily`) per month; maintenance 0;
+  independent of the occupancy bonus; NOT part of the quarterly check. None
+  before Oct 2026. Data: the dashboard Apps Script's "Outpatients" sheet
+  (`house_of_origin`, `therapy_type`, `start_date`, `end_date`); any overlap
+  with the month counts as a full month — the sheet must be kept current.
+- Replaces the 1 Oct 2026 `CONTINUITY_BONUS_ENABLED` switch; kill switch now
+  `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
+  endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
+
+## Managers: house roster (5 houses, current as of October 13, 2026)
 
 The Managers app (`ezone-managers`) covers FIVE houses. Hardcoded fallbacks
 live in `HOUSE_LABELS` (`public/app.js`) and `HOUSE_BONUS`
@@ -337,16 +355,16 @@ still takes precedence over the hardcoded name. `test/house-coverage.test.js`
 and `test/ecosystem-status-doc.test.js` fail CI if any enumeration (or this
 table) drifts.
 
-| Key | House | Manager | Type | Eligibility threshold | Capacity |
+| Key | House | Manager | Type | Eligibility threshold (from Oct 2026; until Sep 2026) | Capacity |
 |---|---|---|---|---|---|
-| raanana | רעננה אשר | שחר | בית מאזן | 10 | 14 |
-| ramot | רמות השבים | אורן | בית מאזן | 17 | 20 |
-| efroni | קיסריה עפרוני | חנן | תחלואה כפולה | 10 | 13 |
-| rehab | קיסריה ריהאב | רנטה | גמילה | 10 | 13 |
-| pardes | רעננה הפרדס | חן | תחלואה כפולה | 10 | 13 |
+| raanana | רעננה אשר | שחר | בית מאזן | 10 (10) | 14 |
+| ramot | רמות השבים | אורן | בית מאזן | 14 (17) | 20 |
+| efroni | קיסריה עפרוני | חנן | תחלואה כפולה | 9 (10) | 13 |
+| rehab | קיסריה ריהאב | רנטה | גמילה | 9 (10) | 13 |
+| pardes | רעננה הפרדס | חן | תחלואה כפולה | 7 (10) | 13 |
 
 - רעננה הפרדס (`pardes`) was added August 24, 2026 with Efroni's bonus
-  parameters; the shared dashboard Apps Script must return `pardes` in
+  parameters (its first tier diverges from Oct 2026: 7 vs Efroni's 9); the shared dashboard Apps Script must return `pardes` in
   `managersOverview` / `managersHouse` for its live data to appear.
 - Manager history: raanana עידו → שחר (Aug 24, 2026); ramot שחר → אורן
   (Aug 25, 2026). Ra'anana's שחר and Ramot's former שחר are different people.
