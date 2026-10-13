@@ -336,8 +336,9 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
 - First tier / treatment-days gate from Oct 2026: Ramot 14 / 420, Efroni 9 /
   270, Rehab 9 / 270, Pardes 7 / 210, Ra'anana 10 / 300 (unchanged). Up to
   Sep 2026: Ramot 17 / 510, others 10 / 300. Tiers 2 and 3 unchanged.
-- Outpatient day-package bonus from Oct 2026: 300 ₪ per outpatient from the
-  house in a day package (`day_2x` / `day_daily`) per month; maintenance 0;
+- Outpatient day-package bonus from Oct 2026 (corrected the same day to
+  ONE-TIME — see the section above): 300 ₪ once per patient, in the month the
+  patient starts a day package (`day_2x` / `day_daily`); maintenance 0;
   independent of the occupancy bonus; NOT part of the quarterly check. None
   before Oct 2026. Data: the dashboard Apps Script's "Outpatients" sheet
   (`house_of_origin`, `therapy_type`, `start_date`, `end_date`); any overlap
@@ -345,6 +346,13 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
 - Replaces the 1 Oct 2026 `CONTINUITY_BONUS_ENABLED` switch; kill switch now
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
+
+## Managers: continued-treatment bonus is one-time (October 13, 2026)
+
+- 300 ₪ ONCE per patient, in the month the patient starts a day package
+  (not monthly). Facts: Dashboard `referralStarts` (E-Zone-Dashboard PR
+  #221). Oct 2026 rule set corrected before October was settled. Tests 235,
+  SW v18.
 
 ## Managers: simple two-step bonus + house-page redesign (October 13, 2026)
 

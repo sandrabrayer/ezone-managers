@@ -358,6 +358,14 @@ function treatmentNightsOf(h) {
 function referralBonus_(counts, eligible, ym) {
   return window.BonusEligibility.continuityAmount(counts || {}, !!eligible, ym);
 }
+/* The referral input of a house object: the per-month package counts
+ * (bonus.continuity) plus `starts` — patients whose FIRST day package began
+ * that month (referralStarts.count; the one-time rule from Oct 2026). */
+function referralCounts_(o) {
+  const c = (o && o.bonus && o.bonus.continuity) || {};
+  const rs = o && o.referralStarts;
+  return { maintenance: c.maintenance, day_2x: c.day_2x, day_daily: c.day_daily, starts: rs ? rs.count : 0 };
+}
 /* Intake-meeting («פגישות קליטה») bonus for one house in month `ym`, from the
  * feed's `intakeMeetings` COUNTS (confirmed / pending). Month-aware: none
  * before Oct 2026; from Oct 2026, 250 ₪ per confirmed meeting. */
@@ -387,8 +395,7 @@ function intakeLine_(ib) {
 function settledReferralFor_(key, ym, eligible) {
   const byKey = monthByKey_(ym);
   const ph = byKey ? byKey[key] : null;
-  const counts = ph && ph.bonus ? ph.bonus.continuity : null;
-  return referralBonus_(counts, eligible, ym).total;
+  return referralBonus_(ph ? referralCounts_(ph) : null, eligible, ym).total;
 }
 
 /* ============================================================
@@ -795,7 +802,7 @@ function buildHouseCard(h) {
   const quartly = quarterlyEarnedAmount(h);
   const secured = status.state === 'locked' || (status.state === 'finished' && status.amount > 0);
   const nowYM = h.month || state.overview?.month || currentMonthYM_();
-  const cont = referralBonus_(h.bonus && h.bonus.continuity, secured, nowYM);
+  const cont = referralBonus_(referralCounts_(h), secured, nowYM);
   const intake = intakeBonus_(h.intakeMeetings, nowYM);
   const isProjection = status.state === 'projection';
   const nowLabel = BV.monthLabel(nowYM);
@@ -1017,7 +1024,7 @@ function renderHouseDetail(key, data) {
 
   // Referrals: local, counts only, month-aware (from Oct 2026: 300 ₪ per
   // day-package outpatient, independent of the occupancy bonus).
-  const cont = referralBonus_(merged.bonus && merged.bonus.continuity, paid, viewingYM);
+  const cont = referralBonus_(referralCounts_(merged), paid, viewingYM);
   // Intake meetings: confirmed ones only (pending = not yet 30 days).
   const intake = intakeBonus_(merged.intakeMeetings, viewingYM);
   const quartly = quarterlyEarnedAmount(merged);
@@ -1339,7 +1346,8 @@ async function loadSettledHouse_(key, ym) {
         // Counts = the rows listed, so the KPI and the log can never disagree.
         entriesCount: entries.length,
         exitsCount: exits.length,
-        continuity: { maintenance: c.maintenance, day_2x: c.day_2x, day_daily: c.day_daily },
+        continuity: { maintenance: c.maintenance, day_2x: c.day_2x, day_daily: c.day_daily,
+          starts: d.referralStarts ? d.referralStarts.count : 0 },
         dailyChart: monthChart_(d.dailyChart, ym)
       };
     } catch (e) {
