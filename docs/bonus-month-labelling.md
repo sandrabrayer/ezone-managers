@@ -101,7 +101,7 @@ No new endpoints, no secrets, no server changes. `bonus-view.js` lives in
 mount on `lib/`, so only `bonus-eligibility.js` is reachable over HTTP. Feed
 strings rendered into the DOM are limited to roster names and sanitised
 manager names. (The app's access model has since changed twice — see
-`docs/open-access.md` for the current one.)
+`docs/access.md` for the current one.)
 
 ## Bonus history month picker (September 10, 2026)
 

@@ -23,19 +23,19 @@ other dashboard action needs a key the Managers app does not have.
 
 The endpoint URL is configured via the `APPS_SCRIPT_URL` env var. It is **required** — there is no hardcoded fallback, and the server refuses to start if it is not set.
 
-## Access — the app is open
+## Access — a personal code per person (13 Oct 2026)
 
-**No password, no access key, no cookie, no login screen — in any
-circumstance.** Anyone who opens the URL gets the whole app, **including the
-patient names in each house's entry/exit log**. That exposure is a deliberate
-decision by the app owner (September 12, 2026), not an oversight: treat the
-deployment URL as the only thing between the feed and the public, and don't
-add a gate back without asking. Background: `docs/open-access.md`.
+The app is **no longer open**. Every person logs in with their own code
+(Railway variable `MANAGER_ACCESS`); a house manager sees only their own
+house, Sandra and Ron see all houses, and staff talks are private to their
+author and the admins. Everything is enforced in `server.js` — see
+`docs/access.md` for the model and the set-up steps. (From 12 Sep to 13 Oct
+2026 the app was open by decision; that model is retired.)
 
 What is still enforced:
 
-- **Per-IP rate limit** on `/api/sheets`, 300 / 15 min — nothing gates the
-  proxy any more, so without it one client could drain the shared dashboard
+- **Per-IP rate limit** on `/api/sheets` and `/api/work`, 300 / 15 min, and on
+  `/api/login`, 10 / 15 min — so no client can drain the shared dashboard
   Apps Script's quota and take Dashboard, Managers and Therapists down with it.
 - **`X-Robots-Tag: noindex, nofollow`** on every response and `robots.txt`
   with `Disallow: /`, so the open URL is at least not indexed.
@@ -60,6 +60,13 @@ There is no static mount on `lib/`; only `/lib/bonus-eligibility.js` is
 exposed to the browser. The bonus VIEW module (`public/bonus-view.js` — month
 labelling, wording, days-so-far) lives in `public/` and is served by the
 static mount; see `docs/bonus-month-labelling.md`.
+
+## Access and work tabs (13 Oct 2026)
+
+Personal code per person (`docs/access.md`): a house manager sees only their
+house; Sandra and Ron see all. Each house has sub-tabs — בונוסים, מטופלים
+(patients, outpatients, visits and admissions this month), שיחות משפחה,
+שיחות עם עובדים (private), אירועים חריגים — with follow-up reminders.
 
 ## Bonus history
 

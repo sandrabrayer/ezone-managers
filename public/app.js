@@ -324,6 +324,7 @@ function clearLegacySession() {
 
 async function fetchJson(url) {
   const r = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (r.status === 401 && window.Auth) window.Auth.showLogin('פג תוקף הכניסה — הזינו את הקוד שוב.');
   const text = await r.text();
   let data;
   try { data = JSON.parse(text); } catch { throw new Error(`Bad JSON from ${url} — ${text.slice(0, 160)}`); }
@@ -403,6 +404,7 @@ function settledReferralFor_(key, ym, eligible) {
    ============================================================ */
 
 function activateTab(key) {
+  key = allowedTab_(key);
   document.querySelectorAll('.tab').forEach(btn => {
     const on = btn.dataset.tab === key;
     btn.classList.toggle('is-active', on);
@@ -1083,6 +1085,7 @@ function renderHouseDetail(key, data) {
   renderHistoryPicker_(panel, key);
   renderHistoryView_(panel, key);
   renderOccupancyCard_(panel.querySelector('[data-occupancy-card]'), [key]);
+  if (window.Work) window.Work.onHouseRendered(panel, key); // work tabs (lists + logs)
 }
 
 function setStatLabel(panel, name, text) {
@@ -1708,6 +1711,7 @@ function renderHouseDetailSettled_(panel, key, ym) {
     renderHistoryPicker_(panel, key);
     renderHistoryView_(panel, key);
     renderOccupancyCard_(panel.querySelector('[data-occupancy-card]'), [key]);
+    if (window.Work) window.Work.onHouseRendered(panel, key); // work tabs (lists + logs)
     return;
   }
 
@@ -1798,6 +1802,7 @@ function renderHouseDetailSettled_(panel, key, ym) {
   renderHistoryPicker_(panel, key);
   renderHistoryView_(panel, key);
   renderOccupancyCard_(panel.querySelector('[data-occupancy-card]'), [key]);
+  if (window.Work) window.Work.onHouseRendered(panel, key); // work tabs (lists + logs)
 }
 
 /* Entry / exit logs of a FINISHED month, from its own house payload.
@@ -2398,18 +2403,43 @@ function startData() {
   setInterval(loadOverview, 60_000);
 }
 
+/* Who is logged in (null until /api/me answered). A house manager sees only
+ * their own house — the server enforces it; the client just hides the rest. */
+let currentUser = null;
+
+/* Manager: hide the network overview and the other houses' tabs, open theirs. */
+function applyRole_(u) {
+  currentUser = u || null;
+  if (!u || u.role === 'admin' || !HOUSE_KEYS.includes(u.house)) return;
+  document.querySelectorAll('.tab').forEach(btn => {
+    btn.hidden = btn.dataset.tab !== u.house;
+  });
+  const ov = document.getElementById('panel-overview');
+  if (ov) ov.hidden = true;
+  activateTab(u.house);
+}
+
+/* The tab a user may open: a manager is always sent to their own house. */
+function allowedTab_(key) {
+  const u = currentUser;
+  if (u && u.role !== 'admin' && HOUSE_KEYS.includes(u.house)) return u.house;
+  return key;
+}
+
 function boot() {
   clearLegacySession();
   wireTabs();
   document.getElementById('monthTag').textContent = currentMonthLabel();
 
-  const hash = (location.hash || '').replace('#', '');
-  if (['overview', ...HOUSE_KEYS].includes(hash)) activateTab(hash);
-
-  // No gate: every visitor gets the app and its data straight away. Whether
-  // patient names are in the payload is the server's decision, not the
-  // client's — see fetchJson above.
-  startData();
+  // Nothing with data loads before the login: the server answers 401 to
+  // every data call until a personal code has been entered.
+  const ready = window.Auth ? window.Auth.init() : Promise.resolve(null);
+  ready.then(u => {
+    applyRole_(u);
+    const hash = (location.hash || '').replace('#', '');
+    if ((!u || u.role === 'admin') && ['overview', ...HOUSE_KEYS].includes(hash)) activateTab(hash);
+    startData();
+  });
 }
 
 document.addEventListener('DOMContentLoaded', boot);

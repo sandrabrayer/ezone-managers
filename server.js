@@ -1,25 +1,37 @@
 'use strict';
 /*
- * ezone-managers server — fully open read-only dashboard.
+ * ezone-managers server — personal-code login (13 Oct 2026).
  *
- *   - NO password, NO login screen, NO access key and NO session cookie.
- *     Anyone who opens the URL gets the whole app, including the patient
- *     names in each house's entry/exit log. That is a deliberate decision
- *     by the app owner (September 12, 2026); see docs/open-access.md.
- *   - fail-closed startup (APPS_SCRIPT_URL required in production)
- *   - per-IP rate limiting on /api/sheets, so the open proxy cannot be used
- *     to drain the shared Apps Script quota
+ *   - The app USED to be fully open (decision of 12 Sep 2026). From 13 Oct
+ *     2026 it holds staff conversations, family-call notes and (stage 3)
+ *     manpower costs, so Sandra decided: a personal code per person. A house
+ *     manager sees ONLY their own house; admins (Sandra, Ron) see all.
+ *     Enforced HERE, server-side — the browser is never trusted.
+ *   - MANAGER_ACCESS (JSON, see lib/access.js) lists the codes;
+ *     MANAGERS_WORK_SECRET is shared with the Dashboard Apps Script
+ *     (`managersWork`) and also keys the session signature.
+ *   - fail-closed startup: APPS_SCRIPT_URL, MANAGER_ACCESS and
+ *     MANAGERS_WORK_SECRET are required in production; a bad MANAGER_ACCESS
+ *     stops the process (Railway keeps the previous deployment serving).
+ *   - signed HttpOnly session cookie (30 days), rate-limited login,
+ *     JSON-only writes (CSRF), per-IP rate limit on every proxied call.
  *   - security headers incl. X-Robots-Tag: noindex, nofollow
- *   - APPS_SCRIPT_URL is server-to-server only; it is never sent to a browser
- *     and never echoed in an error body.
+ *   - APPS_SCRIPT_URL and the work secret are server-to-server only.
  *   - lib/ is NOT statically mounted; only bonus-eligibility.js is exposed
  */
 const express = require('express');
 const path = require('path');
 
+const access = require('./lib/access');
+
 const PORT = Number(process.env.PORT) || 3000;
 const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL || '';
 const IS_PROD = process.env.NODE_ENV === 'production';
+const WORK_SECRET = process.env.MANAGERS_WORK_SECRET || '';
+const ACCESS = access.parseAccess(process.env.MANAGER_ACCESS || '');
+const USERS = ACCESS.ok ? ACCESS.users : [];
+const SESSION_KEY = WORK_SECRET ? access.sessionKey(WORK_SECRET) : null;
+const COOKIE = 'mgr_session';
 
 function fatal(msg) {
   console.error(`[fatal] ${msg}`);
@@ -29,6 +41,8 @@ function fatal(msg) {
 // Fail closed in production. Tests require() this module with NODE_ENV=test.
 if (process.env.NODE_ENV !== 'test' && require.main === module) {
   if (!APPS_SCRIPT_URL) fatal('APPS_SCRIPT_URL is required');
+  if (!WORK_SECRET || WORK_SECRET.length < 24) fatal('MANAGERS_WORK_SECRET is required (24+ characters)');
+  if (!ACCESS.ok) fatal(`MANAGER_ACCESS: ${ACCESS.error}`);
 }
 
 const app = express();
@@ -98,8 +112,34 @@ function clientIp(req) {
 // first paint, so the limit is generous — it exists to cap abuse of the open
 // proxy, not to ration normal use.
 const allowSheets = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 300 });
+// 10 code attempts per 15 minutes per IP — an 8-digit code cannot be guessed.
+const allowLogin = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
 
-// ---- static: public assets only (no gate — the app is open) ----
+// ---- session ----
+function readCookie(req, name) {
+  const raw = String(req.headers.cookie || '');
+  for (const part of raw.split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return '';
+}
+function sessionUser(req) {
+  if (!SESSION_KEY || !USERS.length) return null;
+  return access.readSession(readCookie(req, COOKIE), SESSION_KEY, USERS);
+}
+function setSessionCookie(res, value, maxAgeSec) {
+  res.setHeader('Set-Cookie', `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSec}${IS_PROD ? '; Secure' : ''}`);
+}
+function requireUser(req, res, next) {
+  const u = sessionUser(req);
+  if (!u) return res.status(401).json({ error: 'login_required' });
+  req.user = u;
+  next();
+}
+const publicUser = (u) => ({ name: u.name, role: u.role, house: u.house || null });
+
+// ---- static: public assets only (they hold no data; data needs a login) ----
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Expose ONLY the client-shared bonus module. There is no static mount on
@@ -124,12 +164,62 @@ app.get('/api/version', (_req, res) => {
   res.json({ commit: SHA_RE.test(sha) ? sha.toLowerCase() : 'unknown', builtAt: BUILT_AT });
 });
 
-// ---- Apps Script proxy ----
-const ALLOWED_QUERY_KEYS = new Set(['action', 'house', 'month']);
+// ---- login ----
+app.post('/api/login', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (!SESSION_KEY || !USERS.length) return res.status(503).json({ error: 'not_configured' });
+  if (!req.is('application/json')) return res.status(415).json({ error: 'json_required' });
+  if (!allowLogin(clientIp(req))) {
+    return res.status(429).json({ error: 'יותר מדי ניסיונות. נסו שוב בעוד רבע שעה.' });
+  }
+  const u = access.findUserByCode(USERS, req.body && req.body.code);
+  if (!u) return res.status(401).json({ error: 'קוד שגוי' });
+  setSessionCookie(res, access.signSession(u, SESSION_KEY), access.SESSION_DAYS * 86400);
+  res.json({ ok: true, user: publicUser(u) });
+});
 
-app.get('/api/sheets', async (req, res) => {
+app.post('/api/logout', (_req, res) => {
+  setSessionCookie(res, '', 0);
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true });
+});
+
+app.get('/api/me', requireUser, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true, user: publicUser(req.user) });
+});
+
+// ---- Apps Script proxy (read actions; every one needs a login) ----
+const ALLOWED_QUERY_KEYS = new Set(['action', 'house', 'month']);
+const ALLOWED_ACTIONS = new Set(['managersOverview', 'managersHouse', 'occupancySnapshots']);
+// Backend house ids that differ from the app's keys (efroni is 'arfoni').
+const BACKEND_HOUSE_IDS = { arfoni: 'efroni' };
+const houseKeyOf = (id) => BACKEND_HOUSE_IDS[String(id || '')] || String(id || '');
+
+/* A house manager's view of a feed payload: only their own house. */
+function scopeForManager(action, data, house) {
+  if (!data || typeof data !== 'object') return data;
+  if (action === 'managersOverview') {
+    const houses = Array.isArray(data.houses) ? data.houses.filter((h) => h && houseKeyOf(h.key) === house) : [];
+    const own = houses[0] || {};
+    return { ...data, houses, totals: { activePatients: Number(own.patientsNow) || 0 } };
+  }
+  if (action === 'occupancySnapshots') {
+    const rows = Array.isArray(data.rows) ? data.rows.filter((r) => r && houseKeyOf(r.houseId) === house) : [];
+    return { ...data, rows };
+  }
+  return data;
+}
+
+app.get('/api/sheets', requireUser, async (req, res) => {
   if (!allowSheets(clientIp(req))) {
     return res.status(429).json({ error: 'יותר מדי בקשות. נסו שוב מאוחר יותר.' });
+  }
+  const action = typeof req.query.action === 'string' ? req.query.action : '';
+  if (!ALLOWED_ACTIONS.has(action)) return res.status(400).json({ error: 'unknown_action' });
+  const u = req.user;
+  if (action === 'managersHouse' && !access.canSeeHouse(u, String(req.query.house || ''))) {
+    return res.status(403).json({ error: 'forbidden' });
   }
   try {
     const qs = new URLSearchParams();
@@ -148,12 +238,68 @@ app.get('/api/sheets', async (req, res) => {
     const text = await upstream.text();
     res.status(upstream.status);
     res.set('Cache-Control', 'no-store');
-    const ct = upstream.headers.get('content-type') || 'application/json';
-    res.type(ct).send(text);
+    if (u.role === 'admin') {
+      const ct = upstream.headers.get('content-type') || 'application/json';
+      return res.type(ct).send(text);
+    }
+    // A manager never receives another house's figures.
+    let data;
+    try { data = JSON.parse(text); } catch { return res.status(502).json({ error: 'upstream_error' }); }
+    res.json(scopeForManager(action, data, u.house));
   } catch (err) {
     // Log the detail, return none: a URL-parse failure would otherwise echo
     // APPS_SCRIPT_URL straight to the browser.
     console.error('Proxy error:', err && err.message);
+    res.status(502).json({ error: 'upstream_error' });
+  }
+});
+
+// ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
+const WORK_OPS = new Set(['houseData', 'logAdd', 'logUpdate']);
+const WORK_LOGS = new Set(['familyCalls', 'staffTalks', 'events']);
+const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+app.post('/api/work', requireUser, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  // JSON only: a cross-site form cannot send application/json (CSRF).
+  if (!req.is('application/json')) return res.status(415).json({ error: 'json_required' });
+  if (!allowSheets(clientIp(req))) {
+    return res.status(429).json({ error: 'יותר מדי בקשות. נסו שוב מאוחר יותר.' });
+  }
+  const b = req.body || {};
+  const u = req.user;
+  const op = String(b.op || '');
+  if (!WORK_OPS.has(op)) return res.status(400).json({ error: 'unknown_op' });
+  // The house is the manager's own; an admin names one.
+  const house = u.role === 'admin' ? String(b.house || '') : u.house;
+  if (!access.canSeeHouse(u, house) || !access.HOUSE_KEYS.includes(house)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  const body = { action: 'managersWork', secret: WORK_SECRET, op, house, role: u.role, actor: u.name };
+  if (op === 'houseData' && YM_RE.test(String(b.month || ''))) body.month = String(b.month);
+  if (op !== 'houseData') {
+    if (!WORK_LOGS.has(String(b.log || ''))) return res.status(400).json({ error: 'unknown_log' });
+    body.log = String(b.log);
+  }
+  if (op === 'logAdd') body.entry = JSON.stringify(b.entry && typeof b.entry === 'object' ? b.entry : {});
+  if (op === 'logUpdate') {
+    body.id = String(b.id || '').slice(0, 64);
+    const p = b.patch && typeof b.patch === 'object' ? b.patch : {};
+    body.patch = JSON.stringify({ followUpDone: p.followUpDone === true, deleted: p.deleted === true });
+  }
+  try {
+    const upstream = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const text = await upstream.text();
+    let data;
+    try { data = JSON.parse(text); } catch { return res.status(502).json({ error: 'upstream_error' }); }
+    res.status(data && data.ok === false && data.error === 'unauthorized' ? 503 : 200).json(data);
+  } catch (err) {
+    console.error('Work proxy error:', err && err.message);
     res.status(502).json({ error: 'upstream_error' });
   }
 });
@@ -172,4 +318,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, _rateLimiters: { allowSheets } };
+module.exports = { app, _rateLimiters: { allowSheets, allowLogin } };
