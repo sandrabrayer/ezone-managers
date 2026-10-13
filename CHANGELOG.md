@@ -31,7 +31,7 @@ coordinators have"):
 `docs/access.md`. Without them the new deployment does not start and the
 previous one keeps serving.
 
-**Tests**: 235 → 248 (access suite rewritten for the login model; work-view
+**Tests**: 235 → 237 top-level tests, all green (the access suite is one test with 15 sub-tests, rewritten for the login model; work-view
 builders; UI guards). SW cache v18 → v19.
 
 ### Changed — the 300 ₪ continued-treatment bonus is ONE-TIME per patient (October 13, 2026)
