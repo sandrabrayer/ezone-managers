@@ -167,7 +167,9 @@ test('null house → amount 0', () => {
   assert.equal(r.amount, 0);
 });
 
-/* ── securedFloor: single lock condition = daysSoFar >= threshold × 30 ── */
+/* ── securedFloor: a step is secured once the days ALREADY counted reach
+   max(gate, patients × daysInMonth) — the month's average can then no longer
+   fall below it (13 Oct 2026; before, the gate alone locked any tier). ── */
 const DAYS_30 = 30;
 
 test("Ra'anana avg 11 with 300/300 → tier-1 (2000) secured", () => {
@@ -185,12 +187,11 @@ test("Ra'anana avg 11 with 299 days → nothing secured (boundary)", () => {
   assert.equal(f.amount, 0);
 });
 
-test("Ra'anana avg 12 with 300 days → tier-2 (2500) secured (gate met, tier by occupancy)", () => {
+test("Ra'anana avg 12: 300 days secure only tier 1; tier 2 needs 360 days already counted", () => {
   const f = securedFloor({ ym: OLD, key: 'raanana', avgDaily: 12 }, resolveThreshold, DAYS_30, 300);
-  assert.equal(f.tier, 2);
-  assert.equal(f.amount, 2500);
-  assert.equal(f.tierPatients, 12);
-  assert.equal(f.target, 300);
+  assert.deepEqual([f.tier, f.amount, f.target], [1, 2000, 300]);
+  const g = securedFloor({ ym: OLD, key: 'raanana', avgDaily: 12 }, resolveThreshold, DAYS_30, 360);
+  assert.deepEqual([g.tier, g.amount, g.tierPatients], [2, 2500, 12]);
 });
 
 test("Ra'anana avg 9 → nothing secured even with many days", () => {
@@ -207,16 +208,17 @@ test('Ramot avg 18 with 510 days (= gate 17×30) → tier-1 (2000) secured', () 
   assert.equal(f.target, 510);
 });
 
-test('Ramot avg 20 with 510 days → tier-3 (3000) secured', () => {
-  const f = securedFloor({ ym: OLD, key: 'ramot', avgDaily: 20 }, resolveThreshold, DAYS_30, 510);
-  assert.equal(f.tier, 3);
-  assert.equal(f.amount, 3000);
+test('Ramot avg 20: 510 days secure tier 1; tier 3 needs 600 days (20 × 30) already counted', () => {
+  assert.equal(securedFloor({ ym: OLD, key: 'ramot', avgDaily: 20 }, resolveThreshold, DAYS_30, 510).amount, 2000);
+  const f = securedFloor({ ym: OLD, key: 'ramot', avgDaily: 20 }, resolveThreshold, DAYS_30, 600);
+  assert.deepEqual([f.tier, f.amount], [3, 3000]);
 });
 
-test('securedFloor gate is month-length independent (31-day month, still 510)', () => {
-  const f = securedFloor({ ym: OLD, key: 'ramot', avgDaily: 18 }, resolveThreshold, 31, 510);
+test('securedFloor in a 31-day month: Ramot tier 1 (17) needs 527 days (17 × 31), not 510', () => {
+  assert.equal(securedFloor({ ym: OLD, key: 'ramot', avgDaily: 18 }, resolveThreshold, 31, 526).tier, 0);
+  const f = securedFloor({ ym: OLD, key: 'ramot', avgDaily: 18 }, resolveThreshold, 31, 527);
   assert.equal(f.tier, 1);
-  assert.equal(f.minRequired, 510);
+  assert.equal(f.minRequired, 510, 'the gate itself is still 510');
 });
 
 test('securedFloor null house → all zeros', () => {
@@ -334,42 +336,41 @@ test('Oct 2026: Pardes avg 7 + 210 days → 2000; Efroni and Rehab avg 9 + 270 d
   }
 });
 
-test("Oct 2026: tiers 2 and 3 are unchanged; Ra'anana is identical in both months", () => {
-  for (const ym of [OLD, NEW]) {
-    assert.equal(tierForPatients({ ym, key: 'ramot', avgDaily: 19 }).amount, 2500);
-    assert.equal(tierForPatients({ ym, key: 'ramot', avgDaily: 20 }).amount, 3000);
-    assert.equal(tierForPatients({ ym, key: 'pardes', avgDaily: 12 }).amount, 2500);
-    assert.equal(tierForPatients({ ym, key: 'pardes', avgDaily: 13 }).amount, 3000);
-    for (const [avg, days] of [[9.9, 300], [10, 299], [10, 300], [12, 360], [14, 420]]) {
-      assert.deepEqual(
-        monthlyBonusAmount({ ym, key: 'raanana', avgDaily: avg, treatmentDays: days }),
-        monthlyBonusAmount({ ym: OLD, key: 'raanana', avgDaily: avg, treatmentDays: days })
-      );
-    }
+test('Oct 2026: two steps — first bonus 2,000, full occupancy 3,000 in total; no middle tier', () => {
+  const amt = (key, avgDaily, treatmentDays) => monthlyBonusAmount({ ym: NEW, key, avgDaily, treatmentDays }).amount;
+  // Ramot: 14 → 2,000; 19.5 (old tier 2) is still 2,000; full (20) → 3,000.
+  assert.equal(amt('ramot', 14, 434), 2000);
+  assert.equal(amt('ramot', 19.5, 605), 2000, 'no 2,500 middle tier any more');
+  assert.equal(amt('ramot', 20, 620), 3000);
+  // Full = the house capacity: Ra'anana 14, Efroni / Rehab / Pardes 13.
+  assert.equal(amt('raanana', 14, 434), 3000);
+  assert.equal(amt('raanana', 13.9, 431), 2000);
+  for (const key of ['efroni', 'rehab', 'pardes']) {
+    assert.equal(amt(key, 13, 403), 3000, key);
+    assert.equal(amt(key, 12.9, 400), 2000, key);
   }
-  // Ramot between the old and the new first tier: tier 1 from Oct, still 2,000.
-  assert.equal(tierForPatients({ ym: NEW, key: 'ramot', avgDaily: 18.9 }).amount, 2000);
+  // September keeps the old three tiers.
+  assert.equal(monthlyBonusAmount({ ym: OLD, key: 'ramot', avgDaily: 19.5, treatmentDays: 585 }).amount, 2500);
+  assert.equal(tierForPatients({ ym: NEW, key: 'ramot', avgDaily: 20 }).tier, 2, 'full occupancy is step 2 of 2');
 });
 
-test('securedFloor uses the month\'s gate: Ramot Oct 2026 locks tier 1 at 420 days so far', () => {
-  assert.equal(securedFloor({ ym: NEW, key: 'ramot', avgDaily: 15 }, undefined, 31, 419).amount, 0);
-  const f = securedFloor({ ym: NEW, key: 'ramot', avgDaily: 15 }, undefined, 31, 420);
+test('securedFloor uses the month\'s rules: Ramot Oct 2026 (31 days) locks the first bonus at 434 days so far', () => {
+  assert.equal(securedFloor({ ym: NEW, key: 'ramot', avgDaily: 15 }, undefined, 31, 433).amount, 0);
+  const f = securedFloor({ ym: NEW, key: 'ramot', avgDaily: 15 }, undefined, 31, 434);
   assert.equal(f.amount, 2000);
   assert.equal(f.target, 420);
   assert.equal(securedFloor({ ym: OLD, key: 'ramot', avgDaily: 15 }, undefined, 30, 450).amount, 0, 'old rules: below 17');
 });
 
-test('quarterly Aug–Oct 2026 mixes rule sets: Aug/Sep judged by the old rules, Oct by the new ones', () => {
+test('quarterly bonus: May–Jul 2026 still pays; from the Aug–Oct 2026 window on there is none', () => {
   const BE = require('../lib/bonus-eligibility');
-  const amt = (ym, avgDaily, treatmentDays) => monthlyBonusAmount({ ym, key: 'ramot', avgDaily, treatmentDays }).amount;
-  const win = BE.quarterWindowFor('2026-10');
-  assert.deepEqual(win, ['2026-08', '2026-09', '2026-10']);
-  // Failed August under the old rule (avg 15 < 17), passed Oct only thanks to the new rule.
-  const failed = BE.quarterlyStatus(win, { '2026-08': amt('2026-08', 15, 465), '2026-09': amt('2026-09', 18, 540), '2026-10': amt('2026-10', 15, 465) });
-  assert.deepEqual([failed.monthsMet, failed.earned], [2, 0]);
-  // Passed all three: Aug and Sep under the old rule, Oct under the new one.
-  const passed = BE.quarterlyStatus(win, { '2026-08': amt('2026-08', 17, 527), '2026-09': amt('2026-09', 18, 540), '2026-10': amt('2026-10', 15, 465) });
-  assert.deepEqual([passed.monthsMet, passed.earned], [3, 5000]);
+  const may = BE.quarterlyStatus(['2026-05', '2026-06', '2026-07'], { '2026-05': 2000, '2026-06': 2500, '2026-07': 3000 });
+  assert.deepEqual([may.enabled, may.earned], [true, 5000]);
+  const aug = BE.quarterlyStatus(['2026-08', '2026-09', '2026-10'], { '2026-08': 3000, '2026-09': 3000, '2026-10': 3000 });
+  assert.deepEqual([aug.enabled, aug.monthsMet, aug.earned], [false, 3, 0]);
+  assert.equal(BE.quarterlyEnabled('2026-07'), true);
+  assert.equal(BE.quarterlyEnabled('2026-09'), false, 'Sep is in the Aug–Oct window');
+  assert.equal(BE.quarterlyEnabled('2027-01'), false);
 });
 
 /* ── Outpatient day-package (referral) bonus ────────────────────────────── */

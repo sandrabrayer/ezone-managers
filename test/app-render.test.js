@@ -185,11 +185,11 @@ test('house card: tier is never a status badge mid-month — "מדרגה הבא�
 
 test('house card: a SECURED tier shows the pill and the month it is secured for', () => {
   const { ctx } = setup();
-  // Day 28: chart-derived 28 × 19 = 532 ≥ 510, avg 19 → tier 2 locked.
+  // Day 28: chart-derived 28 × 19 = 532 ≥ 510 → tier 1 locked; tier 2 needs 570 (19 × 30) already counted.
   const chart = Array.from({ length: 28 }, (_, i) => ({ date: `2026-09-${String(i + 1).padStart(2, '0')}`, count: 19 }));
   vm.runInContext('state.now = new Date(2026, 8, 28, 12)', ctx);
   const html = call(ctx, 'buildHouseCard', { ...RAMOT_OVERVIEW, dailyChart: chart }).innerHTML;
-  assert.match(html, /tier-pill t2">מדרגה 2 ✓</);
+  assert.match(html, /tier-pill t1">מדרגה 1 ✓</);
   assert.match(html, /qualify-badge">✓ מובטח · ספטמבר 2026</);
   assert.match(html, /data-current-actual>ימי טיפול עד כה: <b>532\/510 ימי טיפול<\/b>/);
 });
@@ -202,12 +202,12 @@ function renderDetail() {
   return { ...s, panel: s.byId.get('panel-ramot') };
 }
 
-test('house detail: days-so-far is ONE number across KPI, hero, progress bar and house card (102)', () => {
+test('house detail: days-so-far is ONE number across KPI, bonus plan, progress bar and house card (102)', () => {
   const { ctx, panel } = renderDetail();
   const kpi = panel.querySelector('[data-stat="treatmentDays"]').textContent;
   const barSoFar = panel.querySelector('[data-stat="daysSoFar"]').textContent;
-  const hero = panel.querySelector('[data-status-banner]').innerHTML;
-  const heroDays = /(\d+)\/510 ימי טיפול/.exec(/data-hero-current>([\s\S]*?)<\/div>/.exec(hero)[1])[1];
+  const first = panel.querySelector('[data-breakdown]').children[0].innerHTML;
+  const planDays = /עכשיו: (\d+) ימי טיפול מתוך 510/.exec(first)[1];
   const fill = panel.querySelector('[data-bep-fill]').style.width;
   // The overview card re-renders from the same detail (state.details) once loaded.
   const card = call(ctx, 'buildHouseCard', RAMOT_OVERVIEW).innerHTML;
@@ -216,44 +216,54 @@ test('house detail: days-so-far is ONE number across KPI, hero, progress bar and
 
   assert.equal(kpi, '102');
   assert.equal(barSoFar, '102');
-  assert.equal(heroDays, '102');
+  assert.equal(planDays, '102');
   assert.equal(cardDays, '102');
   assert.equal(curBlock, '102');
   assert.equal(fill, `${Math.min(100, (102 / Math.max(102, 510, 383)) * 100)}%`);
   assert.equal(panel.querySelector('[data-stat="daysProjection"]').textContent, '383');
+  assert.equal(panel.querySelector('[data-stat="daysTarget"]').textContent, '510', 'target = what the first bonus needs');
 });
 
-test('house detail: hero headline is the SETTLED month (no month-less "בדרך" wording); running month is secondary', () => {
+test('house detail: hero headline is the SETTLED previous month; the running month is told by the bonus plan, not a hero line', () => {
   const { panel } = renderDetail();
   const hero = panel.querySelector('[data-status-banner]').innerHTML;
   const headline = /data-hero-headline>([^<]*)</.exec(hero)[1];
   assert.equal(headline, 'אוגוסט 2026: לא זכאי · המכסה לא הושלמה (441/510)');
   for (const w of FORBIDDEN) assert.ok(!headline.includes(w), `settled headline must not say "${w}"`);
-  const secondary = /data-hero-current>([^<]*)</.exec(hero)[1];
-  assert.match(secondary, /ספטמבר 2026 — חודש נוכחי \(בתהליך\) · 102\/510 ימי טיפול · צפי לסוף החודש: 383 ימי טיפול/);
-  assert.match(secondary, /מדרגה הבאה: 1 \(17 מטופלים\/יום\) · ממוצע נוכחי 12\.8/);
-  assert.doesNotMatch(hero, /בדרך למדרגה/);
+  assert.doesNotMatch(hero, /data-hero-current/, 'no running-month line in the hero');
   assert.doesNotMatch(hero, /2577|2,577|2500|2,500/);
 });
 
-test('house detail: month split shows both labelled blocks; KPI labels name the month', () => {
+test('house detail: the bonus plan says the condition in words and where the house stands now — never a bare 0', () => {
   const { panel } = renderDetail();
-  const split = panel.querySelector('[data-month-split]').innerHTML;
-  assert.match(split, /בונוס אוגוסט 2026 — סופי \(לתשלום\)/);
-  assert.match(split, /ספטמבר 2026 — חודש נוכחי \(בתהליך\)/);
-  assert.match(split, /ימי טיפול עד כה: <b>102\/510 ימי טיפול<\/b>/);
-  assert.match(split, /צפי לסוף החודש: 383 ימי טיפול/);
+  assert.equal(panel.querySelector('[data-bonus-plan-title]').textContent, 'הבונוסים החודש — ספטמבר 2026');
+  const items = panel.querySelector('[data-breakdown]').children;
+  // September 2026 (old rules): only the first bonus; tiers 19 / 20 cannot be reached
+  // (102 + 22 × 20 = 542 < 570), so they are not shown.
+  assert.equal(items.length, 1);
+  const first = items[0].innerHTML;
+  assert.match(items[0].className, /bp-first st-behind/);
+  assert.match(first, /bp-title">בונוס ראשון</);
+  assert.match(first, /bp-pay">2,000 ₪</);
+  assert.match(first, /bp-cond">ממוצע של לפחות 17 מטופלים ליום — כלומר 510 ימי טיפול בספטמבר 2026</);
+  assert.match(first, /bp-status">עכשיו: 102 ימי טיפול מתוך 510 · ממוצע 12\.8 מטופלים ליום</);
+  assert.match(first, /bp-extra">נשארו 22 ימים — צריך בממוצע 18\.5 מטופלים ליום עד סוף החודש</);
+  assert.match(first, /bp-chip">צריך להאיץ</);
+  assert.doesNotMatch(first, /מדרגה/, 'no "tier" wording');
+  assert.equal(panel.querySelector('[data-bonus-total-label]').textContent, 'סה״כ שכבר הושג — ספטמבר 2026');
+  assert.equal(panel.querySelector('[data-stat="bonusTotal"]').textContent, '0 ₪');
   assert.equal(panel.querySelector('[data-stat-label="treatmentDays"]').textContent, 'ימי טיפול עד כה — ספטמבר 2026 (בתהליך)');
-  assert.equal(panel.querySelector('[data-stat-label="bonus"]').textContent, 'מובטח עד כה — ספטמבר 2026 (בתהליך)');
+  assert.equal(panel.querySelector('[data-stat-label="bonus"]').textContent, 'הושג עד כה — ספטמבר 2026');
   assert.equal(panel.querySelector('[data-stat="bonus"]').textContent, '0 ₪');
 });
 
-test('house detail: tier track / next-tier card never mark a tier reached mid-month', () => {
+test('house detail: no tier track, no next-tier card, no quarterly block, no month split', () => {
+  const html = pub('index.html');
+  for (const gone of ['data-next-tier-card', 'data-tier-track', 'data-quarterly-note', 'data-tier-current', 'בונוס יציבות רבעוני', 'מדרגות בונוס חודשי']) {
+    assert.ok(!html.includes(gone), `${gone} is removed from the house page`);
+  }
   const { panel } = renderDetail();
-  assert.equal(panel.querySelector('[data-tier-current]').textContent, 'מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12.8');
-  const status = panel.querySelector('[data-next-tier-status]').textContent;
-  assert.match(status, /^⏳ ספטמבר 2026 — חודש נוכחי \(בתהליך\) · 102\/510 ימי טיפול · מדרגה הבאה: 1/);
-  assert.doesNotMatch(status, /בדרך למדרגה/);
+  assert.equal(panel.querySelector('[data-month-split]').innerHTML, '', 'month split no longer rendered');
 });
 
 test('house detail: no backend bonus figure reaches any rendered text', () => {
@@ -393,13 +403,12 @@ function bonusSnapshot(ctx, panel) {
     kpiDays: q('[data-stat="treatmentDays"]').textContent,
     kpiBonusLabel: q('[data-stat-label="bonus"]').textContent,
     kpiBonus: q('[data-stat="bonus"]').textContent,
-    monthSplit: q('[data-month-split]').innerHTML,
+    planTitle: q('[data-bonus-plan-title]').textContent,
+    plan: q('[data-breakdown]').children.map((li) => li.innerHTML),
     chartTitle: q('[data-chart-title]').textContent,
     barSoFar: q('[data-stat="daysSoFar"]').textContent,
     barProjection: q('[data-stat="daysProjection"]').textContent,
     currentSpark: q('[data-daily-spark]').innerHTML,
-    nextTier: q('[data-next-tier-status]').textContent,
-    tierCurrent: q('[data-tier-current]').textContent,
     breakdownTotal: q('[data-stat="bonusTotal"]').textContent,
     card: call(ctx, 'buildHouseCard', RAMOT_OVERVIEW).innerHTML,
     state: vm.runInContext('JSON.stringify({ o: state.overview, m: state.monthOverviews, p: state.prevOverview, c: state.chartsByMonth, d: state.details, q: state.quarterWindow })', ctx)
@@ -563,7 +572,12 @@ test('index.html: the house-detail template carries the month picker and history
   const tpl = /<template id="houseDetailTpl">[\s\S]*?<\/template>/.exec(html)[0];
   assert.match(tpl, /<select data-history-month/);
   assert.match(tpl, /data-history-view hidden/);
-  assert.ok(tpl.indexOf('data-history-month') < tpl.indexOf('data-next-tier-card'), 'picker sits near the top of the detail view');
+  // 13 Oct 2026: occupancy history moved to the END of the house page — after the bonus plan, KPIs, chart and logs.
+  for (const before of ['data-bonus-plan', 'class="kpis"', 'data-daily-spark', 'data-log="exits"']) {
+    assert.ok(tpl.indexOf(before) < tpl.indexOf('data-history-card'), `${before} comes before the occupancy history`);
+  }
+  assert.ok(tpl.indexOf('data-history-card') < tpl.indexOf('data-occupancy-card'));
+  assert.ok(tpl.indexOf('data-status-banner') < tpl.indexOf('data-bonus-plan'), 'the bonus plan follows the hero');
   const js = pub('app.js');
   const hist = js.slice(js.lastIndexOf('Occupancy history (house-detail month picker)'));
   assert.doesNotMatch(hist, /state\.(overview|monthOverviews|prevOverview|details|chartsByMonth|quarterWindow)\s*(=|\[[^\]]*\]\s*=)/, 'history code must not assign bonus state');
@@ -644,11 +658,9 @@ function pageSnapshot(ctx, byId, panel) {
     cards: id('houseGrid').children.map((c) => [c.className, c.innerHTML]),
     backHidden: id('bonusMonthBackOverview').hidden,
     detail: bonusSnapshot(ctx, panel),
-    detailExtras: ['[data-stat="entries"]', '[data-stat="daysTarget"]', '[data-stat-label="daysSoFar"]', '[data-stat-label="daysProjection"]', '[data-quarterly-note]', '[data-quarterly-target]']
+    detailExtras: ['[data-stat="entries"]', '[data-stat="daysTarget"]', '[data-stat-label="daysSoFar"]', '[data-stat-label="daysProjection"]', '[data-bonus-plan-title]', '[data-bonus-total-label]', '[data-stat="bonusTotal"]']
       .map((s) => panel.querySelector(s).textContent),
-    nextTierHidden: panel.querySelector('[data-next-tier-card]').hidden,
-    quarterlyMonthsHidden: panel.querySelector('[data-quarterly-months]').hidden,
-    breakdown: panel.querySelector('[data-breakdown]').children.map((li) => li.innerHTML)
+    breakdown: panel.querySelector('[data-breakdown]').children.map((li) => [li.className, li.innerHTML])
   };
 }
 
@@ -746,32 +758,26 @@ test('bonus picker: a finished month renders the overview and the house tab SETT
   assert.equal(panel.querySelector('[data-stat="bonus"]').textContent, '2,500 ₪', 'tier 2,500 only — July 2026 has no referral bonus (the payload\'s counts are ignored)');
   assert.equal(panel.querySelector('[data-stat="entries"]').textContent, '2');
   assert.equal(panel.querySelector('[data-stat="exits"]').textContent, '1');
-  const split = panel.querySelector('[data-month-split]').innerHTML;
-  assert.match(split, /ms-tag">יולי 2026 — סופי<[\s\S]*?ms-amt gold">2,500 ₪<[\s\S]*?זכאי · מדרגה 2 · 2,500 ₪ · ממוצע 19\.2 מטופלים\/יום · 560\/510 ימי טיפול · המכסה הושלמה/);
-  assert.equal((split.match(/ms-row/g) || []).length, 1, 'one settled row, no running row');
   assert.equal(panel.querySelector('[data-chart-title]').textContent, 'ימי טיפול — יולי 2026 (סופי)');
   assert.equal(panel.querySelector('[data-stat-label="daysSoFar"]').textContent, 'ימי טיפול בחודש');
   assert.equal(panel.querySelector('[data-stat="daysSoFar"]').textContent, '560');
-  assert.equal(panel.querySelector('[data-stat="daysTarget"]').textContent, '510');
+  assert.equal(panel.querySelector('[data-stat="daysTarget"]').textContent, '527', 'first bonus in July = 17 × 31 days');
   assert.equal(panel.querySelector('[data-stat-label="daysProjection"]').textContent, 'המכסה');
   assert.equal(panel.querySelector('[data-stat="daysProjection"]').textContent, 'הושלמה');
   assert.equal(panel.querySelector('[data-bep-fill]').style.width, '100%');
   assert.doesNotMatch(panel.querySelector('[data-daily-spark]').innerHTML, /no-chart/, 'the chart comes from the month\'s own house payload');
-  assert.equal(panel.querySelector('[data-next-tier-card]').hidden, true, 'the "missing for next tier" card is hidden on a finished month');
-  assert.equal(panel.querySelector('[data-tier-current]').textContent, 'מדרגה 2 הושגה ✓ · יולי 2026 (סופי) · ממוצע 19.2 מטופלים/יום');
-  assert.equal(panel.querySelector('[data-tier-current]').className, 'tier-current gold');
-  // Quarterly block anchored to the SELECTED month's window (May–Jul 2026), with the qualifying months marked.
-  assert.equal(panel.querySelector('[data-quarterly-target]').textContent, '2 מתוך 3 חודשים שעמדו בסף · 3,333 ₪ תאורטי');
-  assert.match(panel.querySelector('[data-quarterly-note]').textContent, /^נצברו 2\/3 חודשים עבור בונוס יציבות 5,000 ₪ · יחושב בסוף הרבעון \(מאי 2026 · יוני 2026 · יולי 2026\)$/);
-  const qm = panel.querySelector('[data-quarterly-months]');
-  assert.equal(qm.hidden, false);
-  assert.equal(qm.textContent, 'מאי 2026 ✓ · יוני 2026 ✗ · יולי 2026 ✓');
+  // Bonus plan, final state: July 2026 (old rules) — first bonus + the 19-patient step, both
+  // achieved = 2,500; the 20-patient step was not reached, so it is not shown; June missed the
+  // quarterly, so no quarterly line; no referral line before Oct 2026.
+  assert.equal(panel.querySelector('[data-bonus-plan-title]').textContent, 'הבונוסים של יולי 2026 — סופי');
   const bk = panel.querySelector('[data-breakdown]').children.map((li) => [li.className, li.innerHTML]);
-  assert.equal(bk.length, 4, '3 tiers + quarterly; no referral line before Oct 2026');
-  assert.match(bk[1][1], /בונוס מדרגה 2 \(19 מטופלים\)[\s\S]*2,500 ₪ ✓ הושג · 560\/510 ימי טיפול/);
-  assert.match(bk[1][0], /gold/);
-  assert.match(bk[3][1], /2\/3 חודשים שעמדו בסף · יחושב בסוף הרבעון \(מאי 2026 · יוני 2026 · יולי 2026\)/);
-  assert.doesNotMatch(bk.map((r) => r[1]).join('\n'), /הפניות/, 'no referral line in July 2026');
+  assert.deepEqual(bk.map((r) => /bp-item (bp-\w+)/.exec(r[0])[1]), ['bp-first', 'bp-mid']);
+  assert.match(bk[0][0], /st-earned/);
+  assert.match(bk[0][1], /bp-status">הושג — ממוצע 19\.2 מטופלים ליום \(נדרש 17\) · 560 ימי טיפול \(נדרש לפחות 510\)</);
+  assert.match(bk[0][1], /bk-amount">2,000 ₪</);
+  assert.match(bk[1][1], /bp-title">בונוס ביניים<[\s\S]*bp-pay">\+500 ₪ \(סה״כ 2,500 ₪\)<[\s\S]*bk-amount">500 ₪</);
+  assert.doesNotMatch(bk.map((r) => r[1]).join('\n'), /הפניות|רבעוני/, 'no referral or quarterly line in July 2026');
+  assert.equal(panel.querySelector('[data-bonus-total-label]').textContent, 'סה״כ לתשלום — יולי 2026');
   assert.equal(panel.querySelector('[data-stat="bonusTotal"]').textContent, '2,500 ₪');
   const entriesLog = panel.querySelector('[data-log="entries"]');
   assert.deepEqual(entriesLog.children.map((li) => /log-name">([^<]*)</.exec(li.innerHTML)[1]), ['יוסי כהן', 'משה &lt;b&gt;רז&lt;/b&gt;'], 'names, newest first, escaped; rows outside July dropped');
@@ -807,9 +813,12 @@ test('bonus picker: a month without a tier renders "לא זכאי" with the gate
   assert.doesNotMatch(ramot.innerHTML, /tier-pill|trophy/);
   assert.equal(/data-hero-headline>([^<]*)</.exec(panel.querySelector('[data-status-banner]').innerHTML)[1], 'יוני 2026 — סופי: לא זכאי · המכסה לא הושלמה (441/510)');
   assert.equal(panel.querySelector('[data-stat="daysProjection"]').textContent, 'לא הושלמה');
-  assert.equal(panel.querySelector('[data-tier-current]').textContent, 'לא הושגה מדרגה · יוני 2026 (סופי) · ממוצע 14.7 מטופלים/יום (סף 17)');
-  assert.equal(panel.querySelector('[data-quarterly-months]').textContent, 'מאי 2026 ✓ · יוני 2026 ✗ · יולי 2026 (לאחר החודש שנבחר)', 'July had not happened yet as of June');
-  assert.equal(panel.querySelector('[data-quarterly-target]').textContent, '1 מתוך 3 חודשים שעמדו בסף · 1,667 ₪ תאורטי');
+  const bk = panel.querySelector('[data-breakdown]').children;
+  assert.equal(bk.length, 1, 'only the first bonus — missed, so no higher step is shown');
+  assert.match(bk[0].className, /bp-first st-missed/);
+  assert.match(bk[0].innerHTML, /bp-status">לא הושג — ממוצע 14\.7 מטופלים ליום \(נדרש 17\) · 441 ימי טיפול \(נדרש לפחות 510\)</);
+  assert.match(bk[0].innerHTML, /bp-chip">לא הושג</);
+  assert.equal(panel.querySelector('[data-stat="bonusTotal"]').textContent, '0 ₪');
   assert.equal(byId.get('kpiBonus').textContent, '8,000 ₪', 'four tier-1 houses, Ramot nothing');
   assert.equal(byId.get('kpiHousesAbove').textContent, '4/5');
   assert.equal(byId.get('kpiDaysLeft').textContent, '30 מתוך 30');
@@ -819,8 +828,7 @@ test('bonus picker: the running month is byte-for-byte unchanged after picking a
   const { ctx, byId, panel, calls } = await bootWithHistory();
   const before = pageSnapshot(ctx, byId, panel);
   const stateBefore = vm.runInContext('JSON.stringify({ o: state.overview, m: state.monthOverviews, p: state.prevOverview, c: state.chartsByMonth, d: state.details, q: state.quarterWindow })', ctx);
-  assert.equal(before.nextTierHidden, false);
-  assert.equal(before.quarterlyMonthsHidden, true);
+  assert.equal(before.detailExtras[4], 'הבונוסים החודש — ספטמבר 2026');
   assert.match(before.detail.kpiDaysLabel, /ספטמבר 2026 \(בתהליך\)/);
   assert.equal(before.detail.kpiDays, '102');
   assert.equal(before.kpis[0], 'בתים עם בונוס מובטח — ספטמבר 2026 (בתהליך)');
@@ -928,10 +936,10 @@ test('index.html / sw.js: both pickers exist, the legend labels are addressable,
   assert.ok(tpl.indexOf('data-bonus-month') < tpl.indexOf('data-status-banner'), 'house picker sits above the hero');
   assert.match(tpl, /data-stat-label="daysSoFar"/);
   assert.match(tpl, /data-stat-label="daysProjection"/);
-  assert.match(tpl, /data-quarterly-months hidden/);
+  assert.doesNotMatch(tpl, /data-quarterly/, 'no quarterly block on the house page (13 Oct 2026)');
   const m = pub('sw.js').match(/const CACHE = 'ezone-managers-v(\d+)'/);
   assert.ok(m && Number(m[1]) >= 10, 'SW cache must be bumped to v10+ (bonus-history picker shell)');
-  assert.match(pub('styles.css'), /\.next-tier-card\[hidden\]\s*\{\s*display:\s*none/);
+  assert.match(pub('styles.css'), /\.bp-first\s*\{/);
   assert.match(pub('styles.css'), /\.link-btn\[hidden\]\s*\{\s*display:\s*none/);
 });
 
@@ -1056,6 +1064,8 @@ const allTextOf = (el) => {
   walk(el);
   return out.join('\n');
 };
+/* Ids of the bonus-plan blocks rendered in a house tab, in order. */
+const planIds = (el) => el.querySelector('[data-breakdown]').children.map((li) => /data-bonus-item|bp-(\w+) st-/.exec(li.className)[1]);
 const logNames = (ul) => ul.children.map((li) => /log-name">([^<]*)</.exec(li.innerHTML)[1]);
 
 test('settled Sep 2026 (1 Oct): the house tab renders admissions, discharges, patient names from managersHouse&month=2026-09 — and no referral bonus (Sep 2026 is before the referral rule)', async () => {
@@ -1075,7 +1085,7 @@ test('settled Sep 2026 (1 Oct): the house tab renders admissions, discharges, pa
   // referral counts are not paid — September 2026 is before the referral rule.
   assert.equal(/data-hero-headline>([^<]*)</.exec(ef.querySelector('[data-status-banner]').innerHTML)[1], 'ספטמבר 2026 — סופי: זכאי · מדרגה 1 · 2,000 ₪');
   const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
-  assert.equal(bk.length, 4, 'no referral line');
+  assert.deepEqual(planIds(ef), ['first'], 'September (old rules): first bonus only — no referral line');
   assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '2,000 ₪');
   assert.equal(ef.querySelector('[data-stat="bonusTotal"]').textContent, '2,000 ₪');
   assert.doesNotMatch(ef.querySelector('[data-daily-spark]').innerHTML, /no-chart/, 'September daily chart from the payload');
@@ -1083,7 +1093,7 @@ test('settled Sep 2026 (1 Oct): the house tab renders admissions, discharges, pa
   const pa = panel('pardes');
   assert.deepEqual(logNames(pa.querySelector('[data-log="entries"]')), ['תמר אלון']);
   assert.match(pa.querySelector('[data-log="exits"]').innerHTML, /data-settled-log="empty">לא היו יציאות בספטמבר 2026</, 'a month with none, confirmed by the data');
-  assert.equal(pa.querySelector('[data-breakdown]').children.length, 4, 'no referral line');
+  assert.deepEqual(planIds(pa), ['first', 'mid'], 'Pardes reached the 12-patient step; no referral line');
   assert.equal(/data-hero-headline>([^<]*)</.exec(pa.querySelector('[data-status-banner]').innerHTML)[1], 'ספטמבר 2026 — סופי: זכאי · מדרגה 2 · 2,500 ₪');
 
   for (const key of ['efroni', 'pardes']) {
@@ -1114,7 +1124,7 @@ test('settled Sep 2026: a failed house fetch is an explicit error state — neve
   assert.equal(ef.querySelector('[data-stat="entries"]').textContent, '—');
   assert.equal(ef.querySelector('[data-stat="exits"]').textContent, '—');
   // September has no referral bonus, so a failed house payload adds no referral line and no note.
-  assert.equal(ef.querySelector('[data-breakdown]').children.length, 4);
+  assert.deepEqual(planIds(ef), ['first'], 'no referral line');
   assert.equal(ef.querySelector('[data-bonus-fallback-note]').textContent, '');
   assert.match(ef.querySelector('[data-daily-spark]').innerHTML, /data-bonus-history-state="chart-error">שגיאה בטעינת התפוסה היומית לספטמבר 2026: upstream down/);
   assert.doesNotMatch(allTextOf(ef), /אין נתוני/);
@@ -1209,18 +1219,20 @@ const noReferralText = (text, where) => {
 test('referrals OFF — running month: the house tab and card never add the feed\'s referral total; the referral line is absent', () => {
   const { ctx } = setup();
   assert.equal(vm.runInContext("BonusEligibility.continuityEnabled('2026-09')", ctx), false, "no referral bonus in September 2026");
-  // Day 28: tier 2 locked (532 ≥ 510, avg 19) — and the feed carries referrals.
+  // Day 28: 532 days ≥ 510 → the first bonus is locked (tier 2 needs 570 already counted) — and the feed carries referrals.
   vm.runInContext('state.now = new Date(2026, 8, 28, 12)', ctx);
   const chart = Array.from({ length: 28 }, (_, i) => ({ date: `2026-09-${String(i + 1).padStart(2, '0')}`, count: 19 }));
   const detail = { ...RAMOT_DETAIL, dailyChart: chart, bonus: { ...RAMOT_DETAIL.bonus, continuity: REFERRAL_FEED } };
   vm.runInContext(`state.details.ramot = ${JSON.stringify(detail)}`, ctx);
   call(ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', ctx));
   const panel = vm.runInContext('document.getElementById("panel-ramot")', ctx);
-  assert.equal(panel.querySelector('[data-stat="bonus"]').textContent, '2,500 ₪', 'tier 2 only — not + 1,777 (feed) or + 1,000 (counts)');
-  assert.equal(panel.querySelector('[data-stat="bonusTotal"]').textContent, '2,500 ₪');
+  assert.equal(panel.querySelector('[data-stat="bonus"]').textContent, '2,000 ₪', 'first bonus only — not + 1,777 (feed) or + 1,000 (counts)');
+  assert.equal(panel.querySelector('[data-stat="bonusTotal"]').textContent, '2,000 ₪');
   const bk = panel.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
-  assert.equal(bk.length, 4, '3 tiers + quarterly; no referral line');
-  noReferralText(bk.join('\n') + panel.querySelector('[data-status-banner]').innerHTML + panel.querySelector('[data-month-split]').innerHTML, 'house tab');
+  // 19 (570 days) is still reachable: 532 + 2 × 20 = 572 → shown, not yet achieved.
+  assert.deepEqual(planIds(panel), ['first', 'mid'], 'first bonus achieved + the reachable next step; no referral line');
+  assert.match(bk[1], /bp-status">עכשיו: 532 ימי טיפול מתוך 570/);
+  noReferralText(bk.join('\n') + panel.querySelector('[data-status-banner]').innerHTML, 'house tab');
   const card = call(ctx, 'buildHouseCard', { ...RAMOT_OVERVIEW, dailyChart: chart, bonus: { continuity: REFERRAL_FEED } }).innerHTML;
   noReferralText(card, 'house card');
 });
@@ -1231,7 +1243,7 @@ test('referrals OFF — settled Sep 2026: totals are occupancy-only, no referral
   const ef = panel('efroni');
   assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '2,000 ₪', 'tier 1 only — referral counts 2×100 + 1×500 are not paid');
   assert.equal(ef.querySelector('[data-stat="bonusTotal"]').textContent, '2,000 ₪');
-  assert.equal(ef.querySelector('[data-breakdown]').children.length, 4);
+  assert.deepEqual(planIds(ef), ['first'], 'no referral line');
   noReferralText(allTextOf(ef), 'efroni tab');
   // The entries/exits/names fix is untouched.
   assert.deepEqual(logNames(ef.querySelector('[data-log="entries"]')), ['אבי גל', 'נועה ברק']);
@@ -1285,9 +1297,9 @@ function runningMonthPage() {
       hero: q('[data-status-banner]').innerHTML,
       kpis: ['entries', 'exits', 'treatmentDays', 'bonus', 'daysSoFar', 'daysTarget', 'daysProjection', 'bonusTotal'].map((n) => [n, q(`[data-stat="${n}"]`).textContent]),
       bonusNote: q('[data-bonus-fallback-note]').textContent,
-      monthSplit: q('[data-month-split]').innerHTML,
+      planTitle: q('[data-bonus-plan-title]').textContent,
+    plan: q('[data-breakdown]').children.map((li) => li.innerHTML),
       tierCurrent: q('[data-tier-current]').textContent,
-      quarterlyNote: q('[data-quarterly-note]').textContent,
       breakdown: q('[data-breakdown]').children.map((li) => li.innerHTML.replace(/\s+/g, ' ').trim()),
       entries: q('[data-log="entries"]').children.map((li) => li.innerHTML.replace(/\s+/g, ' ').trim()),
       exits: q('[data-log="exits"]').children.map((li) => li.innerHTML.replace(/\s+/g, ' ').trim())
@@ -1295,7 +1307,7 @@ function runningMonthPage() {
   };
 }
 
-test('running month: golden snapshot (referral line removed, totals without referrals — the only change of 1 Oct 2026)', () => {
+test('running month: golden snapshot (house page redesigned 13 Oct 2026 — bonus plan in words; no tier track / quarterly / month split)', () => {
   const page = runningMonthPage();
   if (process.env.UPDATE_SNAPSHOT) {
     fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(page, null, 2) + '\n');
@@ -1319,11 +1331,11 @@ test('running Oct 2026: cards and the house tab use the new first tier and gate 
   const pardes = cards.find((c) => /רעננה הפרדס/.test(c.innerHTML)).innerHTML;
   assert.match(pardes, /זכאות לבונוס: <b>7<\/b>/);
   assert.match(pardes, /data-card-days>[^<]*\/ 210</);
-  // House tab (October, running): the gate marker and the tier rows come from the October rules.
+  // House tab (October, running): the first bonus needs 9 × 31 = 279 days in October.
   const ef = panel('efroni');
-  assert.equal(ef.querySelector('[data-stat="daysTarget"]').textContent, '270');
+  assert.equal(ef.querySelector('[data-stat="daysTarget"]').textContent, '279');
   const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
-  assert.match(bk[0], /בונוס מדרגה 1 \(9 מטופלים\)/);
+  assert.match(bk[0], /bp-cond">ממוצע של לפחות 9 מטופלים ליום — כלומר 279 ימי טיפול באוקטובר 2026</);
 });
 
 test('running Oct 2026: the referral bonus is 300 ₪ per day-package patient, added even before the occupancy bonus is secured', async () => {
@@ -1333,10 +1345,15 @@ test('running Oct 2026: the referral bonus is 300 ₪ per day-package patient, a
   call(ctx, 'renderHouseDetail', 'efroni', withRefs);
   const ef = panel('efroni');
   const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
-  assert.equal(bk.length, 6, '3 tiers + quarterly + referral + intake meetings');
-  assert.match(bk[4], /בונוס הפניות להמשך טיפול[\s\S]*2 מטופלים בחבילה יומית × 300 ₪[\s\S]*bk-amount">600 ₪</);
+  // Day 1 had 11 of 13 beds filled: full occupancy (13 × 31 = 403) is out of reach
+  // (11 + 30 × 13 = 401), so that block is not shown.
+  assert.deepEqual(planIds(ef), ['first', 'intake', 'referral']);
+  const ref = bk[2];
+  assert.match(ref, /bp-title">בונוס המשך טיפול<[\s\S]*bp-pay">300 ₪ לכל מטופל בחודש</);
+  assert.match(ref, /bp-cond">מטופל שהשתחרר מהבית וממשיך אצלנו בטיפול יום — פעמיים בשבוע או יותר</);
+  assert.match(ref, /bp-status">2 מטופלים בטיפול יום = 600 ₪<[\s\S]*bk-amount">600 ₪</);
   assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '600 ₪', 'day 1: occupancy not secured yet, referral 600 counts');
-  assert.match(ef.querySelector('[data-stat-label="bonus"]').textContent, /אוקטובר 2026 \(בתהליך\)/, 'labelled as in progress, not final');
+  assert.match(ef.querySelector('[data-stat-label="bonus"]').textContent, /הושג עד כה — אוקטובר 2026/, 'labelled as so far, not final');
   assert.equal(ef.querySelector('[data-stat="bonusTotal"]').textContent, '600 ₪');
   assert.doesNotMatch(allTextOf(ef), /2577|2,577|5,000 ₪ × |תחזוקתי × 100/, 'no feed total, no feed rates, no old formula');
   // The overview card of the same house shows it in the running block.
@@ -1421,12 +1438,12 @@ test('1 Nov 2026 — picking October: the settled house tab shows the referral l
   const ef = panel('efroni');
   assert.equal(/data-hero-headline>([^<]*)</.exec(ef.querySelector('[data-status-banner]').innerHTML)[1], 'אוקטובר 2026 — סופי: זכאי · מדרגה 1 · 2,000 ₪');
   const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
-  assert.equal(bk.length, 6, '3 tiers + quarterly + referral + intake meetings');
-  assert.match(bk[0], /בונוס מדרגה 1 \(9 מטופלים\)/, 'October tier table');
-  assert.match(bk[4], /2 מטופלים בחבילה יומית × 300 ₪[\s\S]*bk-amount">600 ₪</);
+  assert.deepEqual(planIds(ef), ['first', 'intake', 'referral'], 'full occupancy was not reached, so it is not shown');
+  assert.match(bk[0], /bp-status">הושג — ממוצע 9\.2 מטופלים ליום \(נדרש 9\) · 285 ימי טיפול \(נדרש לפחות 270\)</, 'October rules');
+  assert.match(bk[2], /bp-status">2 מטופלים בטיפול יום = 600 ₪<[\s\S]*bk-amount">600 ₪</);
   assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '2,600 ₪');
   assert.equal(ef.querySelector('[data-stat="bonusTotal"]').textContent, '2,600 ₪');
-  assert.equal(ef.querySelector('[data-stat="daysTarget"]').textContent, '270');
+  assert.equal(ef.querySelector('[data-stat="daysTarget"]').textContent, '279');
   // Ra'anana: no occupancy bonus, referral only.
   const ra = panel('raanana');
   assert.match(ra.querySelector('[data-status-banner]').innerHTML, /לא זכאי/);
@@ -1444,9 +1461,10 @@ test('1 Nov 2026 — settled October, house payload failed: the referral amount 
   const { ctx, panel, heal, calls } = await bootNov({ failHouse: 'efroni' });
   await call(ctx, 'selectBonusMonth_', '2026-10');
   const ef = panel('efroni');
-  const ref = ef.querySelector('[data-breakdown]').children[4].innerHTML;
-  assert.match(ref, /שגיאה בטעינת הפניות לאוקטובר 2026: upstream down[\s\S]*bk-amount">—</);
-  assert.equal(ef.querySelector('[data-bonus-fallback-note]').textContent, 'לא כולל בונוס הפניות — הנתונים לא נטענו');
+  const ref = ef.querySelector('[data-breakdown]').children.find((li) => /bp-referral/.test(li.className)).innerHTML;
+  assert.match(ref, /bp-status">שגיאה בטעינת הנתונים: upstream down<[\s\S]*bk-amount">—</);
+  assert.match(ref, /bp-chip">שגיאה</);
+  assert.equal(ef.querySelector('[data-bonus-fallback-note]').textContent, 'לא כולל בונוס המשך טיפול — הנתונים לא נטענו');
   heal();
   calls.length = 0;
   await call(ctx, 'selectBonusMonth_', '2026-10');
@@ -1494,8 +1512,11 @@ test('1 Nov 2026 — picking October: the house tab shows the intake line and ad
     await call(ctx, 'selectBonusMonth_', '2026-10');
     assert.equal(byId.get('kpiBonus').textContent, '7,950 ₪', '7,200 + 3 × 250');
     const ef = panel('efroni');
-    const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
-    assert.match(bk[5], /בונוס פגישות קליטה \(מהמטופל ה-7\)[\s\S]*3 פגישות שנסגרו לקליטה × 250 ₪ · 2 ממתינות להשלמת 30 יום[\s\S]*bk-amount">750 ₪</);
+    const intake = ef.querySelector('[data-breakdown]').children.find((li) => /bp-intake/.test(li.className)).innerHTML;
+    assert.match(intake, /bp-title">בונוס פגישות קליטה<[\s\S]*bp-pay">250 ₪ לכל פגישה</);
+    // The 7th refers to the 7th patient IN THE HOUSE, not the 7th meeting.
+    assert.match(intake, /bp-cond">קיימת את פגישת הקליטה · המטופל נקלט לאשפוז כשבבית כבר היו 6 מאושפזים \(הוא המאושפז ה-7 ומעלה\) · ונשאר באשפוז לפחות 30 יום</);
+    assert.match(intake, /bp-status">3 פגישות עומדות בתנאים = 750 ₪ · 2 ממתינות להשלמת 30 יום<[\s\S]*bk-amount">750 ₪</);
     assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '3,350 ₪', '2,000 tier + 600 referral + 750 intake');
     assert.equal(ef.querySelector('[data-stat="bonusTotal"]').textContent, '3,350 ₪');
     for (const w of FORBIDDEN_HISTORY) assert.ok(!allTextOf(ef).includes(w), `settled month never says "${w}"`);
@@ -1506,8 +1527,9 @@ test('running Oct 2026: the house tab and card show confirmed intake meetings (2
   const detail = vm.runInContext('state.details.efroni', ctx);
   call(ctx, 'renderHouseDetail', 'efroni', { ...detail, intakeMeetings: { confirmed: 1, pending: 1, items: [] } });
   const ef = panel('efroni');
-  const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
-  assert.match(bk[5], /1 פגישות שנסגרו לקליטה × 250 ₪ · 1 ממתינה להשלמת 30 יום[\s\S]*bk-amount">250 ₪</);
+  const intake = ef.querySelector('[data-breakdown]').children.find((li) => /bp-intake/.test(li.className));
+  assert.match(intake.className, /st-earned/);
+  assert.match(intake.innerHTML, /bp-status">1 פגישה עומדת בתנאים = 250 ₪ · 1 ממתינה להשלמת 30 יום<[\s\S]*bk-amount">250 ₪</);
   assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '250 ₪');
   const card = call(ctx, 'buildHouseCard', { ...vm.runInContext('state.housesById.efroni', ctx), intakeMeetings: { confirmed: 2, pending: 0 } }).innerHTML;
   assert.match(card, /פגישות קליטה 500 ₪/);
@@ -1526,4 +1548,20 @@ test('the quarterly check ignores intake meetings', () => {
   const BE = require('../lib/bonus-eligibility');
   const occ = BE.monthlyBonusAmount({ ym: '2026-10', key: 'rehab', avgDaily: 8, treatmentDays: 248, intakeMeetings: { confirmed: 20 } }).amount;
   assert.equal(occ, 0, 'intake data on the row never adds to the occupancy amount');
+});
+
+test('a house tab opened before the overview finished is redrawn with last month once the overview lands', async () => {
+  const { calls, fetchImpl } = bonusHistoryFeed();
+  const s = setup(fetchImpl);
+  vm.runInContext('state.prevOverview = null; state.monthOverviews = {}; state.housesById = {}; state.overview = null', s.ctx);
+  // The tab draws first (its own payload), with no overview yet.
+  const { prevMonth, ...detailNoPrev } = RAMOT_DETAIL; // the house payload carries no last-month block
+  vm.runInContext(`cacheHouseDetail_('ramot', ${JSON.stringify(detailNoPrev)}, '2026-09')`, s.ctx);
+  call(s.ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', s.ctx));
+  const panel = s.byId.get('panel-ramot');
+  assert.match(panel.querySelector('[data-status-banner]').innerHTML, /הנתונים לא זמינים/);
+  await vm.runInContext('loadOverview', s.ctx)();
+  assert.doesNotMatch(panel.querySelector('[data-status-banner]').innerHTML, /הנתונים לא זמינים/, 'redrawn with August');
+  assert.match(panel.querySelector('[data-status-banner]').innerHTML, /אוגוסט 2026/);
+  assert.ok(calls.length > 0);
 });

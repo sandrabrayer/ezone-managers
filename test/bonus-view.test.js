@@ -116,15 +116,17 @@ test('current month: on pace for tier 3 but gate not met → still "מדרגה �
   assert.match(v.projectionText, /מדרגה 3 \(3,000 ₪\)/, 'the projection line may name the projected tier');
 });
 
-test('current month: gate met and average supports a tier → locked, tier shown as achieved', () => {
-  // Day 27: 27 × 19 = 513 ≥ 510, avg 19 → tier 2 secured.
+test('current month: a step is locked only once the days already counted guarantee it for the month', () => {
+  // Day 27: 27 × 19 = 513 ≥ 510 (tier 1: 17 × 30) but < 570 (tier 2: 19 × 30) → tier 1 locked.
   const v = BV.currentMonthView({ ...RAMOT_SEP, daysSoFar: 513, elapsedDays: 27 }, noThreshold);
   assert.equal(v.state, 'locked');
-  assert.equal(v.securedTier, 2);
-  assert.equal(v.securedAmount, 2500);
+  assert.equal(v.securedTier, 1);
+  assert.equal(v.securedAmount, 2000);
   assert.equal(v.badge.achieved, true);
-  assert.equal(v.badge.text, 'מדרגה 2 · 2,500 ₪');
-  assert.equal(v.securedText, 'מובטח · מדרגה 2 · 2,500 ₪');
+  assert.equal(v.securedText, 'מובטח · מדרגה 1 · 2,000 ₪');
+  // Day 30 with 570 days → tier 2 locked.
+  const w = BV.currentMonthView({ ...RAMOT_SEP, daysSoFar: 570, elapsedDays: 30 }, noThreshold);
+  assert.deepEqual([w.securedTier, w.securedAmount], [2, 2500]);
 });
 
 test('current month average is capped at capacity (front-dated stays cannot project above the beds)', () => {
@@ -147,11 +149,11 @@ test('tierBadgeView: achieved only when an achieved tier is passed in', () => {
 
 test('tierBadgeView / tiersAscFor follow the month: Oct 2026 has the lower first tiers', () => {
   assert.equal(BV.tierBadgeView({ key: 'ramot', ym: '2026-10', avgDaily: 12 }).text, 'מדרגה הבאה: 1 (14 מטופלים/יום) · ממוצע נוכחי 12');
-  assert.equal(BV.tierBadgeView({ key: 'ramot', ym: '2026-10', avgDaily: 14 }).text, 'מדרגה הבאה: 2 (19 מטופלים/יום) · ממוצע נוכחי 14');
+  assert.equal(BV.tierBadgeView({ key: 'ramot', ym: '2026-10', avgDaily: 14 }).text, 'מדרגה הבאה: 2 (20 מטופלים/יום) · ממוצע נוכחי 14');
   assert.equal(BV.tierBadgeView({ key: 'pardes', ym: '2026-10', avgDaily: 6 }).text, 'מדרגה הבאה: 1 (7 מטופלים/יום) · ממוצע נוכחי 6');
-  assert.deepEqual(BV.tiersAscFor('efroni', '2026-10').map((t) => t.patients), [9, 12, 13]);
+  assert.deepEqual(BV.tiersAscFor('efroni', '2026-10').map((t) => t.patients), [9, 13]);
   assert.deepEqual(BV.tiersAscFor('efroni', '2026-09').map((t) => t.patients), [10, 12, 13]);
-  assert.deepEqual(BV.tiersAscFor('efroni').map((t) => t.patients), [9, 12, 13], 'no month → current rules');
+  assert.deepEqual(BV.tiersAscFor('efroni').map((t) => t.patients), [9, 13], 'no month → current rules');
 });
 
 test('settledMonthView: Sep 2026 is judged by the old rules, Oct 2026 by the new ones', () => {

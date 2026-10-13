@@ -56,13 +56,20 @@ test('every rule set covers exactly HOUSE_KEYS', () => {
   }
 });
 
-test('current first tiers (from Oct 2026): ramot 14, raanana 10, efroni 9, rehab 9, pardes 7; tiers 2/3 unchanged', () => {
+test('current rules (from Oct 2026): first bonus ramot 14, raanana 10, efroni 9, rehab 9, pardes 7; full occupancy = capacity', () => {
   const first = Object.fromEntries(Object.entries(HOUSE_BONUS).map(([k, v]) => [k, v.threshold]));
   assert.deepEqual(first, { ramot: 14, raanana: 10, efroni: 9, rehab: 9, pardes: 7 });
-  const upper = (k) => HOUSE_BONUS[k].tiers.slice(0, 2).map((t) => [t.patients, t.amount]);
-  assert.deepEqual(upper('ramot'), [[20, 3000], [19, 2500]]);
-  assert.deepEqual(upper('raanana'), [[14, 3000], [12, 2500]]);
-  for (const k of ['efroni', 'rehab', 'pardes']) assert.deepEqual(upper(k), [[13, 3000], [12, 2500]], k);
+  const steps = (k) => HOUSE_BONUS[k].tiers.map((t) => [t.patients, t.amount]);
+  assert.deepEqual(steps('ramot'), [[20, 3000], [14, 2000]]);
+  assert.deepEqual(steps('raanana'), [[14, 3000], [10, 2000]]);
+  for (const k of ['efroni', 'rehab']) assert.deepEqual(steps(k), [[13, 3000], [9, 2000]], k);
+  assert.deepEqual(steps('pardes'), [[13, 3000], [7, 2000]]);
+  // Full occupancy = the house capacity in HOUSE_LABELS.
+  const labels = appJs.match(/const HOUSE_LABELS = \{([\s\S]*?)\n\};/)[1];
+  for (const key of KEYS) {
+    const cap = Number(labels.match(new RegExp(`${key}:\\s*\\{[^}]*capacity:\\s*(\\d+)`))[1]);
+    assert.equal(HOUSE_BONUS[key].tiers[0].patients, cap, `${key}: full occupancy = capacity`);
+  }
 });
 
 test('HOUSE_LABELS threshold fallbacks match the current first tiers', () => {

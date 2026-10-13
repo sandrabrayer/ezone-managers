@@ -81,17 +81,22 @@ The rules live in `RULE_SETS` in `lib/bonus-eligibility.js`. A month is
 judged by the latest rule set that started on or before it, so a rule change
 never rewrites a settled month.
 
-| House | First tier / gate up to Sep 2026 | From Oct 2026 |
+| House | Up to Sep 2026 (first / gate; tiers 2,000 / 2,500 / 3,000) | From Oct 2026: first bonus 2,000 ₪ · full occupancy 3,000 ₪ total |
 |---|---|---|
-| רמות השבים | 17 / 510 | **14 / 420** |
-| רעננה אשר | 10 / 300 | 10 / 300 |
-| קיסריה עפרוני | 10 / 300 | **9 / 270** |
-| קיסריה ריהאב | 10 / 300 | **9 / 270** |
-| רעננה הפרדס | 10 / 300 | **7 / 210** |
+| רמות השבים | 17 / 510 (19, 20) | **14** · full **20** |
+| רעננה אשר | 10 / 300 (12, 14) | 10 · full 14 |
+| קיסריה עפרוני | 10 / 300 (12, 13) | **9** · full **13** |
+| קיסריה ריהאב | 10 / 300 (12, 13) | **9** · full **13** |
+| רעננה הפרדס | 10 / 300 (12, 13) | **7** · full **13** |
 
-Tier 1 pays 2,000 ₪ once the treatment-days gate (first tier × 30) is met;
-tiers 2 and 3 (2,500 / 3,000 ₪) are unchanged. Quarterly: 5,000 ₪ when the
-occupancy bonus was ≥ 2,000 ₪ in each month of the window.
+A step pays when the month's average reaches its patient count and the
+treatment-days gate (first step × 30) is met; it counts as **secured**
+mid-month once the days already counted reach `max(gate, patients ×
+days-in-month)`. Quarterly 5,000 ₪ (each month's occupancy bonus ≥ 2,000 ₪):
+May–Jul 2026 only — none from the Aug–Oct 2026 window on.
+
+The house page shows each bonus as a block: what it pays, the condition in
+words, and the figures now; full occupancy appears only while reachable.
 
 **Outpatient day-package bonus («בונוס הפניות להמשך טיפול»), from Oct 2026:**
 300 ₪ per outpatient from the house in a day package (two days a week or

@@ -3,6 +3,50 @@
 
 ## Unreleased
 
+### Changed — house page simplified; two-step bonus from October 2026 (October 13, 2026)
+
+**What** (Sandra, 13 Oct 2026 — "make it simple"):
+- **Rules from Oct 2026** (the Oct 2026 rule set, before October was
+  settled): two steps per house — **first bonus 2,000 ₪** at the lowered
+  quota (Ramot 14, Ra'anana 10, Efroni 9, Rehab 9, Pardes 7) and **full
+  occupancy** (the house capacity: 20 / 14 / 13 / 13 / 13) at **3,000 ₪ in
+  total** (+1,000). The 2,500 middle tier is gone. Up to Sep 2026 nothing
+  changes.
+- **No quarterly bonus** from the Aug–Oct 2026 window on
+  (`quarterlyEnabled(ym)`, rule-set flag `quarterly`); May–Jul 2026 still
+  paid.
+- **"Secured" is now exact**: a step counts as secured only once the days
+  already counted reach `max(gate, patients × days-in-month)` — the month's
+  average can then no longer fall below it (e.g. Ramot's first bonus in
+  October needs 14 × 31 = 434 days, not 420). The house tab's target bar uses
+  the same figure.
+- **House page redesign** (house tabs only; the overview is unchanged):
+  - right under the header, one card **«הבונוסים החודש»** with a coloured
+    block per bonus — what it pays, **«תנאי:»** in plain words, **«מצב:»**
+    with the real figures now (e.g. «עכשיו: 161 ימי טיפול מתוך 434 · ממוצע
+    12.4 מטופלים ליום» + «נשארו 18 ימים — צריך בממוצע 15.2 מטופלים ליום»),
+    and a status chip (הושג / בקצב הנכון / צריך להאיץ / לא החודש / ממתין);
+    no bare «0 ₪» on a bonus not yet earned;
+  - **full occupancy appears only when still mathematically reachable** this
+    month (or earned);
+  - the intake-meeting block states that "7th" means the **7th patient
+    hospitalised in the house**, not the 7th meeting;
+  - removed: the «לבונוס הבא» card, «מדרגות בונוס חודשי», the quarterly
+    block, the month split under the bonus KPI and the hero's running-month
+    line;
+  - **«היסטוריית תפוסה»** and the monthly-occupancy card moved to the end.
+- A house tab opened before the overview loaded (a direct `#ramot` link) is
+  redrawn once the overview lands, so its header shows last month instead of
+  «הנתונים לא זמינים».
+- New: `BonusView.bonusPlanView` (pure; a finished month's verdict is the
+  official `monthlyBonusAmount`), `renderBonusPlan_` (every string escaped).
+  Removed dead code: `renderNextTierCard`, `renderTierTrack`,
+  `renderQuarterlyTrack`, `renderBreakdown`, `renderMonthSplit_`,
+  `tierCfgFor_`, `quarterMonthsText_`, `fmtMonthLabel`.
+
+**Tests**: 233 → 234; house-page tests rewritten for the plan; running-month
+snapshot regenerated on purpose (the page changed). SW cache v16 → v17.
+
 ### Added — intake-meeting bonus, 250 ₪ per meeting, from October 2026 (October 13, 2026)
 
 **What** (Sandra's decision, 13 Oct 2026):

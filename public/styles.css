@@ -1442,3 +1442,84 @@ body::before {
   .occupancy-table th, .occupancy-table td { padding: 7px 8px; }
   .occ-pct { font-size: 14px; }
 }
+
+/* ── House page: the bonus plan (13 Oct 2026) ──────────────────────────
+   One block per bonus, each with its own accent colour so the sections are
+   told apart at a glance; the chip colour says where the house stands. */
+.bonus-plan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bp-item {
+  --accent: var(--gold);
+  --accent-bg: rgba(252, 211, 77, 0.07);
+  border: 1px solid var(--line);
+  border-inline-start: 5px solid var(--accent);
+  background: linear-gradient(90deg, var(--accent-bg), rgba(255, 255, 255, 0.02));
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bp-first    { --accent: #FCD34D; --accent-bg: rgba(252, 211, 77, 0.10); }
+.bp-mid      { --accent: #FB923C; --accent-bg: rgba(251, 146, 60, 0.10); }
+.bp-full     { --accent: #34D399; --accent-bg: rgba(52, 211, 153, 0.10); }
+.bp-intake   { --accent: #60A5FA; --accent-bg: rgba(96, 165, 250, 0.10); }
+.bp-referral { --accent: #C084FC; --accent-bg: rgba(192, 132, 252, 0.10); }
+.bp-quarterly{ --accent: #F472B6; --accent-bg: rgba(244, 114, 182, 0.10); }
+.bp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.bp-title { font-family: 'Frank Ruhl Libre', serif; font-weight: 700; font-size: 18px; color: var(--accent); }
+.bp-pay { font-weight: 700; font-size: 15px; color: var(--text); white-space: nowrap; }
+.bp-row { font-size: 14px; line-height: 1.5; color: var(--text); }
+.bp-k { font-weight: 700; color: var(--accent); margin-inline-end: 4px; }
+.bp-cond { color: var(--text-mute); }
+.bp-status { color: var(--text); font-weight: 500; }
+.bp-extra {
+  font-size: 13px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+}
+.bp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+}
+.bp-foot .bk-amount { font-family: 'Frank Ruhl Libre', serif; font-weight: 900; font-size: 22px; color: var(--text-mute); white-space: nowrap; }
+.bp-item.st-earned .bk-amount { color: var(--gold); text-shadow: 0 0 12px var(--gold-glow); }
+.bp-chip {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+.st-earned .bp-chip      { background: rgba(16, 185, 129, 0.22); color: #6EE7B7; }
+.st-on-track .bp-chip    { background: rgba(252, 211, 77, 0.20); color: #FDE68A; }
+.st-behind .bp-chip      { background: rgba(251, 146, 60, 0.22); color: #FDBA74; }
+.st-unreachable .bp-chip,
+.st-missed .bp-chip      { background: rgba(248, 113, 113, 0.20); color: #FCA5A5; }
+.st-pending .bp-chip     { background: rgba(96, 165, 250, 0.20); color: #BFDBFE; }
+.st-none .bp-chip,
+.st-loading .bp-chip     { background: rgba(255, 255, 255, 0.08); color: var(--text-mute); }
+.st-error .bp-chip       { background: rgba(248, 113, 113, 0.20); color: #FCA5A5; }
+.bonus-plan-card .bonus-fallback-note:empty { display: none; }
+@media (max-width: 520px) {
+  .bp-title { font-size: 16px; }
+  .bp-row { font-size: 13px; }
+}
