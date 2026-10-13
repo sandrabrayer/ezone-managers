@@ -158,8 +158,10 @@
   }
 
   /* ── tiers ──────────────────────────────────────────────── */
-  function tiersAscFor(key) {
-    var cfg = (BE.HOUSE_BONUS || {})[key];
+  /* Tier table of a house for a month (ascending). The rules are
+     month-aware: `ym` picks the rule set; no month → the current rules. */
+  function tiersAscFor(key, ym) {
+    var cfg = BE.rulesFor ? BE.rulesFor(key, ym) : (BE.HOUSE_BONUS || {})[key];
     var tiers = cfg && Array.isArray(cfg.tiers) ? cfg.tiers.slice() : [];
     return tiers.sort(function (a, b) { return a.patients - b.patients; });
   }
@@ -183,7 +185,7 @@
       };
     }
     var avg = Number(opts.avgDaily) || 0;
-    var tiers = tiersAscFor(opts.key);
+    var tiers = tiersAscFor(opts.key, opts.ym);
     var next = null, nextIdx = 0;
     for (var i = 0; i < tiers.length; i++) {
       if (avg < tiers[i].patients) { next = tiers[i]; nextIdx = i + 1; break; }
@@ -218,7 +220,7 @@
     var ym = opts.ym;
     var avg = Number(opts.avgDaily) || 0;
     var td = Number(opts.treatmentDays) || 0;
-    var h = { key: key, avgDaily: avg, treatmentDays: td };
+    var h = { key: key, ym: ym, avgDaily: avg, treatmentDays: td };
     var r = BE.monthlyBonusAmount(h, resolveThreshold, daysInMonth(ym));
     var threshold = BE.thresholdOf(h, resolveThreshold);
     var label = monthLabel(ym);
@@ -251,7 +253,7 @@
       avgDaily: avg,
       threshold: threshold,
       statusText: statusText,
-      badge: tierBadgeView({ key: key, achievedTier: r.amount > 0 ? r.tier : 0, achievedAmount: r.amount, avgDaily: avg }),
+      badge: tierBadgeView({ key: key, ym: ym, achievedTier: r.amount > 0 ? r.tier : 0, achievedAmount: r.amount, avgDaily: avg }),
       final: true
     };
   }
@@ -278,7 +280,7 @@
     var elapsed = Math.max(1, Math.min(dim, Number(opts.elapsedDays) || 1));
     var capacity = Number(opts.capacity) > 0 ? Number(opts.capacity) : Infinity;
     var avgSoFar = Math.min(capacity, days / elapsed);
-    var hAvg = { key: key, avgDaily: avgSoFar };
+    var hAvg = { key: key, ym: ym, avgDaily: avgSoFar };
     var threshold = BE.thresholdOf(hAvg, resolveThreshold);
     var gate = BE.gateTarget(hAvg, resolveThreshold);
     var projTier = BE.tierForPatients(hAvg, resolveThreshold);
@@ -315,26 +317,31 @@
       securedText: locked
         ? 'מובטח · מדרגה ' + floor.tier + ' · ' + fmtCurrency(floor.amount)
         : 'טרם הובטח · 0 ₪',
-      badge: tierBadgeView({ key: key, achievedTier: locked ? floor.tier : 0, achievedAmount: floor.amount, avgDaily: avgSoFar }),
+      badge: tierBadgeView({ key: key, ym: ym, achievedTier: locked ? floor.tier : 0, achievedAmount: floor.amount, avgDaily: avgSoFar }),
       final: false
     };
   }
 
   /* ── overview hero (winners banner) ─────────────────────── */
   /**
-   * rows: [{ name, manager, amount, tier, quarterly }] for the settled month.
-   * out : { title, winners:[{..., text}], noneText, currentLine }
+   * rows: [{ name, manager, amount, tier, quarterly, referral }] for the
+   * settled month. `amount` = the occupancy bonus; `referral` = the
+   * outpatient day-package bonus (0 before Oct 2026). A manager with only a
+   * referral bonus is still a winner.
+   * out : { title, winners:[{..., total, text}], noneText, currentLine }
    */
   function winnersBannerView(prevYm, rows, current) {
     var label = monthLabel(prevYm);
-    var winners = (rows || []).filter(function (r) { return (r.amount > 0) || (r.quarterly > 0); })
+    var winners = (rows || []).filter(function (r) { return (r.amount > 0) || (r.quarterly > 0) || (r.referral > 0); })
       .map(function (r) {
         var parts = [];
         if (r.amount > 0) parts.push('זכאי · מדרגה ' + r.tier + ' · ' + fmtCurrency(r.amount));
+        if (r.referral > 0) parts.push('בונוס הפניות ' + fmtCurrency(r.referral));
         if (r.quarterly > 0) parts.push('כולל בונוס רבעוני ' + fmtCurrency(r.quarterly));
         return {
           name: r.name, manager: r.manager, amount: r.amount, tier: r.tier, quarterly: r.quarterly,
-          total: (r.amount || 0) + (r.quarterly || 0),
+          referral: r.referral || 0,
+          total: (r.amount || 0) + (r.referral || 0) + (r.quarterly || 0),
           text: parts.join(' · ')
         };
       });

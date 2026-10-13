@@ -222,3 +222,10 @@ static guard fails CI if another one appears.
 - The Apps Script backend (this repo never touches it) — `occupancySnapshots`
   is the Dashboard PR's. Until it is live the card shows its error state.
 - Bonus KPIs, hero, house cards, both existing month pickers, `lib/`.
+
+## Thresholds are month-aware (13 Oct 2026)
+
+The history view's orange line and gate (`ימי טיפול — <month>: X / gate`)
+use the bonus rules of the SELECTED month: up to Sep 2026 the original
+thresholds (Ramot 17 / 510, others 10 / 300); from Oct 2026 Ramot 14 / 420,
+Efroni and Rehab 9 / 270, Pardes 7 / 210, Ra'anana 10 / 300.

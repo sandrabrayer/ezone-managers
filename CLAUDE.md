@@ -85,7 +85,12 @@ PR link, merge SHA, test count, Apps Script deploy run (if any),
 ## 9. Bonus model — single sources of truth
 - ALL bonus math lives in `lib/bonus-eligibility.js` (tiers by average
   daily occupancy, fixed threshold × 30 treatment-days gate, secured
-  floor, quarterly window anchored May 2026).
+  floor, quarterly window anchored May 2026, outpatient referral bonus).
+- Rules are MONTH-AWARE (`RULE_SETS`, each with an effective-from month).
+  To change a rule, ADD a rule set with a later `from` — never edit one that
+  already applied to a settled month. Every BonusEligibility call must carry
+  the month it evaluates (`ym` / `month` on the house object; `atYM_` in
+  `app.js`).
 - ALL bonus wording / month labelling lives in `public/bonus-view.js`
   (settled vs running month, forbidden settled words, days-so-far).
 - Backend bonus fields (`qualifies`, `lockedIn`, `projectedBonus`,

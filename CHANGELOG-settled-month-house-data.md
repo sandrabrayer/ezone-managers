@@ -125,6 +125,10 @@ on Sep 17), so v14 is the next version.
 
 ## Referral bonus disabled (decision, 1 Oct 2026)
 
+> **Superseded on 13 Oct 2026**: the switch `CONTINUITY_BONUS_ENABLED` no
+> longer exists. The referral bonus is month-aware — none before Oct 2026;
+> from Oct 2026, 300 ₪ per day-package outpatient. See `CHANGELOG.md`.
+
 **Referral bonus disabled by decision (1 Oct 2026); switch: CONTINUITY_BONUS_ENABLED in lib/bonus-eligibility.js.**
 
 Sandra's decision: the referral bonus («בונוס הפניות להמשך טיפול») is **not

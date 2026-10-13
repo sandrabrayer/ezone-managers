@@ -147,7 +147,7 @@ picker: `shortTitle` = `יולי 2026 — סופי`, `gateText` =
 | Next-tier card | shown | **hidden** and blanked (`[hidden]`, CSS `display:none`) |
 | Tier track | `מדרגה הבאה … ממוצע נוכחי` | `מדרגה 2 הושגה ✓ · יולי 2026 (סופי) · ממוצע 19.2 מטופלים/יום` or `לא הושגה מדרגה · … (סף 17)` |
 | Quarterly | running window | the **selected month's window** as of that month + `[data-quarterly-months]`: `מאי 2026 ✓ · יוני 2026 ✗ · יולי 2026 ✓` (`(לאחר החודש שנבחר)` for later months) |
-| Breakdown | `✓ מובטח`, tiers + quarterly (referral line hidden — switched off) | `✓ הושג`, tiers + quarterly line for the selected window (referral line hidden — switched off) |
+| Breakdown | `✓ מובטח`, tiers + quarterly (+ referral line from Oct 2026) | `✓ הושג`, tiers + quarterly line for the selected window (+ referral line for Oct 2026 and later) |
 | Logs | entries / exits | the month's entries / exits with patient names (escaped); `לא היו כניסות ביולי 2026` when there were none; explicit loading / error rows otherwise |
 
 The forbidden list for a picked month is the settled list **plus** `צפי`,
@@ -210,18 +210,14 @@ per house × month, cached in its own slice `state.settledDetails` — never
   with `לא היו כניסות ב…` only when the payload confirms there were none. A
   failed house is retried on the next selection; the others are not refetched.
 
-**Referral bonus — switched off.** Referral bonus disabled by decision (1 Oct 2026); switch: CONTINUITY_BONUS_ENABLED in lib/bonus-eligibility.js. While
-`CONTINUITY_BONUS_ENABLED` is `false`:
-- managers get occupancy bonuses only, in the running month and in finished
-  months;
-- no total includes referrals (house KPI, breakdown, hero, card, overview,
-  banner, quarterly);
-- the «בונוס הפניות להמשך טיפול» line, the card's «הפניות» extra and the
-  «לא כולל בונוס הפניות» note are not rendered;
-- the running month no longer adds the Dashboard's `continuity.total`.
+**Referral bonus — month-aware (13 Oct 2026; replaces the 1 Oct switch).**
+None before Oct 2026 (no line, no note, not in any total). From Oct 2026:
+300 ₪ per day-package outpatient (`day_2x` / `day_daily`) per month,
+`maintenance` 0, independent of the occupancy bonus, not part of the
+quarterly check. The line reads `N מטופלים בחבילה יומית × 300 ₪`; a settled
+month's amount is `—` with the «לא כולל בונוס הפניות …» note while its house
+payload is loading or failed. Kill switch: `REFERRAL_BONUS_KILL_SWITCH`.
 
-The counts are still fetched and `continuityAmount` (counts × 100 / 500 /
-1,000, local, never the feed's `total`) is kept for switching it back on.
 Both views then go through `referralBonus_` in `app.js`. The running-month
 golden snapshot is `test/fixtures/running-month.snapshot.json`.
 
@@ -264,8 +260,8 @@ already loaded (`state.historyByMonth`) but never requests one itself.
 | Settled branches: `renderMonthSplit_(…, settledOverride)`, `renderTierTrack` (`ctx.settled`), `renderQuarterlyTrack` (`asOf`, `quarterMonthsText_`), `renderBreakdown` (`ctx.settled`), `quarterlyLocal_(key, asOfYM)` | `public/app.js` |
 | Styles `.bonus-month-bar`, `.link-btn`, `.quarterly-months`, `.log-empty`, `[hidden]` guards | `public/styles.css` |
 | Settled house payload: `state.settledDetails`, `loadSettledHouse_`, `settledHouseEntry_`, `openedHouseKeys_`, `renderSettledLogs_`, `rawNumber_` | `public/app.js`, "Bonus history" section |
-| Referral switch `CONTINUITY_BONUS_ENABLED` (false), `continuityEnabled`, `continuityAmount`, `CONTINUITY_RATES` | `lib/bonus-eligibility.js` |
-| `referralBonus_`, `referralsEnabled_` (running + settled) | `public/app.js` |
+| Month-aware rules `RULE_SETS`, `ruleSetFor`, `rulesFor`, `monthOf`; referral `referralRuleFor`, `continuityEnabled(ym)`, `continuityAmount(counts, eligible, ym)`, `REFERRAL_BONUS_KILL_SWITCH` | `lib/bonus-eligibility.js` |
+| `referralBonus_`, `referralsEnabled_`, `settledReferralFor_`, `ymOfHouse_` / `atYM_` (month pinning) | `public/app.js` |
 | Running-month golden snapshot | `test/fixtures/running-month.snapshot.json` (`UPDATE_SNAPSHOT=1` to regenerate deliberately) |
 | Tests | `test/bonus-view.test.js` (3), `test/app-render.test.js` ("bonus picker: …", 8; "settled Sep 2026: …" / "house keys: …" / "settled month: …" / "running month on 1 Oct 2026 …", 7), `test/bonus-eligibility.test.js` (`continuityAmount`) |
 
@@ -276,3 +272,12 @@ No new endpoints (the only request is the existing
 is validated against the offered list before use; error messages are
 HTML-escaped; only sanitised name / manager strings from the month rows
 reach the DOM.
+
+## Month-aware rules (13 Oct 2026)
+
+Thresholds, gates and the referral rule depend on the month being shown.
+Figures quoted above (`510`, `17`) are the original rules, which still apply
+to every month up to and including September 2026. From October 2026: Ramot
+14 / 420, Efroni and Rehab 9 / 270, Pardes 7 / 210, Ra'anana 10 / 300.
+`public/app.js` pins the month on every BonusEligibility call (`atYM_`); a
+settled month's tier table, gate and referral rule are that month's.
