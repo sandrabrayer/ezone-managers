@@ -459,6 +459,9 @@
       var rStatus;
       if (rState === 'loading') rStatus = 'טוען נתונים…';
       else if (rState === 'error') rStatus = 'שגיאה בטעינת הנתונים' + (opts.referralError ? ': ' + opts.referralError : '');
+      else if (rb.oneTime) rStatus = rb.payableCount > 0
+        ? fmtInt(rb.payableCount) + ' ' + (rb.payableCount === 1 ? 'מטופל התחיל' : 'מטופלים התחילו') + ' טיפול יום ב' + label + ' = ' + fmtCurrency(rb.total)
+        : 'עדיין אין מטופלים מהבית שהתחילו טיפול יום ב' + label;
       else rStatus = rb.payableCount > 0
         ? fmtInt(rb.payableCount) + ' ' + (rb.payableCount === 1 ? 'מטופל' : 'מטופלים') + ' בטיפול יום = ' + fmtCurrency(rb.total)
         : 'עדיין אין מטופלים מהבית בטיפול יום ב' + label;
@@ -466,8 +469,12 @@
       items.push({
         id: 'referral',
         title: 'בונוס המשך טיפול',
-        amountText: fmtCurrency(rb.unitRate || 300) + ' לכל מטופל בחודש',
-        condition: 'מטופל שהשתחרר מהבית וממשיך אצלנו בטיפול יום — פעמיים בשבוע או יותר',
+        amountText: rb.oneTime
+          ? fmtCurrency(rb.unitRate || 300) + ' חד-פעמי לכל מטופל'
+          : fmtCurrency(rb.unitRate || 300) + ' לכל מטופל בחודש',
+        condition: rb.oneTime
+          ? 'מטופל שהשתחרר מהבית והתחיל אצלנו טיפול יום — פעמיים בשבוע או יותר. תשלום אחד, בחודש שבו התחיל'
+          : 'מטופל שהשתחרר מהבית וממשיך אצלנו בטיפול יום — פעמיים בשבוע או יותר',
         status: rStatus,
         extra: '',
         state: rItemState,

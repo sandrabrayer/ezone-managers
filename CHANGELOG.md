@@ -3,6 +3,26 @@
 
 ## Unreleased
 
+### Changed — the 300 ₪ continued-treatment bonus is ONE-TIME per patient (October 13, 2026)
+
+**What** (Sandra, 13 Oct 2026): «בונוס המשך טיפול» pays **300 ₪ once per
+patient**, in the month the patient **starts** a day package (two days a
+week or daily) — not every month they stay in it. Corrected in the Oct 2026
+rule set before October was settled (`referral: { oneTime: true, amount: 300 }`).
+- Counts come from the Dashboard feed's new `referralStarts.count` (patients
+  whose FIRST day package began that month; renewals and switches never
+  count again) — E-Zone-Dashboard PR #221. Until it is deployed the bonus
+  shows 0.
+- House page wording: «300 ₪ חד-פעמי לכל מטופל» · «…התחיל אצלנו טיפול יום…
+  תשלום אחד, בחודש שבו התחיל» · «N מטופלים התחילו טיפול יום ב<חודש>».
+- `continuityAmount(counts, eligible, ym)` reads `counts.starts` for a
+  one-time rule; `referralCounts_` in `app.js` merges `bonus.continuity` and
+  `referralStarts`.
+
+**Tests**: 234 → 235 (a patient still in a package the next month pays
+nothing). Mutation: paying monthly package counts instead of starts fails 9
+tests. SW cache v17 → v18.
+
 ### Changed — house page simplified; two-step bonus from October 2026 (October 13, 2026)
 
 **What** (Sandra, 13 Oct 2026 — "make it simple"):

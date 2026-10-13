@@ -1341,7 +1341,8 @@ test('running Oct 2026: cards and the house tab use the new first tier and gate 
 test('running Oct 2026: the referral bonus is 300 ₪ per day-package patient, added even before the occupancy bonus is secured', async () => {
   const { ctx, panel } = await bootOct({}, ['efroni']);
   const detail = vm.runInContext('state.details.efroni', ctx);
-  const withRefs = { ...detail, bonus: { continuity: { maintenance: 1, day_2x: 2, day_daily: 0, total: STRAY, rates: { day_2x: 5000 } } } };
+  const withRefs = { ...detail, bonus: { continuity: { maintenance: 1, day_2x: 2, day_daily: 0, total: STRAY, rates: { day_2x: 5000 } } },
+    referralStarts: { count: 2, items: [] } };
   call(ctx, 'renderHouseDetail', 'efroni', withRefs);
   const ef = panel('efroni');
   const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
@@ -1349,15 +1350,15 @@ test('running Oct 2026: the referral bonus is 300 ₪ per day-package patient, a
   // (11 + 30 × 13 = 401), so that block is not shown.
   assert.deepEqual(planIds(ef), ['first', 'intake', 'referral']);
   const ref = bk[2];
-  assert.match(ref, /bp-title">בונוס המשך טיפול<[\s\S]*bp-pay">300 ₪ לכל מטופל בחודש</);
-  assert.match(ref, /bp-cond">מטופל שהשתחרר מהבית וממשיך אצלנו בטיפול יום — פעמיים בשבוע או יותר</);
-  assert.match(ref, /bp-status">2 מטופלים בטיפול יום = 600 ₪<[\s\S]*bk-amount">600 ₪</);
+  assert.match(ref, /bp-title">בונוס המשך טיפול<[\s\S]*bp-pay">300 ₪ חד-פעמי לכל מטופל</);
+  assert.match(ref, /bp-cond">מטופל שהשתחרר מהבית והתחיל אצלנו טיפול יום — פעמיים בשבוע או יותר\. תשלום אחד, בחודש שבו התחיל</);
+  assert.match(ref, /bp-status">2 מטופלים התחילו טיפול יום באוקטובר 2026 = 600 ₪<[\s\S]*bk-amount">600 ₪</);
   assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '600 ₪', 'day 1: occupancy not secured yet, referral 600 counts');
   assert.match(ef.querySelector('[data-stat-label="bonus"]').textContent, /הושג עד כה — אוקטובר 2026/, 'labelled as so far, not final');
   assert.equal(ef.querySelector('[data-stat="bonusTotal"]').textContent, '600 ₪');
   assert.doesNotMatch(allTextOf(ef), /2577|2,577|5,000 ₪ × |תחזוקתי × 100/, 'no feed total, no feed rates, no old formula');
   // The overview card of the same house shows it in the running block.
-  const card = call(ctx, 'buildHouseCard', { ...vm.runInContext('state.housesById.efroni', ctx), bonus: withRefs.bonus }).innerHTML;
+  const card = call(ctx, 'buildHouseCard', { ...vm.runInContext('state.housesById.efroni', ctx), bonus: withRefs.bonus, referralStarts: withRefs.referralStarts }).innerHTML;
   assert.match(card, /הפניות 600 ₪/);
 });
 
@@ -1380,6 +1381,8 @@ function novFeed({ failHouse = null } = {}) {
       bonus: { continuity: { maintenance: 0, day_2x: 0, day_daily: 0, ...r.refs, total: STRAY }, ...BACKEND_JUNK }, ...BACKEND_JUNK };
     const im = (INTAKE[month] || {})[key];
     if (im) row.intakeMeetings = im;
+    // One-time rule: in this fixture every October day-package patient STARTED in October.
+    if (month === '2026-10') row.referralStarts = { count: (r.refs.day_2x || 0) + (r.refs.day_daily || 0), items: [] };
     return row;
   };
   const fetchImpl = async (url) => {
@@ -1440,7 +1443,7 @@ test('1 Nov 2026 — picking October: the settled house tab shows the referral l
   const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
   assert.deepEqual(planIds(ef), ['first', 'intake', 'referral'], 'full occupancy was not reached, so it is not shown');
   assert.match(bk[0], /bp-status">הושג — ממוצע 9\.2 מטופלים ליום \(נדרש 9\) · 285 ימי טיפול \(נדרש לפחות 270\)</, 'October rules');
-  assert.match(bk[2], /bp-status">2 מטופלים בטיפול יום = 600 ₪<[\s\S]*bk-amount">600 ₪</);
+  assert.match(bk[2], /bp-status">2 מטופלים התחילו טיפול יום באוקטובר 2026 = 600 ₪<[\s\S]*bk-amount">600 ₪</);
   assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '2,600 ₪');
   assert.equal(ef.querySelector('[data-stat="bonusTotal"]').textContent, '2,600 ₪');
   assert.equal(ef.querySelector('[data-stat="daysTarget"]').textContent, '279');
@@ -1564,4 +1567,14 @@ test('a house tab opened before the overview finished is redrawn with last month
   assert.doesNotMatch(panel.querySelector('[data-status-banner]').innerHTML, /הנתונים לא זמינים/, 'redrawn with August');
   assert.match(panel.querySelector('[data-status-banner]').innerHTML, /אוגוסט 2026/);
   assert.ok(calls.length > 0);
+});
+
+test('one-time referral: a patient still in a day package in November (started in October) pays nothing in November', async () => {
+  const { ctx, panel } = await bootNov({}, ['efroni']);
+  // Running November: the feed still counts the patient IN the package, but no new start.
+  const detail = vm.runInContext('state.details.efroni', ctx);
+  call(ctx, 'renderHouseDetail', 'efroni', { ...detail, bonus: { continuity: { day_2x: 2, total: STRAY } }, referralStarts: { count: 0, items: [] } });
+  const ref = panel('efroni').querySelector('[data-breakdown]').children.find((li) => /bp-referral/.test(li.className)).innerHTML;
+  assert.match(ref, /bp-status">עדיין אין מטופלים מהבית שהתחילו טיפול יום בנובמבר 2026</);
+  assert.doesNotMatch(ref, /bk-amount/, 'no amount — nothing earned');
 });

@@ -375,7 +375,8 @@ test('quarterly bonus: May–Jul 2026 still pays; from the Aug–Oct 2026 window
 
 /* ── Outpatient day-package (referral) bonus ────────────────────────────── */
 
-const COUNTS = { maintenance: 4, day_2x: 2, day_daily: 1 };
+// `starts` = patients whose FIRST day package began that month (feed referralStarts.count).
+const COUNTS = { maintenance: 4, day_2x: 2, day_daily: 1, starts: 3 };
 
 test('referral bonus: none before Oct 2026 — 0, whatever the counts or eligibility', () => {
   const BE = require('../lib/bonus-eligibility');
@@ -387,27 +388,28 @@ test('referral bonus: none before Oct 2026 — 0, whatever the counts or eligibi
   }
 });
 
-test('referral bonus from Oct 2026: 300 ₪ per day-package patient, maintenance 0, independent of the occupancy bonus', () => {
+test('referral bonus from Oct 2026: ONE-TIME 300 ₪ per patient who STARTED a day package that month', () => {
   const BE = require('../lib/bonus-eligibility');
   assert.equal(BE.continuityEnabled(NEW), true);
   for (const eligible of [true, false]) {
     const r = BE.continuityAmount(COUNTS, eligible, NEW);
-    assert.equal(r.total, 900, `(2 + 1) × 300, eligible=${eligible}`);
-    assert.equal(r.payableCount, 3);
-    assert.equal(r.unitRate, 300);
-    assert.equal(r.maintenance, 4, 'counted but not paid');
+    assert.equal(r.total, 900, `3 starts × 300, eligible=${eligible}`);
+    assert.deepEqual([r.payableCount, r.unitRate, r.oneTime], [3, 300, true]);
   }
-  assert.equal(BE.continuityAmount({ maintenance: 7 }, true, NEW).total, 0, 'maintenance only → 0');
+  // Patients merely IN a package (the monthly counts) pay nothing without a start.
+  assert.equal(BE.continuityAmount({ maintenance: 4, day_2x: 2, day_daily: 1 }, true, NEW).total, 0, 'no new starts → 0');
+  assert.equal(BE.continuityAmount({ day_2x: 5, starts: 1 }, true, NEW).total, 300, 'only the start is paid');
   assert.equal(BE.continuityAmount(COUNTS, true, '2027-02').total, 900, 'later months keep the rule');
 });
 
 test('referral bonus: the feed total / rates are never used; junk counts are sanitised', () => {
   const BE = require('../lib/bonus-eligibility');
-  const stray = BE.continuityAmount({ day_2x: 1, total: 99999, rates: { day_2x: 5000 } }, true, NEW);
+  const stray = BE.continuityAmount({ day_2x: 1, starts: 1, total: 99999, rates: { day_2x: 5000 } }, true, NEW);
   assert.equal(stray.total, 300);
-  const junk = BE.continuityAmount({ maintenance: '-3', day_2x: 'x', day_daily: 1.9 }, true, NEW);
-  assert.deepEqual([junk.maintenance, junk.day_2x, junk.day_daily, junk.total], [0, 0, 1, 300]);
-  assert.equal(BE.continuityAmount({ day_2x: -2, day_daily: Infinity }, true, NEW).total, 0);
+  assert.equal(BE.continuityAmount({ starts: '-3' }, true, NEW).total, 0);
+  assert.equal(BE.continuityAmount({ starts: 'x' }, true, NEW).total, 0);
+  assert.equal(BE.continuityAmount({ starts: 1.9 }, true, NEW).total, 300);
+  assert.equal(BE.continuityAmount({ starts: Infinity }, true, NEW).total, 0);
   assert.equal(BE.continuityAmount(null, true, NEW).total, 0);
 });
 

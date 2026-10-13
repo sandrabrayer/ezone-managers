@@ -98,9 +98,10 @@ May–Jul 2026 only — none from the Aug–Oct 2026 window on.
 The house page shows each bonus as a block: what it pays, the condition in
 words, and the figures now; full occupancy appears only while reachable.
 
-**Outpatient day-package bonus («בונוס הפניות להמשך טיפול»), from Oct 2026:**
-300 ₪ per outpatient from the house in a day package (two days a week or
-daily) per month; maintenance pays 0. Paid whether or not the occupancy bonus
+**Continued-treatment bonus («בונוס המשך טיפול»), from Oct 2026:**
+300 ₪ ONCE per patient from the house, in the month the patient starts a day
+package (two days a week or daily) — not monthly; maintenance pays 0
+(Dashboard feed `referralStarts`). Paid whether or not the occupancy bonus
 was earned; not part of the quarterly check. None before Oct 2026. Counts come
 from the dashboard's "Outpatients" sheet (any overlap with the month counts as
 a full month). Kill switch: `REFERRAL_BONUS_KILL_SWITCH` in
