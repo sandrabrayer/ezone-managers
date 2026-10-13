@@ -347,6 +347,19 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: work tool stage 1 — personal-code login + house work tabs (October 13, 2026)
+
+- The app is NO LONGER open: personal code per person (`MANAGER_ACCESS`
+  Railway variable); a house manager sees only their house, Sandra and Ron
+  see all; enforced server-side. Session cookie signed with a key derived
+  from `MANAGERS_WORK_SECRET`. See `docs/access.md`.
+- House sub-tabs: בונוסים · מטופלים · שיחות משפחה · שיחות עם עובדים
+  (private to author + admins) · אירועים חריגים, with follow-up reminders.
+  Data via `/api/work` → Dashboard `managersWork` (same secret, set as a
+  Script Property there).
+- Next: stage 2 (therapists + coordinators schedule, employee list, who's on
+  shift today), stage 3 (manpower cost from staffing).
+
 ## Managers: continued-treatment bonus is one-time (October 13, 2026)
 
 - 300 ₪ ONCE per patient, in the month the patient starts a day package

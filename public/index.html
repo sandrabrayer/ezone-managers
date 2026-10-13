@@ -20,16 +20,31 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <!-- No login overlay: the app is open to every visitor. The full view
-       (patient names in the activity logs) is unlocked by the private
-       ?key= link, which the server turns into an httpOnly cookie — there is
-       deliberately no UI for it. -->
+  <!-- Personal-code login (13 Oct 2026): every person has their own code;
+       a house manager sees only their house. The server enforces it. -->
+  <div class="login-overlay" id="loginOverlay" hidden>
+    <form class="login-box" id="loginForm" autocomplete="off">
+      <img class="brand-emblem" src="/icons/ezone-emblem-192.png" alt="" width="48" height="48" />
+      <div class="login-title">איזון — מנהלים</div>
+      <label for="loginCode">הקוד האישי שלך</label>
+      <input id="loginCode" name="code" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="current-password" required />
+      <button type="submit">כניסה</button>
+      <div class="login-msg" id="loginMsg" role="alert"></div>
+    </form>
+  </div>
+
   <header class="top-bar">
     <div class="brand">
       <img class="brand-emblem" src="/icons/ezone-emblem-192.png" alt="" width="30" height="30" />
       <span class="brand-name">מנהלים</span>
     </div>
-    <div class="month-tag" id="monthTag">—</div>
+    <div class="top-bar-end">
+      <div class="user-chip" id="userChip" hidden>
+        <span id="userName"></span>
+        <button type="button" class="link-btn" id="logoutBtn">יציאה</button>
+      </div>
+      <div class="month-tag" id="monthTag">—</div>
+    </div>
   </header>
 
   <nav class="tabs" id="tabs" role="tablist" aria-label="ניווט">
@@ -132,6 +147,22 @@
 
       <div class="status-banner" data-status-banner></div>
 
+      <!-- Work tabs (13 Oct 2026): the bonus page plus the manager's work tools. -->
+      <nav class="subtabs" data-subtabs role="tablist" aria-label="תפריט הבית">
+        <button type="button" class="subtab is-active" data-sub="bonus" role="tab" aria-selected="true">בונוסים</button>
+        <button type="button" class="subtab" data-sub="patients" role="tab" aria-selected="false">מטופלים</button>
+        <button type="button" class="subtab" data-sub="familyCalls" role="tab" aria-selected="false">שיחות משפחה</button>
+        <button type="button" class="subtab" data-sub="staffTalks" role="tab" aria-selected="false">שיחות עם עובדים</button>
+        <button type="button" class="subtab" data-sub="events" role="tab" aria-selected="false">אירועים חריגים</button>
+      </nav>
+      <div data-followups></div>
+
+      <section data-sub-panel="patients" hidden></section>
+      <section data-sub-panel="familyCalls" hidden></section>
+      <section data-sub-panel="staffTalks" hidden></section>
+      <section data-sub-panel="events" hidden></section>
+
+      <section data-sub-panel="bonus">
       <!-- The bonuses of the month, one block each: what it pays, the
            condition in plain words and the real figures now (13 Oct 2026). -->
       <div class="card bonus-plan-card" data-bonus-plan>
@@ -201,6 +232,7 @@
 
       <!-- Monthly occupancy (permanent) — this house only. Filled by JS. -->
       <div class="card occupancy-card" data-occupancy-card></div>
+      </section>
 
     </div>
   </template>
@@ -208,6 +240,8 @@
   <script src="/lib/bonus-eligibility.js"></script>
   <script src="/bonus-view.js"></script>
   <script src="/occupancy-export.js"></script>
+  <script src="/auth.js"></script>
+  <script src="/work.js"></script>
   <script src="/app.js"></script>
   <!-- External, not inline: the CSP is script-src 'self' with no
        'unsafe-inline'. -->

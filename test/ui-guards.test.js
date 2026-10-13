@@ -8,22 +8,26 @@ const path = require('node:path');
 
 const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
 
-test('no login UI remains in the shell (the app is open to every visitor)', () => {
+test('personal-code login UI (13 Oct 2026): one overlay, a numeric password field, a logout button', () => {
   const html = pub('index.html');
-  const css = pub('styles.css');
-  for (const needle of ['loginOverlay', 'loginPin', 'loginBtn', 'login-card', 'קוד גישה']) {
-    assert.ok(!html.includes(needle), `index.html still carries login markup: ${needle}`);
-  }
-  assert.ok(!css.includes('.login-overlay'), 'the login overlay CSS is dead code');
+  assert.match(html, /<div class="login-overlay" id="loginOverlay" hidden>/);
+  assert.match(html, /<input id="loginCode" name="code" type="password" inputmode="numeric"/);
+  assert.match(html, /id="logoutBtn"/);
+  assert.match(pub('styles.css'), /\.login-overlay\s*\{/);
+  // Scripts: auth.js and work.js load before app.js; the service worker ships them.
+  const order = ['/auth.js', '/work.js', '/app.js'].map((s) => html.indexOf(`<script src="${s}">`));
+  assert.ok(order.every((i) => i > 0) && order[0] < order[1] && order[1] < order[2]);
+  assert.match(pub('sw.js'), /'\/auth\.js',\s*'\/work\.js'/);
 });
 
-test('app.js has no login code path and sends no session token', () => {
+test('app.js waits for the login before loading data, and never sends a token itself', () => {
   const js = pub('app.js');
-  for (const needle of ['showLogin', 'submitLogin', 'wireLogin', '/api/login', 'Authorization', 'Bearer']) {
-    assert.ok(!js.includes(needle), `app.js still carries login code: ${needle}`);
-  }
-  assert.ok(js.includes('clearLegacySession'),
-    'a stale PIN-era token from a returning visitor must be cleared on boot');
+  assert.match(js, /window\.Auth \? window\.Auth\.init\(\)/);
+  assert.ok(js.indexOf('Auth.init()') < js.indexOf('startData();\n  });'), 'data starts only after the login');
+  for (const needle of ['Authorization', 'Bearer', 'localStorage.setItem']) assert.ok(!js.includes(needle), needle);
+  assert.ok(js.includes('clearLegacySession'));
+  const auth = pub('auth.js');
+  assert.ok(!/localStorage|sessionStorage/.test(auth), 'the session lives only in the HttpOnly cookie');
 });
 
 test('the shell has no inline <script> (CSP is script-src self)', () => {

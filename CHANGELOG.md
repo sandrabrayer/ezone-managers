@@ -3,6 +3,37 @@
 
 ## Unreleased
 
+### Added — work tool, stage 1: personal-code login + house work tabs (October 13, 2026)
+
+**What** (Sandra, 13 Oct 2026 — "not only bonuses: a work tool, like the
+coordinators have"):
+- **Personal-code login** replaces the open app. A house manager sees only
+  their own house; admins (Sandra, Ron) see all. Server-side enforcement:
+  `lib/access.js` (codes from `MANAGER_ACCESS`, signed 30-day session cookie
+  keyed from `MANAGERS_WORK_SECRET`, code fingerprint re-checked on every
+  request), `server.js` (`/api/login`, `/api/logout`, `/api/me`; every data
+  route needs the session; manager feeds filtered to their house;
+  `managersHouse` of another house → 403; login rate limit 10 / 15 min).
+  Fail-closed start-up without both variables. `docs/open-access.md` →
+  `docs/access.md`.
+- **House sub-tabs**: בונוסים (the bonus page, unchanged) · מטופלים (patients
+  in the house, outpatients who came from it, intake visits and admissions
+  this month) · שיחות משפחה (patient, contact, relation, date/time, short
+  description) · שיחות עם עובדים (private: the author + admins) · אירועים
+  חריגים (date/time, patient, what happened, what was done).
+- **Follow-up reminders**: any entry can get a follow-up date; due ones show
+  at the top of the house page with «בוצע».
+- Data: `/api/work` (JSON only) → Dashboard `managersWork` (E-Zone-Dashboard
+  PR, own `MANAGERS_WORK_SECRET`). New `public/auth.js`, `public/work.js`
+  (pure `WorkView` builders, every value escaped).
+
+**Setup**: two Railway variables + one Script Property — see
+`docs/access.md`. Without them the new deployment does not start and the
+previous one keeps serving.
+
+**Tests**: 235 → 248 (access suite rewritten for the login model; work-view
+builders; UI guards). SW cache v18 → v19.
+
 ### Changed — the 300 ₪ continued-treatment bonus is ONE-TIME per patient (October 13, 2026)
 
 **What** (Sandra, 13 Oct 2026): «בונוס המשך טיפול» pays **300 ₪ once per

@@ -6,7 +6,7 @@ dashboard Apps Script; the frontend lives in `public/`.
 | Fact | Value |
 |---|---|
 | Deployed branch (Railway) | `main` — **every PR targets `main`** |
-| Production URL | UNKNOWN — ask Sandra once, then record it here |
+| Production URL | `https://ezone-managers.up.railway.app` |
 | Apps Script deploy | **None in this repo.** There is no `apps-script/`, no `Code.gs` and no `.github/workflows/deploy-apps-script.yml`; the backend is the E-Zone-Dashboard Apps Script, out of scope here (see §8). |
 | Test command | `npm test` (`node --test`; no network, no secrets) |
 | CI | `.github/workflows/test.yml` — Node 18/20/22 on every PR and push to `main` |
@@ -71,13 +71,18 @@ PR link, merge SHA, test count, Apps Script deploy run (if any),
 (with links). No step-by-step narration.
 
 ## 8. Scope and app rules
-- Apps Script (backend) changes are out of scope: the frontend must work
-  with the existing `managersOverview` / `managersHouse` payloads.
-- The app is fully OPEN: no password, no access key, no cookie, no login
-  screen. Patient names in the entry/exit logs are visible to anyone with
-  the URL — a deliberate owner decision of September 12, 2026. Do not add a
-  gate, key or redaction layer without Sandra asking; do not remove the rate
-  limit, the `noindex` header or `robots.txt`. See `docs/open-access.md`.
+- Apps Script (backend) changes belong to the E-Zone-Dashboard repo (its own
+  PR, deployed automatically on merge); this repo consumes `managersOverview`
+  / `managersHouse` / `occupancySnapshots` / `managersWork`.
+- ACCESS (13 Oct 2026, replaces the open model): a personal code per
+  person (`MANAGER_ACCESS`); a house manager sees ONLY their own house, admins
+  see all; staff talks are private to their author + admins. Enforced in
+  `server.js` / `lib/access.js` — never only in the client. Every data route
+  needs the session; keep the rate limits, `noindex` and `robots.txt`. See
+  `docs/access.md`.
+- Work tool data goes through `/api/work` → Dashboard `managersWork` with
+  `MANAGERS_WORK_SECRET`; the server decides house / role / actor.
+- Escape every feed value before innerHTML (`escapeHtml_`, `WorkView.esc`).
 - Keep `escapeHtml_` on the patient name in `activityRowHtml` (XSS fix).
 - Escape any upstream string rendered into the DOM; validate picker /
   query values before use.

@@ -1,252 +1,227 @@
 'use strict';
-/* The app is fully open: no password, no key, no cookie.
+/* Personal-code access (13 Oct 2026) — replaces the open-app model of
+ * 12 Sep 2026. Covers: nothing with data is served without a login; codes,
+ * cookie flags, rate limit; a house manager sees ONLY their house (feeds
+ * filtered server-side, other houses 403); admins see all; logout; a removed
+ * code logs out; the work proxy sends the secret + the server-decided house /
+ * role / actor and never trusts the browser for them; headers, robots.txt and
+ * no secret ever in a response.
  *
- * Covers: every route works with no credential of any kind, the feed reaches
- * the client complete (patient names included), no login UI or login route
- * exists, the rate limit still caps the open proxy, the security headers and
- * robots.txt are present, and no SERVER secret (the Apps Script URL) leaks
- * into a response.
- *
- * All env values below are dummies and global.fetch is MOCKED — no test ever
- * reaches the real Apps Script. */
+ * All env values are dummies; global.fetch is MOCKED. */
 process.env.NODE_ENV = 'test';
 process.env.APPS_SCRIPT_URL = 'https://apps-script.test/exec';
+const auth = require('./helpers-auth');
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 const { app, _rateLimiters } = require('../server');
+const accessLib = require('../lib/access');
 
-const PATIENT = 'ישראל ישראלי';
-
-const HOUSE_PAYLOAD = JSON.stringify({
-  ok: true,
-  month: '2026-09',
-  key: 'ramot',
-  name: 'רמות השבים',
-  manager: 'אורן',
-  entriesMonth: 1,
-  exitsMonth: 1,
-  activity: [
-    { date: '2026-09-03', kind: 'entry', name: PATIENT },
-    { date: '2026-09-11', kind: 'exit', name: 'דנה כהן' }
+const OVERVIEW = JSON.stringify({
+  ok: true, month: '2026-10', totals: { activePatients: 50 },
+  houses: [
+    { key: 'raanana', patientsNow: 11, manager: 'שחר' },
+    { key: 'ramot', patientsNow: 13, manager: 'אורן' },
+    { key: 'arfoni', patientsNow: 9, manager: 'חנן' }
   ]
 });
+const SNAPSHOTS = JSON.stringify({ ok: true, rows: [{ month: '2026-09', houseId: 'ramot' }, { month: '2026-09', houseId: 'arfoni' }, { month: '2026-09', houseId: 'pardes' }] });
 
-function request(server, path, { headers, method = 'GET' } = {}) {
-  return new Promise((resolve, reject) => {
-    const { port } = server.address();
-    const req = http.request({ host: '127.0.0.1', port, path, method, headers }, (res) => {
-      let buf = '';
-      res.on('data', (c) => { buf += c; });
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text: buf }));
-    });
-    req.on('error', reject);
-    req.end();
-  });
+let calls = [];
+function mockUpstream(byAction) {
+  global.fetch = async (url, opts = {}) => {
+    const u = new URL(String(url));
+    const body = opts.body ? JSON.parse(opts.body) : null;
+    calls.push({ url: String(url), method: opts.method || 'GET', body });
+    const action = body ? body.action : u.searchParams.get('action');
+    const text = typeof byAction === 'function' ? byAction(action, u, body) : (byAction[action] || '{"ok":true}');
+    return { status: 200, text: async () => text, headers: { get: (k) => (k.toLowerCase() === 'content-type' ? 'application/json' : null) } };
+  };
 }
 
-function mockUpstream(body, { status = 200, contentType = 'application/json' } = {}) {
-  global.fetch = async () => ({
-    status,
-    text: async () => body,
-    headers: { get: (k) => (k.toLowerCase() === 'content-type' ? contentType : null) }
-  });
-}
-
-test('fully open app', async (t) => {
+test('personal-code access', async (t) => {
   const realFetch = global.fetch;
   t.after(() => { global.fetch = realFetch; });
-
   const server = app.listen(0, '127.0.0.1');
   await new Promise((r) => server.once('listening', r));
   t.after(() => server.close());
+  t.beforeEach(() => { calls = []; _rateLimiters.allowSheets.clear(); _rateLimiters.allowLogin.clear(); mockUpstream({ managersOverview: OVERVIEW, occupancySnapshots: SNAPSHOTS }); });
+  const req = auth.request;
 
-  t.beforeEach(() => { _rateLimiters.allowSheets.clear(); });
-
-  // ── every route works with no credential ─────────────────────────
-  await t.test('the app shell is served with no key and no cookie', async () => {
-    const r = await request(server, '/');
+  await t.test('the app shell is served without a login (it holds no data)', async () => {
+    const r = await req(server, '/');
     assert.equal(r.status, 200);
-    assert.ok(r.text.includes('houseDetailTpl'));
+    assert.match(r.text, /<html/);
   });
 
-  await t.test('/api/sheets works with no key and no cookie', async () => {
-    mockUpstream(HOUSE_PAYLOAD);
-    const r = await request(server, '/api/sheets?action=managersOverview');
-    assert.equal(r.status, 200);
-    assert.equal(r.headers['cache-control'], 'no-store');
-    assert.equal(JSON.parse(r.text).ok, true);
+  await t.test('no data without a login: /api/sheets, /api/me and /api/work → 401, nothing proxied', async () => {
+    for (const [p, opts] of [['/api/sheets?action=managersOverview', {}], ['/api/me', {}], ['/api/work', { method: 'POST', body: { op: 'houseData' } }]]) {
+      const r = await req(server, p, opts);
+      assert.equal(r.status, 401, p);
+      assert.equal(JSON.parse(r.text).error, 'login_required');
+    }
+    assert.equal(calls.length, 0, 'the upstream is never reached');
   });
 
-  await t.test('a deep link to a house tab is served the shell, not a gate', async () => {
-    const r = await request(server, '/ramot');
-    assert.equal(r.status, 200);
-    assert.ok(r.text.includes('houseDetailTpl'));
+  await t.test('a wrong code is refused; a right one sets an HttpOnly, SameSite=Strict session cookie', async () => {
+    const bad = await req(server, '/api/login', { method: 'POST', body: { code: '12345678' } });
+    assert.equal(bad.status, 401);
+    assert.equal(bad.headers['set-cookie'], undefined);
+    const ok = await req(server, '/api/login', { method: 'POST', body: { code: auth.ORAN_CODE } });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(JSON.parse(ok.text).user, { name: 'אורן', role: 'manager', house: 'ramot' });
+    const c = ok.headers['set-cookie'][0];
+    assert.match(c, /^mgr_session=[^;]+; Path=\/; HttpOnly; SameSite=Strict; Max-Age=2592000/);
+    assert.doesNotMatch(c, new RegExp(auth.ORAN_CODE), 'the code itself is never in the cookie');
   });
 
-  await t.test('/healthz is open', async () => {
-    const r = await request(server, '/healthz');
-    assert.equal(r.status, 200);
+  await t.test('login needs JSON and is rate-limited per IP (10 per window)', async () => {
+    const form = await req(server, '/api/login', { method: 'POST', body: 'code=1', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+    assert.equal(form.status, 415);
+    for (let i = 0; i < 10; i++) await req(server, '/api/login', { method: 'POST', body: { code: '00000000' } });
+    const blocked = await req(server, '/api/login', { method: 'POST', body: { code: auth.ADMIN_CODE } });
+    assert.equal(blocked.status, 429, 'even the right code is refused once the limit is hit');
   });
 
-  // ── the feed reaches the client complete ─────────────────────────
-  await t.test('patient names ARE returned — no redaction anywhere', async () => {
-    mockUpstream(HOUSE_PAYLOAD);
-    const r = await request(server, '/api/sheets?action=managersHouse&house=ramot');
-    assert.ok(r.text.includes(PATIENT), 'the name must reach the client unchanged');
-    assert.ok(r.text.includes('דנה כהן'));
-    const body = JSON.parse(r.text);
-    for (const row of body.activity) {
-      assert.equal(typeof row.name, 'string');
-      assert.equal('nameHidden' in row, false, 'the redaction flag is gone');
+  await t.test('a forged or tampered cookie is refused', async () => {
+    const cookie = await auth.login(server, auth.ORAN_CODE);
+    const [name, value] = cookie.split('=');
+    const [payload, sig] = value.split('.');
+    const forged = Buffer.from(JSON.stringify({ n: 'אורן', h: 'raanana', r: 'admin', f: 'x', e: Date.now() + 1e9 })).toString('base64url');
+    for (const v of [`${forged}.${sig}`, `${payload}.${sig}x`, 'garbage']) {
+      const r = await req(server, '/api/me', { headers: { Cookie: `${name}=${v}` } });
+      assert.equal(r.status, 401, v.slice(0, 20));
     }
   });
 
-  await t.test('the upstream body is passed through byte-for-byte', async () => {
-    mockUpstream(HOUSE_PAYLOAD);
-    const r = await request(server, '/api/sheets?action=managersHouse&house=ramot');
-    assert.equal(r.text, HOUSE_PAYLOAD);
+  await t.test('a house manager sees ONLY their house: overview and snapshots filtered, other houses 403', async () => {
+    const cookie = await auth.login(server, auth.ORAN_CODE);
+    const o = JSON.parse((await req(server, '/api/sheets?action=managersOverview', { headers: { Cookie: cookie } })).text);
+    assert.deepEqual(o.houses.map((h) => h.key), ['ramot']);
+    assert.deepEqual(o.totals, { activePatients: 13 }, 'no network-wide totals');
+    const s = JSON.parse((await req(server, '/api/sheets?action=occupancySnapshots', { headers: { Cookie: cookie } })).text);
+    assert.deepEqual(s.rows.map((r) => r.houseId), ['ramot']);
+    assert.equal((await req(server, '/api/sheets?action=managersHouse&house=ramot', { headers: { Cookie: cookie } })).status, 200);
+    const other = await req(server, '/api/sheets?action=managersHouse&house=raanana', { headers: { Cookie: cookie } });
+    assert.equal(other.status, 403);
+    // Efroni's backend id is 'arfoni': Hanan still gets his house.
+    const hanan = await auth.login(server, auth.HANAN_CODE);
+    const ho = JSON.parse((await req(server, '/api/sheets?action=managersOverview', { headers: { Cookie: hanan } })).text);
+    assert.deepEqual(ho.houses.map((h) => h.key), ['arfoni']);
   });
 
-  await t.test('a non-JSON upstream body is passed through as-is (no redaction step)', async () => {
-    mockUpstream('<html>upstream said no</html>', { contentType: 'text/html' });
-    const r = await request(server, '/api/sheets?action=managersOverview');
-    assert.equal(r.status, 200);
-    assert.equal(r.text, '<html>upstream said no</html>');
+  await t.test('an admin sees every house, byte-for-byte', async () => {
+    const cookie = await auth.login(server, auth.ADMIN_CODE);
+    const r = await req(server, '/api/sheets?action=managersOverview', { headers: { Cookie: cookie } });
+    assert.equal(r.text, OVERVIEW);
+    assert.equal((await req(server, '/api/sheets?action=managersHouse&house=raanana', { headers: { Cookie: cookie } })).status, 200);
   });
 
-  // ── nothing gate-shaped remains ──────────────────────────────────
-  await t.test('there is no login route', async () => {
-    const r = await request(server, '/api/login', { method: 'POST' });
-    assert.equal(r.status, 404);
-    assert.equal(JSON.parse(r.text).error, 'not found');
-  });
-
-  await t.test('the shell carries no login markup', async () => {
-    const r = await request(server, '/');
-    for (const needle of ['loginOverlay', 'loginPin', 'קוד גישה', 'מוסתר']) {
-      assert.ok(!r.text.includes(needle), `shell still carries ${needle}`);
+  await t.test('only the three read actions are proxied', async () => {
+    const cookie = await auth.login(server, auth.ADMIN_CODE);
+    for (const a of ['getData', 'managersWork', 'saveAll', '']) {
+      const r = await req(server, `/api/sheets?action=${a}`, { headers: { Cookie: cookie } });
+      assert.equal(r.status, 400, a);
     }
+    assert.equal(calls.length, 0);
   });
 
-  await t.test('a ?key= param is now just an ignored query param — 200, no cookie, no redirect', async () => {
-    const r = await request(server, '/?key=anything-at-all');
-    assert.equal(r.status, 200, 'no key check, so no 404 and no redirect');
-    assert.equal(r.headers['set-cookie'], undefined, 'no cookie is ever set');
-    assert.equal(r.headers.location, undefined);
-  });
-
-  await t.test('a leftover cookie from the key era changes nothing', async () => {
-    mockUpstream(HOUSE_PAYLOAD);
-    const r = await request(server, '/api/sheets?action=managersHouse&house=ramot', {
-      headers: { Cookie: 'ezm_full=1789794151242.deadbeef; ezm_session_token=stale' }
-    });
+  await t.test('work proxy: the server decides house / role / actor and adds the secret; the browser cannot override them', async () => {
+    mockUpstream(() => '{"ok":true}');
+    const cookie = await auth.login(server, auth.ORAN_CODE);
+    const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: {
+      op: 'logAdd', log: 'staffTalks', house: 'raanana', role: 'admin', actor: 'סנדרה', secret: 'x',
+      entry: { employeeName: 'רינה', talkDate: '2026-10-12', summary: 'שיחה' } } });
     assert.equal(r.status, 200);
-    assert.ok(r.text.includes(PATIENT));
-    assert.equal(r.headers['set-cookie'], undefined);
+    const sent = calls[0];
+    assert.equal(sent.method, 'POST');
+    assert.equal(sent.url, 'https://apps-script.test/exec', 'POST to the script itself — nothing in the URL');
+    assert.deepEqual([sent.body.action, sent.body.house, sent.body.role, sent.body.actor, sent.body.secret],
+      ['managersWork', 'ramot', 'manager', 'אורן', process.env.MANAGERS_WORK_SECRET]);
+    assert.deepEqual(JSON.parse(sent.body.entry), { employeeName: 'רינה', talkDate: '2026-10-12', summary: 'שיחה' });
   });
 
-  await t.test('the server never sets a cookie on any route', async () => {
-    for (const p of ['/', '/healthz', '/robots.txt', '/api/sheets?action=managersOverview']) {
-      mockUpstream('{"ok":true}');
-      const r = await request(server, p);
-      assert.equal(r.headers['set-cookie'], undefined, `a cookie was set on ${p}`);
-    }
+  await t.test('work proxy: an admin names the house; bad ops / logs / houses are refused; JSON only', async () => {
+    mockUpstream(() => '{"ok":true}');
+    const admin = await auth.login(server, auth.ADMIN_CODE);
+    await req(server, '/api/work', { method: 'POST', headers: { Cookie: admin }, body: { op: 'houseData', house: 'pardes', month: '2026-10' } });
+    assert.deepEqual([calls[0].body.house, calls[0].body.role, calls[0].body.month], ['pardes', 'admin', '2026-10']);
+    const bads = [{ op: 'drop' }, { op: 'logAdd', log: 'salaries' }, { op: 'houseData', house: 'nowhere' }];
+    for (const b of bads) assert.notEqual((await req(server, '/api/work', { method: 'POST', headers: { Cookie: admin }, body: b })).status, 200, JSON.stringify(b));
+    const form = await req(server, '/api/work', { method: 'POST', headers: { Cookie: admin, 'Content-Type': 'text/plain' }, body: '{"op":"houseData","house":"ramot"}' });
+    assert.equal(form.status, 415, 'a cross-site form post is refused');
+    const patch = await req(server, '/api/work', { method: 'POST', headers: { Cookie: admin }, body: { op: 'logUpdate', log: 'events', house: 'ramot', id: 'abc', patch: { followUpDone: true, author: 'x' } } });
+    assert.equal(patch.status, 200);
+    assert.deepEqual(JSON.parse(calls.at(-1).body.patch), { followUpDone: true, deleted: false }, 'only the two known flags pass');
   });
 
-  // ── rate limit ───────────────────────────────────────────────────
-  await t.test('/api/sheets is rate-limited per IP (300 per window)', async () => {
-    mockUpstream('{"ok":true}');
-    let last;
-    for (let i = 0; i < 301; i++) last = await request(server, '/api/sheets?action=managersOverview');
-    assert.equal(last.status, 429);
-    assert.equal(JSON.parse(last.text).error, 'יותר מדי בקשות. נסו שוב מאוחר יותר.');
+  await t.test('the backend refusing the secret shows as 503, not as data', async () => {
+    mockUpstream(() => '{"ok":false,"error":"unauthorized"}');
+    const cookie = await auth.login(server, auth.ORAN_CODE);
+    const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseData' } });
+    assert.equal(r.status, 503);
   });
 
-  await t.test('the rate limit does not apply to the app shell itself', async () => {
-    mockUpstream('{"ok":true}');
-    for (let i = 0; i < 301; i++) await request(server, '/api/sheets?action=managersOverview');
-    const r = await request(server, '/');
-    assert.equal(r.status, 200, 'a rate-limited visitor can still load the page');
+  await t.test('logout clears the cookie', async () => {
+    const r = await req(server, '/api/logout', { method: 'POST', body: {} });
+    assert.match(r.headers['set-cookie'][0], /^mgr_session=; .*Max-Age=0/);
   });
 
-  // ── headers, robots, secrets ─────────────────────────────────────
-  await t.test('X-Robots-Tag: noindex, nofollow on every response', async () => {
-    for (const p of ['/', '/healthz', '/robots.txt', '/api/sheets?action=managersOverview']) {
-      mockUpstream('{"ok":true}');
-      const r = await request(server, p);
-      assert.equal(r.headers['x-robots-tag'], 'noindex, nofollow', `missing on ${p}`);
-    }
-  });
-
-  await t.test('robots.txt disallows everything', async () => {
-    const r = await request(server, '/robots.txt');
-    assert.equal(r.status, 200);
-    assert.match(r.text, /User-agent:\s*\*/i);
-    assert.match(r.text, /Disallow:\s*\//);
-  });
-
-  await t.test('security headers are set', async () => {
-    const r = await request(server, '/');
-    assert.equal(r.headers['x-content-type-options'], 'nosniff');
+  await t.test('X-Robots-Tag and security headers on every response; robots.txt disallows all', async () => {
+    const r = await req(server, '/');
+    assert.equal(r.headers['x-robots-tag'], 'noindex, nofollow');
     assert.equal(r.headers['x-frame-options'], 'DENY');
-    assert.equal(r.headers['referrer-policy'], 'no-referrer');
-    assert.match(r.headers['content-security-policy'], /default-src 'self'/);
-    assert.match(r.headers['content-security-policy'], /frame-ancestors 'none'/);
-    assert.equal(r.headers['x-powered-by'], undefined);
+    assert.match(r.headers['content-security-policy'], /script-src 'self'/);
+    assert.match((await req(server, '/robots.txt')).text, /Disallow: \//);
   });
 
-  await t.test('the index.html CSP holds: no inline <script> in the shell', async () => {
-    const r = await request(server, '/');
-    assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>[^<]*\S/.test(r.text),
-      'an inline script would be blocked by script-src \'self\'');
-  });
-
-  await t.test('the Apps Script URL never appears in a response', async () => {
-    mockUpstream('{"ok":true}');
-    for (const p of ['/', '/app.js', '/healthz', '/api/sheets?action=managersOverview']) {
-      const r = await request(server, p);
-      assert.ok(!r.text.includes('apps-script.test'), `APPS_SCRIPT_URL leaked on ${p}`);
-      assert.ok(!r.text.includes('/exec'), `Apps Script /exec URL leaked on ${p}`);
+  await t.test('no secret ever reaches a browser: not the script URL, not the work secret, not a code', async () => {
+    mockUpstream(() => { throw new Error('fetch https://apps-script.test/exec failed'); });
+    const cookie = await auth.login(server, auth.ADMIN_CODE);
+    for (const r of [
+      await req(server, '/api/sheets?action=managersOverview', { headers: { Cookie: cookie } }),
+      await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseData', house: 'ramot' } }),
+      await req(server, '/api/me', { headers: { Cookie: cookie } }),
+      await req(server, '/')
+    ]) {
+      assert.doesNotMatch(r.text, /apps-script\.test|test-work-secret|90000001|10000002/);
     }
   });
 
-  await t.test('a proxy exception returns no detail (the URL can appear in err.message)', async () => {
-    global.fetch = async () => { throw new Error(`Failed to parse URL from ${process.env.APPS_SCRIPT_URL}`); };
-    const r = await request(server, '/api/sheets?action=managersOverview');
-    assert.equal(r.status, 502);
-    assert.deepEqual(JSON.parse(r.text), { error: 'upstream_error' });
-    assert.ok(!r.text.includes('apps-script.test'));
+  await t.test('no server-only module is reachable; bonus-eligibility.js is', async () => {
+    assert.equal((await req(server, '/lib/access.js')).status, 200, 'SPA shell, not the module');
+    assert.doesNotMatch((await req(server, '/lib/access.js')).text, /MANAGER_ACCESS/);
+    assert.match((await req(server, '/lib/bonus-eligibility.js')).text, /RULE_SETS/);
+    assert.doesNotMatch((await req(server, '/server.js')).text, /MANAGERS_WORK_SECRET/);
   });
+});
 
-  await t.test('no server-only module is reachable over HTTP', async () => {
-    for (const f of ['/lib/auth.js', '/lib/redact.js', '/server.js', '/package.json']) {
-      const r = await request(server, f);
-      // Deleted or unmounted: the SPA shell answers, never module source.
-      assert.ok(!r.text.includes('createHmac'), `${f} source was served`);
-      assert.ok(!r.text.includes('APPS_SCRIPT_URL'), `${f} source was served`);
-    }
-  });
+test('lib/access: a removed or changed code logs that person out; expired sessions fail', () => {
+  const a = accessLib.parseAccess(JSON.stringify([{ code: '11112222', name: 'אורן', house: 'ramot' }]));
+  const k = accessLib.sessionKey('k'.repeat(32));
+  const tok = accessLib.signSession(a.users[0], k, 1000);
+  assert.equal(accessLib.readSession(tok, k, a.users, 2000).name, 'אורן');
+  const changed = accessLib.parseAccess(JSON.stringify([{ code: '11113333', name: 'אורן', house: 'ramot' }]));
+  assert.equal(accessLib.readSession(tok, k, changed.users, 2000), null, 'new code → old session dead');
+  assert.equal(accessLib.readSession(tok, k, a.users, 1000 + 31 * 86400000), null, 'expired after 30 days');
+});
 
-  await t.test('client-shared lib/bonus-eligibility.js IS served', async () => {
-    const r = await request(server, '/lib/bonus-eligibility.js');
-    assert.equal(r.status, 200);
-    assert.ok(r.text.includes('tierForPatients') || r.text.includes('bonus'));
-  });
+test('lib/access: MANAGER_ACCESS validation (fail closed on anything odd)', () => {
+  const bad = (v) => accessLib.parseAccess(typeof v === 'string' ? v : JSON.stringify(v)).ok;
+  assert.equal(bad(''), false);
+  assert.equal(bad([]), false);
+  assert.equal(bad([{ code: '123', name: 'x', house: 'ramot' }]), false, 'code too short');
+  assert.equal(bad([{ code: '12345678', name: 'x', house: 'nowhere' }]), false, 'unknown house');
+  assert.equal(bad([{ code: '12345678', name: '', house: 'ramot' }]), false, 'no name');
+  assert.equal(bad([{ code: '12345678', name: 'a', house: 'ramot' }, { code: '12345678', name: 'b', role: 'admin' }]), false, 'duplicate code');
+  assert.equal(bad([{ code: '12345678', name: '<b>', role: 'admin' }]), false, 'markup in a name');
+  assert.equal(bad([{ code: '12345678', name: 'ok', role: 'admin' }]), true);
+});
 
-  await t.test('the proxy still forwards ONLY allowlisted query keys', async () => {
-    let seen = null;
-    global.fetch = async (url) => {
-      seen = String(url);
-      return { status: 200, text: async () => '{"ok":true}', headers: { get: () => null } };
-    };
-    await request(server, '/api/sheets?action=managersHouse&house=ramot&month=2026-07&evil=1&key=x');
-    const qs = new URL(seen).searchParams;
-    assert.equal(qs.get('action'), 'managersHouse');
-    assert.equal(qs.get('house'), 'ramot');
-    assert.equal(qs.get('month'), '2026-07');
-    assert.equal(qs.has('evil'), false);
-    assert.equal(qs.has('key'), false);
-  });
+test('docs: the open-access doc is replaced by the access doc', () => {
+  const root = path.join(__dirname, '..');
+  assert.ok(fs.existsSync(path.join(root, 'docs', 'access.md')));
+  assert.ok(!fs.existsSync(path.join(root, 'docs', 'open-access.md')));
 });

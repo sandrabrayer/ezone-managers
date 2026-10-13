@@ -8,22 +8,15 @@
  * the query allowlist, status pass-through and the error path. */
 process.env.NODE_ENV = 'test';
 process.env.APPS_SCRIPT_URL = 'https://apps-script.test/exec';
+const auth = require('./helpers-auth');
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('node:http');
 const { app, _rateLimiters } = require('../server');
 
-function request(server, path, headers) {
-  return new Promise((resolve, reject) => {
-    const { port } = server.address();
-    http.get({ host: '127.0.0.1', port, path, headers }, (res) => {
-      let buf = '';
-      res.on('data', (c) => { buf += c; });
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text: buf }));
-    }).on('error', reject);
-  });
-}
+/* Every call here is made as an ADMIN (sees all houses — the raw feed). */
+let COOKIE = '';
+const request = (server, path, headers) => auth.request(server, path, { headers: { ...(headers || {}), Cookie: COOKIE } });
 
 test('sheets proxy (mocked upstream)', async (t) => {
   const realFetch = global.fetch;
@@ -34,6 +27,7 @@ test('sheets proxy (mocked upstream)', async (t) => {
   t.after(() => server.close());
 
   t.beforeEach(() => { _rateLimiters.allowSheets.clear(); });
+  COOKIE = await auth.login(server, auth.ADMIN_CODE);
 
   let lastFetchUrl = null;
 
