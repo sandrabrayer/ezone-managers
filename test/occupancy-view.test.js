@@ -396,7 +396,7 @@ test('CSV export: a spreadsheet formula in a feed string is neutralised end to e
 test('the occupancy view renders feed data with textContent only', () => {
   const js = pub('app.js');
   const start = js.indexOf('Monthly occupancy — permanent');
-  const end = js.indexOf('function renderNextTierCard');
+  const end = js.indexOf('function renderBonusPlan_');
   assert.ok(start > 0 && end > start, 'the occupancy section must exist');
   const section = js.slice(start, end);
   const writes = [...section.matchAll(/innerHTML\s*=\s*([^;]+);/g)].map((m) => m[1].trim());

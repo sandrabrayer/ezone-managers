@@ -150,13 +150,6 @@ function fmtDateShort(s) {
   if (isNaN(d)) return String(s);
   return `${d.getDate()}/${d.getMonth() + 1}`;
 }
-function fmtMonthLabel(yearMonth) {
-  if (!yearMonth) return currentMonthLabel();
-  const m = String(yearMonth).match(/^(\d{4})-(\d{1,2})/);
-  if (!m) return String(yearMonth);
-  const idx = Math.max(0, Math.min(11, parseInt(m[2], 10) - 1));
-  return `${HEBREW_MONTHS[idx]} ${m[1]}`;
-}
 
 function daysInMonthFromLabel(yearMonth, fallback = now_()) {
   const m = String(yearMonth || '').match(/^(\d{4})-(\d{1,2})/);
@@ -305,58 +298,6 @@ function settledPrevFor_(h) {
   return { ...v, minRequired: v.gate };
 }
 
-/* Two clearly separated month blocks beneath the bonus KPI:
- *   "בונוס <קודם> — סופי (לתשלום)"  final state only
- *   "<נוכחי> — חודש נוכחי (בתהליך)" actual days-so-far + labelled projection
- * Both are computed locally (BonusView); the feed's own bonus fields are
- * never rendered. */
-function renderMonthSplit_(panel, bonusEl, h, settledOverride) {
-  const BV = window.BonusView;
-  // Bonus-history view: ONE row — the selected finished month, final state.
-  const status = settledOverride ? null : monthlyStatus(h);
-  const prev = settledOverride || settledPrevFor_(h);
-  const cur = status ? status.view : null;
-  const viewingYM = h?.month || state.overview?.month || currentMonthYM_();
-
-  let box = panel.querySelector('[data-month-split]');
-  if (!box) {
-    box = document.createElement('div');
-    box.setAttribute('data-month-split', '');
-    box.className = 'month-split';
-    bonusEl.parentNode.appendChild(box);
-  }
-
-  const parts = [];
-  if (prev) {
-    parts.push(
-      `<div class="ms-row ms-prev ms-headline">
-         <span class="ms-tag">${settledOverride ? prev.shortTitle : prev.title}</span>
-         <span class="ms-amt ${prev.amount > 0 ? 'gold' : 'zero'}">${fmtCurrency(prev.amount)}</span>
-         <span class="ms-sub">${prev.statusText} · ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום${settledOverride ? ' · ' + prev.gateText : ''}</span>
-       </div>`
-    );
-  } else {
-    parts.push(
-      `<div class="ms-row ms-prev ms-headline">
-         <span class="ms-tag">בונוס ${BV.monthLabel(prevMonthYM_(viewingYM))} — סופי (לתשלום)</span>
-         <span class="ms-amt zero">—</span>
-         <span class="ms-sub">הנתונים לא זמינים</span>
-       </div>`
-    );
-  }
-
-  if (cur) {
-    parts.push(
-      `<div class="ms-row ms-cur">
-         <span class="ms-tag">${cur.title}</span>
-         <span class="ms-amt ${cur.securedAmount > 0 ? 'gold' : 'zero'}">${fmtCurrency(cur.securedAmount)}</span>
-         <span class="ms-sub">${cur.actualLabel}: <b>${cur.actualText}</b><br>${cur.projectionLabel}: ${cur.projectionText}<br>${cur.badge.text}</span>
-       </div>`
-    );
-  }
-
-  box.innerHTML = parts.join('');
-}
 
 /* One-decimal number for display (e.g. avgDaily 18.4). */
 function fmtNum1_(v) {
@@ -417,17 +358,11 @@ function treatmentNightsOf(h) {
 function referralBonus_(counts, eligible, ym) {
   return window.BonusEligibility.continuityAmount(counts || {}, !!eligible, ym);
 }
-function referralsEnabled_(ym) {
-  return window.BonusEligibility.continuityEnabled(ym) === true;
-}
 /* Intake-meeting («פגישות קליטה») bonus for one house in month `ym`, from the
  * feed's `intakeMeetings` COUNTS (confirmed / pending). Month-aware: none
  * before Oct 2026; from Oct 2026, 250 ₪ per confirmed meeting. */
 function intakeBonus_(feed, ym) {
   return window.BonusEligibility.intakeMeetingAmount(feed || {}, ym);
-}
-function intakeEnabled_(ym) {
-  return window.BonusEligibility.intakeEnabled(ym) === true;
 }
 /* Intake-meeting bonus for a house in a FINISHED month, from that month's
  * overview row. Counted in the month of admission: `pending` admissions may
@@ -526,6 +461,14 @@ async function loadOverview() {
       : null;
 
     renderOverview(data);
+    // A house tab opened BEFORE the overview finished (a direct #ramot link)
+    // was drawn without last month's settled figures — redraw it now.
+    if (!state.bonusMonth) {
+      HOUSE_KEYS.forEach(key => {
+        const panel = document.getElementById(`panel-${key}`);
+        if (panel && panel.getAttribute('data-rendered') && state.details[key]) renderHouseDetail(key, state.details[key]);
+      });
+    }
     setStatus(`עודכן ${new Date().toLocaleTimeString('he-IL')}`);
   } catch (err) {
     console.error(err);
@@ -1029,9 +972,7 @@ function renderHouseDetail(key, data) {
   const name = labels.name || BV.safeLabel(data.name) || BV.safeLabel(o.name) || key;
   const manager = BV.safeLabel(data.manager) || BV.safeLabel(o.manager) || labels.manager || '';
   const threshold = resolveThreshold(merged);
-  const occ = Number.isFinite(merged.patientsNow) ? merged.patientsNow : 0;
 
-  const monthlyResult = monthlyBonusResult(merged);
   // ONE status object per render: its daysSoFar is THE days-so-far figure
   // for the hero, the KPI, the progress bar and the breakdown below.
   const status = monthlyStatus(merged);
@@ -1040,21 +981,15 @@ function renderHouseDetail(key, data) {
   const viewingLabel = BV.monthLabel(viewingYM);
   const target = status.target;
   const nights = status.daysSoFar;
-  const tier = { tier: status.projectedTier, amount: status.projectedAmount };
-  const eligible = status.projectedAmount > 0;
   // "paid" means actually secured: a finished month that earned, or a
-  // current month already locked in (days-so-far >= the fixed gate).
+  // current month already locked in.
   const paid = (status.state === 'finished' && status.amount > 0) || status.state === 'locked';
-  const above = eligible;
-
-  const cfg = tierCfgFor_(key, monthlyResult, viewingYM);
 
   const activity = Array.isArray(data.activity) ? data.activity : [];
   const entries = activity.filter(a => a.kind === 'entry');
   const exits   = activity.filter(a => a.kind === 'exit');
 
   const totalDaysMonth = daysInMonthFromLabel(viewingYM);
-  const today = now_();
   // Projection (end-of-month days if the current average holds) — a SEPARATE
   // figure from the actual days-so-far, always labelled "צפי לסוף החודש".
   const projection = cur ? cur.projectedDays : nights;
@@ -1072,7 +1007,6 @@ function renderHouseDetail(key, data) {
        <div class="sb-name">${name}</div>
        <div class="sb-title" data-hero-headline>${hero.headline}</div>
        <div class="sb-sub">${hero.sub}</div>
-       ${cur ? `<div class="sb-current" data-hero-current>⏳ ${hero.secondary}</div>` : ''}
      </div>`;
 
   // KPI stats — every label names its month.
@@ -1087,32 +1021,22 @@ function renderHouseDetail(key, data) {
   // Intake meetings: confirmed ones only (pending = not yet 30 days).
   const intake = intakeBonus_(merged.intakeMeetings, viewingYM);
   const quartly = quarterlyEarnedAmount(merged);
-  // Only secured monthly (locked/finished) + actually-earned quarterly.
-  const totalBonus = status.amount + (cont.total || 0) + (intake.total || 0) + (quartly || 0);
+  // The bonuses of the month in plain words (BonusView.bonusPlanView). Its
+  // total — what is ALREADY earned — is also the bonus KPI.
+  const plan = BV.bonusPlanView({
+    key, ym: viewingYM, settled: !cur, capacity: resolveCapacity(merged),
+    daysSoFar: nights, elapsedDays: cur ? cur.elapsedDays : totalDaysMonth,
+    treatmentDays: nights, avgDaily: Number(merged.avgDaily) || 0,
+    referral: cont, referralState: 'ok', intake, quarterly: quartly
+  });
+  const totalBonus = plan.total;
 
   const bonusEl = panel.querySelector('[data-stat="bonus"]');
-  setStatLabel(panel, 'bonus', cur ? `מובטח עד כה — ${viewingLabel} (בתהליך)` : `בונוס ${viewingLabel} — סופי`);
+  setStatLabel(panel, 'bonus', cur ? `הושג עד כה — ${viewingLabel}` : `בונוס ${viewingLabel} — סופי`);
   bonusEl.classList.remove('is-skeleton');
   bonusEl.textContent = fmtCurrency(totalBonus);
   bonusEl.classList.toggle('gold', totalBonus > 0);
-
-  // Caveat next to the running-month bonus KPI: the projection (labelled) and
-  // the next-tier line — never a tier presented as achieved.
-  let fallbackEl = panel.querySelector('[data-bonus-fallback-note]');
-  if (cur && status.state === 'projection') {
-    if (!fallbackEl) {
-      fallbackEl = document.createElement('div');
-      fallbackEl.setAttribute('data-bonus-fallback-note', '');
-      fallbackEl.className = 'bonus-fallback-note';
-      bonusEl.parentNode.appendChild(fallbackEl);
-    }
-    fallbackEl.textContent = `${cur.projectionLabel}: ${cur.projectionText} · ${cur.badge.text}`;
-  } else if (fallbackEl) {
-    fallbackEl.remove();
-  }
-
-  // ── Settled previous month + in-progress current month (two blocks) ──
-  renderMonthSplit_(panel, bonusEl, merged);
+  renderBonusPlan_(panel, plan);
 
   // Target bar (treatment-days so far vs the fixed gate)
   const chartTitle = panel.querySelector('[data-chart-title]');
@@ -1123,41 +1047,24 @@ function renderHouseDetail(key, data) {
   }
   setStatLabel(panel, 'daysSoFar', 'ימי טיפול עד כה');
   setStatLabel(panel, 'daysProjection', 'צפי לסוף החודש');
-  const denom = Math.max(nights, target, projection, 1);
+  // The bar's target = what the FIRST bonus really needs this month.
+  const firstItem = plan.items.find(it => it.id === 'first');
+  const firstNeed = firstItem ? firstItem.need : target;
+  const denom = Math.max(nights, firstNeed, projection, 1);
   const fillPct = Math.min(100, (nights / denom) * 100);
-  const bepPct  = Math.min(100, (target / denom) * 100);
+  const bepPct  = Math.min(100, (firstNeed / denom) * 100);
   const bar = panel.querySelector('[data-bep-bar]');
-  bar.classList.toggle('above', paid);
+  bar.classList.toggle('above', nights >= firstNeed);
   panel.querySelector('[data-bep-fill]').style.width = fillPct + '%';
   const marker = panel.querySelector('[data-bep-marker]');
   marker.style.right = bepPct + '%';
-  panel.querySelector('[data-bep-marker-label]').textContent = `יעד ${fmtInt(target)}`;
+  panel.querySelector('[data-bep-marker-label]').textContent = `יעד ${fmtInt(firstNeed)}`;
   setStat(panel, 'daysSoFar',    fmtInt(nights));
-  setStat(panel, 'daysTarget',   fmtInt(target));
+  setStat(panel, 'daysTarget',   fmtInt(firstNeed));
   setStat(panel, 'daysProjection', fmtInt(projection));
 
   renderDailySpark(panel, data.dailyChart || [], threshold, resolveCapacity(merged));
 
-  // "Missing for next tier" card (right after status banner)
-  const daysLeftInMonth = Math.max(0, totalDaysMonth - today.getDate());
-  const chartData = Array.isArray(data.dailyChart) ? data.dailyChart : [];
-  const todayKey2 = BV.dateKey(today);
-  const pastCounts = chartData
-    .filter(p => (p.date || '') <= todayKey2)
-    .map(p => Number(p.count) || 0);
-  const recentDailyAvg = pastCounts.length
-    ? pastCounts.slice(-5).reduce((s, n) => s + n, 0) / Math.min(5, pastCounts.length)
-    : (Number(merged.patientsNow) || 0);
-  renderNextTierCard(panel, { key, cfg, target, nights, tier: tier.tier, occ, monthlyResult, status }, daysLeftInMonth, recentDailyAvg, merged.patientsNow);
-
-  // Tier progress visualization
-  renderTierTrack(panel, { key, cfg, target, nights, tier: tier.tier, occ, monthlyResult, status });
-
-  // Quarterly progress
-  renderQuarterlyTrack(panel, merged, cfg, target);
-
-  // Bonus breakdown (educational)
-  renderBreakdown(panel, merged, { ym: viewingYM, above, tier: tier.tier, cfg, target, nights, occ, cont, intake, quartly, totalBonus, monthlyResult, status });
 
   // Logs
   renderEntries(panel.querySelector('[data-log="entries"]'), entries);
@@ -1176,18 +1083,6 @@ function setStatLabel(panel, name, text) {
   if (el) el.textContent = text;
 }
 
-/* Compatibility config for the detail-page visualizations. Tier patient
- * counts come from the canonical per-house table OF THAT MONTH (the rules
- * are month-aware). Quarterly is unchanged. */
-function tierCfgFor_(key, monthlyResult, ym) {
-  const houseCfg = window.BonusEligibility.rulesFor(key, ym) || null;
-  const tierTable = (houseCfg && Array.isArray(houseCfg.tiers)) ? houseCfg.tiers.slice() : [];
-  return {
-    base: monthlyResult.amount || (tierTable.length ? tierTable[tierTable.length - 1].amount : 0),
-    tierTable,                          // [{patients, amount}], highest first
-    quarterly: window.BonusEligibility.QUARTERLY_AMOUNT
-  };
-}
 
 function setStat(panel, name, value) {
   const el = panel.querySelector(`[data-stat="${name}"]`);
@@ -1750,21 +1645,15 @@ function blankDetailFigures_(panel, label) {
   setStatLabel(panel, 'treatmentDays', `ימי טיפול — ${label} (סופי)`);
   setStatLabel(panel, 'bonus', `בונוס ${label} — סופי`);
   const note = panel.querySelector('[data-bonus-fallback-note]');
-  if (note) { note.textContent = ''; note.remove(); }
-  const split = panel.querySelector('[data-month-split]');
-  if (split) split.innerHTML = '';
+  if (note) note.textContent = '';
   const chartTitle = panel.querySelector('[data-chart-title]');
   if (chartTitle) chartTitle.textContent = `ימי טיפול — ${label} (סופי)`;
   const spark = panel.querySelector('[data-daily-spark]');
   if (spark) spark.innerHTML = '';
   const bk = panel.querySelector('[data-breakdown]');
   if (bk) bk.innerHTML = '';
-  const tc = panel.querySelector('[data-tier-current]');
-  if (tc) tc.textContent = '—';
-  const qn = panel.querySelector('[data-quarterly-note]');
-  if (qn) qn.textContent = '—';
-  const qm = panel.querySelector('[data-quarterly-months]');
-  if (qm) { qm.hidden = true; qm.textContent = ''; }
+  const pt = panel.querySelector('[data-bonus-plan-title]');
+  if (pt) pt.textContent = `הבונוסים של ${label} — סופי`;
   const entries = panel.querySelector('[data-log="entries"]');
   const exits = panel.querySelector('[data-log="exits"]');
   if (entries) entries.innerHTML = '';
@@ -1775,16 +1664,6 @@ function renderHouseDetailSettled_(panel, key, ym) {
   const BV = window.BonusView;
   const label = BV.monthLabel(ym);
   renderBonusMonthPicker_(panel.querySelector('[data-bonus-month]'), panel.querySelector('[data-bonus-month-back]'));
-
-  // A "what is missing for the next tier" card has no meaning for a
-  // finished month — hidden (and blanked) until the running month is shown
-  // again; renderNextTierCard repopulates every field.
-  const nextCard = panel.querySelector('[data-next-tier-card]');
-  if (nextCard) nextCard.hidden = true;
-  ['header', 'daily-gap', 'daily-label', 'cumulative', 'status', 'jump'].forEach(n => {
-    const el = panel.querySelector(`[data-next-tier-${n}]`);
-    if (el) el.textContent = '';
-  });
 
   const labels = HOUSE_LABELS[key] || {};
   const entry = bonusMonthEntry_(ym);
@@ -1827,11 +1706,9 @@ function renderHouseDetailSettled_(panel, key, ym) {
   const merged = { ...h, bonus: {} };
   const threshold = resolveThreshold(merged);
   const capacity = resolveCapacity(merged);
-  const monthlyResult = monthlyBonusResult(merged);
   const status = monthlyStatus(merged);   // 'finished' — merged.month is the selected month
   const target = status.target;
   const nights = s.treatmentDays;         // finished month: days-so-far = the full-month total
-  const cfg = tierCfgFor_(key, monthlyResult, ym);
   // Referrals: the COUNTS from the month's own house payload; the amount is
   // computed locally (lib/bonus-eligibility.js) with that month's rule.
   // Unknown until that payload has loaded.
@@ -1842,7 +1719,13 @@ function renderHouseDetailSettled_(panel, key, ym) {
   const quartly = quarterlyLocal_(key, ym).earned;
   // Intake meetings of that month (from its overview row, which did load).
   const intake = settledIntakeFor_(key, ym);
-  const totalBonus = s.amount + quartly + cont.total + intake.total;
+  // The month's bonuses in plain words — final state (BonusView.bonusPlanView).
+  const plan = BV.bonusPlanView({
+    key, ym, settled: true, capacity, treatmentDays: s.treatmentDays, avgDaily: s.avgDaily,
+    referral: cont, referralState: contState, referralError: sh && !sh.ok ? sh.error : '',
+    intake, quarterly: quartly
+  });
+  const totalBonus = plan.total;
 
   // Hero: the selected month, final state ("יולי 2026 — סופי: …").
   const hero = BV.houseHeroView({ name, manager, settled: s, prevYm: ym, current: null, selected: true });
@@ -1865,38 +1748,24 @@ function renderHouseDetailSettled_(panel, key, ym) {
   bonusEl.classList.remove('is-skeleton');
   bonusEl.textContent = fmtCurrency(totalBonus);
   bonusEl.classList.toggle('gold', totalBonus > 0);
-  // No projection on a finished month. The note slot is used only to say the
-  // total is incomplete while the referral figures are loading / failed —
-  // and only while the referral bonus is switched on.
-  let fallbackEl = panel.querySelector('[data-bonus-fallback-note]');
-  if (referralsEnabled_(ym) && contState !== 'ok') {
-    if (!fallbackEl) {
-      fallbackEl = document.createElement('div');
-      fallbackEl.setAttribute('data-bonus-fallback-note', '');
-      fallbackEl.className = 'bonus-fallback-note';
-      bonusEl.parentNode.appendChild(fallbackEl);
-    }
-    fallbackEl.textContent = contState === 'loading'
-      ? 'לא כולל בונוס הפניות — טוען…'
-      : 'לא כולל בונוס הפניות — הנתונים לא נטענו';
-  } else if (fallbackEl) { fallbackEl.textContent = ''; fallbackEl.remove(); }
-
-  renderMonthSplit_(panel, bonusEl, merged, s);
+  renderBonusPlan_(panel, plan);
 
   // Treatment-days bar: the settled total vs the fixed gate; gate result in words.
   const chartTitle = panel.querySelector('[data-chart-title]');
   if (chartTitle) chartTitle.textContent = `ימי טיפול — ${label} (סופי)`;
   setStatLabel(panel, 'daysSoFar', 'ימי טיפול בחודש');
   setStatLabel(panel, 'daysProjection', 'המכסה');
-  const denom = Math.max(nights, target, 1);
+  const firstItem = plan.items.find(it => it.id === 'first');
+  const firstNeed = firstItem ? firstItem.need : target;
+  const denom = Math.max(nights, firstNeed, 1);
   const bar = panel.querySelector('[data-bep-bar]');
   bar.classList.toggle('above', s.amount > 0);
   panel.querySelector('[data-bep-fill]').style.width = Math.min(100, (nights / denom) * 100) + '%';
   const marker = panel.querySelector('[data-bep-marker]');
-  marker.style.right = Math.min(100, (target / denom) * 100) + '%';
-  panel.querySelector('[data-bep-marker-label]').textContent = `יעד ${fmtInt(target)}`;
+  marker.style.right = Math.min(100, (firstNeed / denom) * 100) + '%';
+  panel.querySelector('[data-bep-marker-label]').textContent = `יעד ${fmtInt(firstNeed)}`;
   setStat(panel, 'daysSoFar', fmtInt(nights));
-  setStat(panel, 'daysTarget', fmtInt(target));
+  setStat(panel, 'daysTarget', fmtInt(firstNeed));
   setStat(panel, 'daysProjection', s.gatePassed ? 'הושלמה' : 'לא הושלמה');
 
   const chart = Array.isArray(h.dailyChart) && h.dailyChart.length ? h.dailyChart
@@ -1914,11 +1783,6 @@ function renderHouseDetailSettled_(panel, key, ym) {
           : `<div class="history-empty" data-bonus-history-state="no-chart">אין נתוני תפוסה יומית ל${label}</div>`;
     }
   }
-
-  const ctx = { key, cfg, target, nights, tier: s.tier, occ: s.avgDaily, monthlyResult, status, settled: s };
-  renderTierTrack(panel, ctx);
-  renderQuarterlyTrack(panel, merged, cfg, target);
-  renderBreakdown(panel, merged, { ...ctx, ym, above: s.amount > 0, cont, intake, contState, contError: sh && !sh.ok ? sh.error : '', quartly, totalBonus });
 
   renderSettledLogs_(panel, sh, label);
 
@@ -2443,365 +2307,45 @@ function renderOccupancyEverywhere_() {
   });
 }
 
-function renderNextTierCard(panel, ctx, daysLeftInMonth, recentDailyAvg, patientsNow) {
-  const card = panel.querySelector('[data-next-tier-card]');
-  if (!card) return;
-  card.hidden = false; // hidden while a finished month is selected in the bonus-history picker
-  const header = panel.querySelector('[data-next-tier-header]');
-  const primary = panel.querySelector('[data-next-tier-primary]');
-  const dailyGapEl = panel.querySelector('[data-next-tier-daily-gap]');
-  const dailyLabelEl = panel.querySelector('[data-next-tier-daily-label]');
-  const cumulativeEl = panel.querySelector('[data-next-tier-cumulative]');
-  const statusEl = panel.querySelector('[data-next-tier-status]');
-  const jump = panel.querySelector('[data-next-tier-jump]');
 
-  // Patient-count tiers (ascending) and current occupancy.
-  const tiersAsc = (ctx.cfg.tierTable || []).slice().sort((a, b) => a.patients - b.patients);
-  const occ = Number.isFinite(Number(patientsNow)) ? Number(patientsNow) : Math.round(Number(recentDailyAvg) || 0);
 
-  // Already at the top tier by count?
-  const topTier = tiersAsc[tiersAsc.length - 1];
-  const st = ctx.status || {};
-  const secured = st.state === 'locked' || (st.state === 'finished' && st.amount > 0);
-  // Only celebrate "max bonus reached" when the top tier is actually SECURED
-  // (locked/finished). Mid-month, even at top occupancy, it's still in
-  // progress — show the projection toward it instead.
-  if (topTier && occ >= topTier.patients && secured && st.amount >= topTier.amount) {
-    card.className = 'next-tier-card maxed';
-    header.textContent = '🏆 הגעת לבונוס המקסימלי!';
-    primary.style.display = 'none';
-    cumulativeEl.style.display = 'none';
-    statusEl.style.display = 'none';
-    jump.style.display = 'none';
-    return;
-  }
 
-  // Find the next tier above current occupancy.
-  const next = tiersAsc.find(t => occ < t.patients) || topTier;
-  const current = [...tiersAsc].reverse().find(t => occ >= t.patients) || null;
-  const patientsGap = next ? Math.max(0, next.patients - occ) : 0;
-  const currentAmt = current ? current.amount : 0;
-  const nextAmt = next ? next.amount : 0;
 
-  card.className = 'next-tier-card ' + (current ? 'gold' : 'first-tier');
-  primary.style.display = '';
-  cumulativeEl.style.display = '';
-  statusEl.style.display = '';
-  jump.style.display = '';
 
-  const atTopTier = current && (!next || next.amount <= current.amount);
-  header.textContent = atTopTier ? 'מדרגה עליונה:' : current ? 'לבונוס הבא:' : 'לבונוס הראשון:';
-
-  // Primary (huge): patients needed to reach the next tier.
-  dailyGapEl.textContent = patientsGap > 0 ? fmtInt(patientsGap) : '✓';
-  dailyLabelEl.textContent = patientsGap > 0
-    ? `מטופלים חסרים למדרגה הבאה (${fmtInt(next.patients)} · כעת ${fmtInt(occ)})`
-    : `נדרש מספר המטופלים למדרגה זו הושג (${fmtInt(occ)})`;
-
-  // Secondary: the treatment-days gate (this is what actually unlocks payment).
-  // Target and min-required come from the status object (days-so-far basis) so
-  // this line matches the banner and the KPIs rather than the full-month result.
-  const gateTarget = st.target || ctx.target || 0;
-  const gateMin = Math.ceil(st.minRequired || 0);
-  const gatePassed = gateMin > 0 && (ctx.nights || 0) >= gateMin;
-  const gapToGate = Math.max(0, gateMin - (ctx.nights || 0));
-  cumulativeEl.textContent = gatePassed
-    ? `סף ימי הטיפול הושג: ${fmtInt(ctx.nights)} / ${fmtInt(gateTarget)}`
-    : `סף תשלום: נדרשים ${fmtInt(gateMin)} ימי טיפול · חסרים ${fmtInt(gapToGate)}`;
-
-  // Status pill reflects whether the bonus is actually SECURED now (locked or
-  // finished-and-earned). Mid-month projection must not say "paid".
-  if (secured && st.amount > 0) {
-    statusEl.textContent = '🏆 הבונוס החודשי מובטח החודש!';
-  } else if (st.state === 'projection' && st.view) {
-    // Running month: name the month, the ACTUAL days so far and the NEXT tier.
-    const v = st.view;
-    statusEl.textContent = `⏳ ${v.title} · ${v.actualText} · ${v.badge.text}`;
-  } else if (st.state === 'projection') {
-    statusEl.textContent = `⏳ בתהליך · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`;
-  } else {
-    statusEl.textContent = `⚠️ עדיין לא זכאי · נדרשים ${fmtInt((next && next.patients) || 0)} מטופלים`;
-  }
-
-  // Only show the "jump" line when there's a genuinely HIGHER tier to reach.
-  // At the top tier (next === current amount), a "from X to X" line is
-  // meaningless, so hide it.
-  const hasHigherTier = next && current && next.amount > current.amount;
-  if (hasHigherTier) {
-    jump.style.display = '';
-    jump.textContent = `הבונוס יקפוץ מ-${fmtCurrency(currentAmt)} ל-${fmtCurrency(nextAmt)}`;
-  } else if (next && !current) {
-    // Below the first tier: heading toward the first bonus.
-    jump.style.display = '';
-    jump.textContent = `בונוס ראשון: ${fmtCurrency(nextAmt)}`;
-  } else {
-    jump.style.display = 'none';
-  }
-}
-
-function renderTierTrack(panel, ctx) {
-  const track = panel.querySelector('[data-tier-track]');
-  if (!track) return;
-  const BV = window.BonusView;
-
-  // Patient-count tiers ascending: [{patients, amount}].
-  const tiersAsc = (ctx.cfg.tierTable || []).slice().sort((a, b) => a.patients - b.patients);
-  const p1 = tiersAsc[0]?.patients ?? 0;
-  const p2 = tiersAsc[1]?.patients ?? p1;
-  const p3 = tiersAsc[2]?.patients ?? p2;
-
-  const STOP_POS = { 1: 20, 2: 50, 3: 80 };
-
-  // Map an average daily occupancy → track %.
-  const fillFor = p => {
-    if (p <= 0 || p1 <= 0) return 0;
-    if (p <= p1) return (p / p1) * STOP_POS[1];
-    if (p <= p2) return STOP_POS[1] + ((p - p1) / Math.max(1, p2 - p1)) * (STOP_POS[2] - STOP_POS[1]);
-    if (p <= p3) return STOP_POS[2] + ((p - p2) / Math.max(1, p3 - p2)) * (STOP_POS[3] - STOP_POS[2]);
-    return 100;
-  };
-
-  // A tier is "reached" ONLY when it is secured: locked in this month, or a
-  // finished month that earned it. Mid-month occupancy alone never lights a
-  // tier — it only moves the fill and the "next tier" line.
-  const st = ctx.status || {};
-  const secured = st.state === 'locked' || (st.state === 'finished' && st.amount > 0);
-  const securedTier = secured ? (st.securedTier || 0) : 0;
-  const avg = st.view ? st.view.avgSoFar : (Number(st.avgSoFar) || (Number.isFinite(ctx.occ) ? ctx.occ : 0));
-  const badge = st.view ? st.view.badge : BV.tierBadgeView({ key: ctx.key, achievedTier: securedTier, achievedAmount: st.amount, avgDaily: avg });
-  const nextIdx = badge.achieved ? 0 : (badge.nextTier || 0);
-
-  const stops = track.querySelectorAll('[data-tier-stop]');
-  stops.forEach(stop => {
-    const idx = parseInt(stop.getAttribute('data-tier-stop'), 10);
-    stop.style.left = STOP_POS[idx] + '%';
-    stop.classList.toggle('reached', securedTier >= idx);
-    stop.classList.toggle('active',  securedTier === idx || (securedTier === 0 && nextIdx === idx));
-  });
-
-  panel.querySelector('[data-ts-nights="1"]').textContent = `${fmtInt(p1)} מטופלים/יום`;
-  panel.querySelector('[data-ts-nights="2"]').textContent = `${fmtInt(p2)} מטופלים/יום`;
-  panel.querySelector('[data-ts-nights="3"]').textContent = `${fmtInt(p3)} מטופלים/יום`;
-
-  const ta1 = panel.querySelector('[data-ts-amount="1"]');
-  const ta2 = panel.querySelector('[data-ts-amount="2"]');
-  const ta3 = panel.querySelector('[data-ts-amount="3"]');
-  if (ta1) ta1.textContent = fmtCurrency(tiersAsc[0]?.amount || 0);
-  if (ta2) ta2.textContent = fmtCurrency(tiersAsc[1]?.amount || 0);
-  if (ta3) ta3.textContent = fmtCurrency(tiersAsc[2]?.amount || 0);
-
-  panel.querySelector('[data-tier-fill]').style.width = fillFor(avg) + '%';
-
-  const cur = panel.querySelector('[data-tier-current]');
-  const sv = ctx.settled || null; // bonus-history picker: a finished month → final wording only
-  if (sv) {
-    cur.className = 'tier-current ' + (securedTier > 0 ? 'gold' + (securedTier >= 3 ? ' max' : '') : 'zero');
-    cur.textContent = securedTier > 0
-      ? `מדרגה ${securedTier} הושגה ✓ · ${sv.label} (סופי) · ממוצע ${fmtNum1_(avg)} מטופלים/יום`
-      : `לא הושגה מדרגה · ${sv.label} (סופי) · ממוצע ${fmtNum1_(avg)} מטופלים/יום (סף ${fmtInt(sv.threshold)})`;
-  } else if (securedTier >= 3) {
-    cur.className = 'tier-current gold max';
-    cur.textContent = `מדרגה 3 המקסימלית מובטחת ✓ · ממוצע ${fmtNum1_(avg)} מטופלים/יום`;
-  } else if (securedTier > 0) {
-    cur.className = 'tier-current gold';
-    cur.textContent = `מדרגה ${securedTier} מובטחת ✓ · ${BV.tierBadgeView({ key: ctx.key, avgDaily: avg }).text}`;
-  } else {
-    cur.className = 'tier-current zero';
-    cur.textContent = badge.text;
-  }
-}
-
-function renderQuarterlyTrack(panel, data, cfg, monthlyTarget) {
-  // Quarterly standing is computed LOCALLY from the finished months of the
-  // anchored window (May–Jul 2026, Aug–Oct, ...) — never from backend fields.
-  // In the bonus-history view the window is the SELECTED month's window.
-  const asOf = historyYMOf_(data);
-  const q = quarterlyLocal_(data.key, asOf);
-  const monthsMet      = q.monthsMet;
-  const monthsRequired = q.monthsRequired;
-  const monthsElapsed  = q.monthsFinished;
-  const amount         = q.earned;
-  const quarterlyMax   = window.BonusEligibility.QUARTERLY_AMOUNT;
-  const windowTxt      = q.window.length ? q.window.map(fmtMonthLabel).join(' · ') : '';
-
-  // Bar fills by months met out of 3.
-  const pct = monthsRequired > 0 ? Math.min(100, (monthsMet / monthsRequired) * 100) : 0;
-  const fill = panel.querySelector('[data-quarterly-fill]');
-  if (fill) {
-    fill.style.width = pct + '%';
-    fill.classList.toggle('full', monthsMet >= monthsRequired);
-  }
-
-  // Target label: months met + the theoretical accrued fraction.
-  const tgt = panel.querySelector('[data-quarterly-target]');
-  if (tgt) {
-    const fracText = monthsMet > 0 ? ` · ${fmtCurrency(Math.round(quarterlyMax * monthsMet / monthsRequired))} תאורטי` : '';
-    tgt.textContent = `${monthsMet} מתוך ${monthsRequired} חודשים שעמדו בסף${fracText}`;
-  }
-
-  const note = panel.querySelector('[data-quarterly-note]');
-  if (note) {
-    if (amount > 0) {
-      note.className = 'quarterly-note gold';
-      note.textContent = `זכאי לבונוס יציבות רבעוני · ${fmtCurrency(amount)}${windowTxt ? ' · ' + windowTxt : ''}`;
-    } else {
-      note.className = 'quarterly-note';
-      const wtxt = windowTxt ? ` (${windowTxt})` : '';
-      // Show theoretical progress instead of a bare "missing".
-      const monthsLeft = Math.max(0, monthsRequired - monthsElapsed);
-      note.textContent = monthsMet > 0
-        ? `נצברו ${monthsMet}/${monthsRequired} חודשים עבור בונוס יציבות ${fmtCurrency(quarterlyMax)} · יחושב בסוף הרבעון${wtxt}`
-        : `בונוס יציבות ${fmtCurrency(quarterlyMax)} — נדרשים ${monthsRequired} חודשים רצופים מעל הסף · יחושב בסוף הרבעון${wtxt}`;
-    }
-  }
-
-  // Which months of the window qualified — bonus-history view only; the
-  // running month keeps its existing block untouched.
-  const monthsEl = panel.querySelector('[data-quarterly-months]');
-  if (monthsEl) {
-    if (asOf) { monthsEl.hidden = false; monthsEl.textContent = quarterMonthsText_(q, asOf); }
-    else { monthsEl.hidden = true; monthsEl.textContent = ''; }
-  }
-}
-
-/* "מאי 2026 ✓ · יוני 2026 ✗ · יולי 2026 (לאחר החודש שנבחר)" — one mark per
- * window month, from the settled amounts the as-of standing was built on. */
-function quarterMonthsText_(q, asOf) {
-  const min = window.BonusEligibility.QUARTERLY_MIN_MONTHLY;
-  return (q.window || []).map(m => {
-    const amt = (q.byMonth || {})[m];
-    if (Number.isFinite(amt)) return `${fmtMonthLabel(m)} ${amt >= min ? '✓' : '✗'}`;
-    return `${fmtMonthLabel(m)} (${m > asOf ? 'לאחר החודש שנבחר' : 'לא זמין'})`;
-  }).join(' · ');
-}
-
-function renderBreakdown(panel, data, ctx) {
+/* The bonuses of the month (BonusView.bonusPlanView) — one coloured block
+ * per bonus: what it pays, the condition in plain words, where the house
+ * stands NOW in real figures, and a status chip. Every string is escaped. */
+function renderBonusPlan_(panel, view) {
   const ul = panel.querySelector('[data-breakdown]');
+  if (!ul || !view) return;
   ul.innerHTML = '';
-
-  // Patient-count tiers from the canonical per-house table. Under Model A the
-  // single matched tier is the payable amount, and it is only paid when the
-  // treatment-days gate (threshold × 30) is met.
-  const mr = ctx.monthlyResult || { amount: 0, tier: 0, eligible: false, gatePassed: false, target: 0, minRequired: 0, tierPatients: 0 };
-  const st = ctx.status || { state: 'finished', amount: 0, projectedTier: 0, projectedAmount: 0, daysSoFar: 0, target: 0, minRequired: 0, gapDays: 0 };
-  const nights = ctx.nights;
-  const tierTable = (ctx.cfg && Array.isArray(ctx.cfg.tierTable)) ? ctx.cfg.tierTable : [];
-  // Render lowest tier first for readability.
-  const tiersAsc = tierTable.slice().sort((a, b) => a.patients - b.patients);
-  const occNow = Number.isFinite(data.patientsNow) ? data.patientsNow : 0;
-  const secured = (st.state === 'finished' && st.amount > 0) || st.state === 'locked';
-  const sv = ctx.settled || null; // bonus-history picker: a finished month
-
-  const tierItems = tiersAsc.map((row, i) => {
-    const tierNum = i + 1;
-    const matchedAmount = secured ? st.amount : st.projectedAmount;
-    const isMatched = matchedAmount > 0 && row.amount === matchedAmount;
-    const securedHere = isMatched && secured;
-    let formula;
-    if (!isMatched) {
-      formula = `נדרש ממוצע ${fmtInt(row.patients)} מטופלים/יום`;
-    } else if (securedHere) {
-      formula = sv
-        ? `${fmtCurrency(row.amount)} ✓ הושג · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`
-        : `${fmtCurrency(row.amount)} ✓ מובטח · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`;
-    } else {
-      // current month, projected toward this tier but not yet locked
-      formula = st.view
-        ? `${st.view.label} בתהליך · ${st.view.actualLabel}: ${st.view.actualText} · ${st.view.projectionLabel}: ${st.view.projectionText}`
-        : `בתהליך · ${fmtInt(st.daysSoFar)}/${fmtInt(st.target)} ימי טיפול`;
-    }
-    return {
-      label: `בונוס מדרגה ${tierNum} (${fmtInt(row.patients)} מטופלים)`,
-      formula,
-      amount: securedHere ? row.amount : 0,
-      zero: !securedHere,
-      gold: securedHere
-    };
-  });
-
-  const bkYM = ctx.ym || ymOfHouse_(data);
-  const continuityFormula = (() => {
-    const c = ctx.cont || {};
-    if (sv && ctx.contState === 'loading') return `טוען הפניות — ${sv.label}…`;
-    if (sv && ctx.contState === 'error') return `שגיאה בטעינת הפניות ל${sv.label}: ${escapeHtml_(ctx.contError)}`;
-    if (c.payableCount > 0) {
-      return c.unitRate > 0
-        ? `${fmtInt(c.payableCount)} מטופלים בחבילה יומית × ${fmtCurrency(c.unitRate)}`
-        : `${fmtInt(c.payableCount)} מטופלים בחבילה יומית`;
-    }
-    return sv ? `לא היו הפניות פעילות ב${sv.label}` : 'אין הפניות פעילות החודש';
-  })();
-  // Referral amount is unknown (not 0) while the settled month's payload is
-  // loading or failed.
-  const contUnknown = !!sv && (ctx.contState === 'loading' || ctx.contState === 'error');
-
-  // Quarterly line — LOCAL standing (anchored window), no backend fields.
-  const q = quarterlyLocal_(data.key, historyYMOf_(data));
-  const qWindow = q.window.length ? q.window.map(fmtMonthLabel).join(' · ') : '';
-  const qMet = q.monthsMet;
-  const qReq = q.monthsRequired;
-
-  const items = [
-    ...tierItems,
-    {
-      label: 'בונוס יציבות רבעוני',
-      formula: ctx.quartly > 0
-        ? `${fmtCurrency(ctx.cfg.quarterly)} · כל ${qReq} החודשים עמדו בסף (${qWindow})`
-        : `${qMet}/${qReq} חודשים שעמדו בסף · יחושב בסוף הרבעון (${qWindow})`,
-      amount: ctx.quartly,
-      zero: !ctx.quartly,
-      gold: ctx.quartly > 0
-    },
-    // «בונוס הפניות להמשך טיפול» — rendered only for a month whose rules
-    // have a referral bonus (from Oct 2026) and while the kill switch is off.
-    ...(referralsEnabled_(bkYM) ? [{
-      label: 'בונוס הפניות להמשך טיפול',
-      formula: continuityFormula,
-      amount: ctx.cont.total,
-      amountText: contUnknown ? '—' : undefined,
-      zero: !ctx.cont.total,
-      gold: ctx.cont.total > 0
-    }] : []),
-    // «בונוס פגישות קליטה» — from Oct 2026: 250 ₪ per CONFIRMED meeting
-    // (the patient stayed 30+ days); pending ones are named, not paid.
-    ...(intakeEnabled_(bkYM) ? [(() => {
-      const ib = ctx.intake || intakeBonus_(null, bkYM);
-      const parts = [];
-      parts.push(ib.confirmed > 0
-        ? `${fmtInt(ib.confirmed)} פגישות שנסגרו לקליטה × ${fmtCurrency(ib.unit)}`
-        : 'אין פגישות קליטה מאושרות');
-      if (ib.pending > 0) parts.push(`${fmtInt(ib.pending)} ${ib.pending === 1 ? 'ממתינה' : 'ממתינות'} להשלמת 30 יום`);
-      return {
-        label: 'בונוס פגישות קליטה (מהמטופל ה-7)',
-        formula: parts.join(' · '),
-        amount: ib.total,
-        zero: !ib.total,
-        gold: ib.total > 0
-      };
-    })()] : [])
-  ];
-
-  // The monthly bonus is the SINGLE-best tier reached — dim lower tier rows
-  // when a higher tier wins so the visual matches "highest reached" semantics.
-  const effectiveTier = secured ? (st.securedTier || 0) : 0;
-  items.forEach((item, idx) => {
+  const e = escapeHtml_;
+  const title = panel.querySelector('[data-bonus-plan-title]');
+  if (title) title.textContent = view.title;
+  view.items.forEach(it => {
     const li = document.createElement('li');
-    if (item.zero) li.classList.add('zero');
-    if (item.gold) li.classList.add('gold');
-    if (idx <= 2 && effectiveTier > 0 && effectiveTier !== (idx + 1)) {
-      li.classList.add('dim');
-    }
+    li.className = `bp-item bp-${it.id} st-${it.state}`;
+    li.setAttribute('data-bonus-item', it.id);
     li.innerHTML = `
-      <div class="bk-left">
-        <span class="bk-label">${item.label}</span>
-        <span class="bk-formula">${item.formula}</span>
+      <div class="bp-head">
+        <span class="bp-title">${e(it.title)}</span>
+        <span class="bp-pay">${e(it.amountText)}</span>
       </div>
-      <span class="bk-amount">${item.amountText || fmtCurrency(item.amount)}</span>
-    `;
+      <div class="bp-row"><span class="bp-k">תנאי:</span> <span class="bp-cond">${e(it.condition)}</span></div>
+      <div class="bp-row"><span class="bp-k">מצב:</span> <span class="bp-status">${e(it.status)}</span></div>
+      ${it.extra ? `<div class="bp-extra">${e(it.extra)}</div>` : ''}
+      <div class="bp-foot">
+        <span class="bp-chip">${e(it.chip)}</span>
+        ${!it.amountKnown ? '<span class="bk-amount">—</span>' : it.amount > 0 ? `<span class="bk-amount">${fmtCurrency(it.amount)}</span>` : ''}
+      </div>`;
     ul.appendChild(li);
   });
-
-  panel.querySelector('[data-stat="bonusTotal"]').textContent = fmtCurrency(ctx.totalBonus);
+  const totalLabel = panel.querySelector('[data-bonus-total-label]');
+  if (totalLabel) totalLabel.textContent = view.totalLabel;
+  const total = panel.querySelector('[data-stat="bonusTotal"]');
+  if (total) total.textContent = fmtCurrency(view.total);
+  const note = panel.querySelector('[data-bonus-fallback-note]');
+  if (note) note.textContent = view.totalNote || '';
 }
 
 /* Activity log row: date + name, exactly as the feed supplies them.

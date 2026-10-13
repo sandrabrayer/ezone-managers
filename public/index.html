@@ -132,32 +132,16 @@
 
       <div class="status-banner" data-status-banner></div>
 
-      <!-- Occupancy history: browse any past month's daily occupancy.
-           Display-only — the bonus KPIs / hero above and below never read
-           this selection (see docs/occupancy-history-view.md). -->
-      <div class="card history-card" data-history-card>
-        <div class="history-head">
-          <div class="card-title">היסטוריית תפוסה</div>
-          <label class="month-picker">
-            <span>חודש</span>
-            <select data-history-month aria-label="בחירת חודש לתצוגת תפוסה"></select>
-          </label>
+      <!-- The bonuses of the month, one block each: what it pays, the
+           condition in plain words and the real figures now (13 Oct 2026). -->
+      <div class="card bonus-plan-card" data-bonus-plan>
+        <div class="card-title" data-bonus-plan-title>הבונוסים החודש</div>
+        <ul class="bonus-plan" data-breakdown></ul>
+        <div class="breakdown-total">
+          <span data-bonus-total-label>סה״כ</span>
+          <strong class="gold" data-stat="bonusTotal">—</strong>
         </div>
-        <div class="history-view" data-history-view hidden></div>
-      </div>
-
-      <!-- Monthly occupancy (permanent) — this house only. Filled by JS. -->
-      <div class="card occupancy-card" data-occupancy-card></div>
-
-      <div class="next-tier-card" data-next-tier-card>
-        <div class="next-tier-header" data-next-tier-header>—</div>
-        <div class="next-tier-primary" data-next-tier-primary>
-          <div class="ntn-value" data-next-tier-daily-gap>—</div>
-          <div class="ntn-label" data-next-tier-daily-label>—</div>
-        </div>
-        <div class="next-tier-cumulative" data-next-tier-cumulative>—</div>
-        <div class="next-tier-status" data-next-tier-status>—</div>
-        <div class="next-tier-jump" data-next-tier-jump>—</div>
+        <div class="bonus-fallback-note" data-bonus-fallback-note></div>
       </div>
 
       <div class="kpis">
@@ -175,7 +159,7 @@
         </div>
         <div class="bep-legend">
           <span><span data-stat-label="daysSoFar">ימי טיפול עד כה</span>: <b data-stat="daysSoFar">—</b></span>
-          <span>יעד (זכאות לבונוס): <b data-stat="daysTarget">—</b></span>
+          <span>יעד לבונוס הראשון: <b data-stat="daysTarget">—</b></span>
           <span><span data-stat-label="daysProjection">צפי לסוף החודש</span>: <b data-stat="daysProjection">—</b></span>
         </div>
 
@@ -190,34 +174,6 @@
         </ul>
       </div>
 
-      <div class="card tier-card">
-        <div class="card-title">מדרגות בונוס חודשי</div>
-        <div class="tier-track" data-tier-track>
-          <div class="tier-fill" data-tier-fill></div>
-          <div class="tier-stop" data-tier-stop="1"><span class="ts-label">מדרגה 1</span><span class="ts-amount" data-ts-amount="1">—</span><span class="ts-nights" data-ts-nights="1">—</span></div>
-          <div class="tier-stop" data-tier-stop="2"><span class="ts-label">מדרגה 2</span><span class="ts-amount" data-ts-amount="2">—</span><span class="ts-nights" data-ts-nights="2">—</span></div>
-          <div class="tier-stop" data-tier-stop="3"><span class="ts-label">מדרגה 3</span><span class="ts-amount" data-ts-amount="3">—</span><span class="ts-nights" data-ts-nights="3">—</span></div>
-        </div>
-        <div class="tier-current" data-tier-current>—</div>
-
-        <div class="card-subtitle">בונוס יציבות רבעוני</div>
-        <div class="quarterly-track">
-          <div class="quarterly-fill" data-quarterly-fill></div>
-          <div class="quarterly-target" data-quarterly-target>—</div>
-        </div>
-        <div class="quarterly-note" data-quarterly-note>—</div>
-        <div class="quarterly-months" data-quarterly-months hidden></div>
-      </div>
-
-      <div class="card breakdown-card">
-        <div class="card-title">פירוט חישוב הבונוס</div>
-        <ul class="breakdown" data-breakdown></ul>
-        <div class="breakdown-total">
-          <span>סה״כ</span>
-          <strong class="gold" data-stat="bonusTotal">—</strong>
-        </div>
-      </div>
-
       <div class="logs">
         <div class="card log-card">
           <div class="card-title">כניסות החודש</div>
@@ -228,6 +184,24 @@
           <ul class="log-list" data-log="exits"></ul>
         </div>
       </div>
+
+      <!-- Occupancy history (moved to the END of the page, 13 Oct 2026): browse any past month's daily occupancy.
+           Display-only — the bonus KPIs / hero above and below never read
+           this selection (see docs/occupancy-history-view.md). -->
+      <div class="card history-card" data-history-card>
+        <div class="history-head">
+          <div class="card-title">היסטוריית תפוסה</div>
+          <label class="month-picker">
+            <span>חודש</span>
+            <select data-history-month aria-label="בחירת חודש לתצוגת תפוסה"></select>
+          </label>
+        </div>
+        <div class="history-view" data-history-view hidden></div>
+      </div>
+
+      <!-- Monthly occupancy (permanent) — this house only. Filled by JS. -->
+      <div class="card occupancy-card" data-occupancy-card></div>
+
     </div>
   </template>
 

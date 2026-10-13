@@ -273,6 +273,21 @@ is validated against the offered list before use; error messages are
 HTML-escaped; only sanitised name / manager strings from the month rows
 reach the DOM.
 
+## House page: the bonus plan (13 Oct 2026)
+
+The house tab no longer has the next-tier card, the tier track, the
+quarterly block or the month split. Right under the header, one card
+(`[data-bonus-plan]`, list `[data-breakdown]`) renders
+`BonusView.bonusPlanView`: per bonus a block with `bp-title`, `bp-pay`,
+`תנאי:` (`bp-cond`), `מצב:` (`bp-status`), an optional `bp-extra` (what is
+needed per day for the rest of the month, or why it is out of reach) and a
+chip (`st-earned | st-on-track | st-behind | st-unreachable | st-missed |
+st-pending | st-none | st-loading | st-error`). Higher occupancy steps show
+only when earned or still reachable (`days + remaining × capacity ≥ need`).
+Settled months use the official `monthlyBonusAmount` verdict and the same
+final-state vocabulary (no forbidden settled words). The occupancy history
+and monthly-occupancy cards sit at the END of the tab.
+
 ## Intake-meeting bonus (13 Oct 2026)
 
 From Oct 2026: 250 ₪ per confirmed intake meeting (`intakeMeetings.confirmed`

@@ -322,6 +322,183 @@
     };
   }
 
+  /* ── house page: the bonus plan (13 Oct 2026 redesign) ──────
+   * Every bonus of the month as ONE block: what it pays, the condition in
+   * plain words, and where the house stands NOW in real figures (never a
+   * bare 0). Higher occupancy steps appear only once earned or still
+   * mathematically reachable this month.
+   *
+   * in : { key, ym, settled, capacity,
+   *        daysSoFar, elapsedDays            (running month)
+   *        treatmentDays, avgDaily           (settled month)
+   *        referral: continuityAmount(...) | null, referralState: 'ok'|'loading'|'error', referralError,
+   *        intake: intakeMeetingAmount(...) | null,
+   *        quarterly: earned amount (shown only when > 0) }
+   * out: { title, items:[{ id, title, amountText, condition, status, extra,
+   *                        state, chip, amount, amountKnown }],
+   *        total, totalKnown, totalLabel, totalNote } */
+  var STEP_CHIPS = {
+    earned: 'הושג ✓', 'on-track': 'בקצב הנכון', behind: 'צריך להאיץ',
+    unreachable: 'לא החודש', missed: 'לא הושג', pending: 'ממתין', none: 'אין עדיין',
+    loading: 'טוען', error: 'שגיאה'
+  };
+  function bonusPlanView(o) {
+    var opts = o || {};
+    var key = opts.key;
+    var ym = opts.ym;
+    var settled = !!opts.settled;
+    var label = monthLabel(ym);
+    var dim = daysInMonth(ym);
+    var cap = Number(opts.capacity) > 0 ? Number(opts.capacity) : 0;
+    var tiers = tiersAscFor(key, ym);
+    var first = tiers[0] || null;
+    var gate = first ? first.patients * (BE.GATE_DAYS_FACTOR || 30) : 0;
+
+    var days, elapsed, avg;
+    if (settled) {
+      days = Math.max(0, Number(opts.treatmentDays) || 0);
+      elapsed = dim;
+      avg = Number(opts.avgDaily) || (days / dim);
+    } else {
+      days = Math.max(0, Number(opts.daysSoFar) || 0);
+      elapsed = Math.max(1, Math.min(dim, Number(opts.elapsedDays) || 1));
+      avg = days / elapsed;
+      if (cap) avg = Math.min(cap, avg);
+    }
+    var remaining = settled ? 0 : Math.max(0, dim - elapsed);
+    var maxDays = cap ? days + remaining * cap : Infinity;
+    var projected = settled ? days : Math.round(avg * dim);
+
+    // A finished month's verdict is the OFFICIAL settled result (the same
+    // monthlyBonusAmount the totals and the quarterly check use).
+    var settledAmount = settled
+      ? BE.monthlyBonusAmount({ key: key, ym: ym, avgDaily: avg, treatmentDays: days }).amount
+      : 0;
+
+    var items = [];
+    var prevAmount = 0;
+    tiers.forEach(function (t, i) {
+      var need = Math.max(gate, Math.ceil(t.patients * dim));
+      var incr = t.amount - prevAmount;
+      prevAmount = t.amount;
+      var isFull = cap > 0 && t.patients >= cap;
+      var met = settled ? settledAmount >= t.amount : days >= need;
+      var reachable = maxDays >= need;
+      var state;
+      if (met) state = 'earned';
+      else if (settled) state = 'missed';
+      else if (!reachable) state = 'unreachable';
+      else if (projected >= need) state = 'on-track';
+      else state = 'behind';
+      // Only the FIRST bonus is always shown; a higher step only once earned
+      // or while it can still be reached this month.
+      if (i > 0 && !met && (settled || !reachable)) return;
+
+      var title = i === 0 ? 'בונוס ראשון' : isFull ? 'בונוס תפוסה מלאה' : 'בונוס ביניים';
+      var condition = isFull
+        ? 'בית מלא כל החודש — ' + fmtInt(cap) + ' מטופלים בכל יום (' + fmtInt(need) + ' ימי טיפול ב' + label + ')'
+        : 'ממוצע של לפחות ' + fmtInt(t.patients) + ' מטופלים ליום — כלומר ' + fmtInt(need) + ' ימי טיפול ב' + label;
+      var status, extra = '';
+      if (settled) {
+        status = (met ? 'הושג — ' : 'לא הושג — ') + 'ממוצע ' + fmtNum1(avg) + ' מטופלים ליום (נדרש ' +
+          fmtInt(t.patients) + ') · ' + fmtInt(days) + ' ימי טיפול (נדרש לפחות ' + fmtInt(gate) + ')';
+      } else if (met) {
+        status = 'הושג — ' + fmtInt(days) + ' ימי טיפול מתוך ' + fmtInt(need) + ' כבר עכשיו';
+      } else {
+        status = 'עכשיו: ' + fmtInt(days) + ' ימי טיפול מתוך ' + fmtInt(need) +
+          ' · ממוצע ' + fmtNum1(avg) + ' מטופלים ליום';
+        if (state === 'unreachable') {
+          extra = 'גם בבית מלא עד סוף החודש יהיו לכל היותר ' + fmtInt(maxDays) + ' ימי טיפול';
+        } else if (remaining > 0) {
+          var reqAvg = (need - days) / remaining;
+          extra = 'נשארו ' + fmtInt(remaining) + ' ימים — צריך בממוצע ' + fmtNum1(reqAvg) +
+            ' מטופלים ליום עד סוף החודש';
+        }
+      }
+      items.push({
+        id: i === 0 ? 'first' : isFull ? 'full' : 'mid',
+        title: title,
+        amountText: i === 0 ? fmtCurrency(t.amount) : '+' + fmtCurrency(incr) + ' (סה״כ ' + fmtCurrency(t.amount) + ')',
+        condition: condition,
+        status: status,
+        extra: extra,
+        state: state,
+        chip: STEP_CHIPS[state],
+        amount: met ? incr : 0,
+        amountKnown: true,
+        need: need
+      });
+    });
+
+    // Intake meetings — 250 ₪ per meeting (from Oct 2026).
+    if (BE.intakeEnabled && BE.intakeEnabled(ym)) {
+      var ib = opts.intake || BE.intakeMeetingAmount(null, ym);
+      var iState = ib.total > 0 ? 'earned' : ib.pending > 0 ? 'pending' : 'none';
+      var iParts = [];
+      if (ib.confirmed > 0) iParts.push(fmtInt(ib.confirmed) + ' ' + (ib.confirmed === 1 ? 'פגישה עומדת' : 'פגישות עומדות') + ' בתנאים = ' + fmtCurrency(ib.total));
+      if (ib.pending > 0) iParts.push(fmtInt(ib.pending) + ' ' + (ib.pending === 1 ? 'ממתינה' : 'ממתינות') + ' להשלמת 30 יום');
+      items.push({
+        id: 'intake',
+        title: 'בונוס פגישות קליטה',
+        amountText: fmtCurrency(ib.unit) + ' לכל פגישה',
+        condition: 'קיימת את פגישת הקליטה · המטופל נקלט לאשפוז כשבבית כבר היו 6 מאושפזים (הוא המאושפז ה-7 ומעלה) · ונשאר באשפוז לפחות 30 יום',
+        status: iParts.length ? iParts.join(' · ') : 'עדיין אין פגישות קליטה שעומדות בתנאים ב' + label,
+        extra: '',
+        state: iState,
+        chip: STEP_CHIPS[iState],
+        amount: ib.total,
+        amountKnown: true
+      });
+    }
+
+    // Referral to outpatient day packages — 300 ₪ per patient per month.
+    if (BE.continuityEnabled && BE.continuityEnabled(ym)) {
+      var rState = opts.referralState || 'ok';
+      var rb = opts.referral || BE.continuityAmount(null, false, ym);
+      var known = rState === 'ok';
+      var rStatus;
+      if (rState === 'loading') rStatus = 'טוען נתונים…';
+      else if (rState === 'error') rStatus = 'שגיאה בטעינת הנתונים' + (opts.referralError ? ': ' + opts.referralError : '');
+      else rStatus = rb.payableCount > 0
+        ? fmtInt(rb.payableCount) + ' ' + (rb.payableCount === 1 ? 'מטופל' : 'מטופלים') + ' בטיפול יום = ' + fmtCurrency(rb.total)
+        : 'עדיין אין מטופלים מהבית בטיפול יום ב' + label;
+      var rItemState = !known ? rState : rb.total > 0 ? 'earned' : 'none';
+      items.push({
+        id: 'referral',
+        title: 'בונוס המשך טיפול',
+        amountText: fmtCurrency(rb.unitRate || 300) + ' לכל מטופל בחודש',
+        condition: 'מטופל שהשתחרר מהבית וממשיך אצלנו בטיפול יום — פעמיים בשבוע או יותר',
+        status: rStatus,
+        extra: '',
+        state: rItemState,
+        chip: STEP_CHIPS[rItemState],
+        amount: known ? rb.total : 0,
+        amountKnown: known
+      });
+    }
+
+    // Quarterly — only the old windows (May–Jul 2026) paid it; shown when earned.
+    var q = Number(opts.quarterly) || 0;
+    if (q > 0) {
+      items.push({
+        id: 'quarterly', title: 'בונוס יציבות רבעוני', amountText: fmtCurrency(q),
+        condition: 'בונוס של 2,000 ₪ לפחות בכל אחד משלושת חודשי הרבעון',
+        status: 'הושג', extra: '', state: 'earned', chip: STEP_CHIPS.earned, amount: q, amountKnown: true
+      });
+    }
+
+    var total = items.reduce(function (sum, it) { return sum + (it.amount || 0); }, 0);
+    var totalKnown = items.every(function (it) { return it.amountKnown; });
+    return {
+      title: settled ? 'הבונוסים של ' + label + ' — סופי' : 'הבונוסים החודש — ' + label,
+      items: items,
+      total: total,
+      totalKnown: totalKnown,
+      totalLabel: settled ? 'סה״כ לתשלום — ' + label : 'סה״כ שכבר הושג — ' + label,
+      totalNote: totalKnown ? '' : 'לא כולל בונוס המשך טיפול — הנתונים לא נטענו'
+    };
+  }
+
   /* ── overview hero (winners banner) ─────────────────────── */
   /**
    * rows: [{ name, manager, amount, tier, quarterly, referral, intake }] for
@@ -419,6 +596,8 @@
     currentMonthView: currentMonthView,
     winnersBannerView: winnersBannerView,
     currentMonthLine: currentMonthLine,
-    houseHeroView: houseHeroView
+    houseHeroView: houseHeroView,
+    bonusPlanView: bonusPlanView,
+    STEP_CHIPS: STEP_CHIPS
   };
 }));

@@ -40,7 +40,7 @@
     ]
   },
   "houseTab": {
-    "hero": "<div class=\"big-emoji\">⚠️</div>\n     <div>\n       <div class=\"sb-name\">רמות השבים</div>\n       <div class=\"sb-title\" data-hero-headline>אוגוסט 2026: לא זכאי · המכסה לא הושלמה (441/510)</div>\n       <div class=\"sb-sub\">מנהל/ת: אורן · ממוצע 14.7 מטופלים/יום · 441/510 ימי טיפול</div>\n       <div class=\"sb-current\" data-hero-current>⏳ ספטמבר 2026 — חודש נוכחי (בתהליך) · 102/510 ימי טיפול · צפי לסוף החודש: 383 ימי טיפול · מתחת לסף (17 מטופלים/יום) · מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12.8</div>\n     </div>",
+    "hero": "<div class=\"big-emoji\">⚠️</div>\n     <div>\n       <div class=\"sb-name\">רמות השבים</div>\n       <div class=\"sb-title\" data-hero-headline>אוגוסט 2026: לא זכאי · המכסה לא הושלמה (441/510)</div>\n       <div class=\"sb-sub\">מנהל/ת: אורן · ממוצע 14.7 מטופלים/יום · 441/510 ימי טיפול</div>\n     </div>",
     "kpis": [
       [
         "entries",
@@ -75,15 +75,14 @@
         "0 ₪"
       ]
     ],
-    "bonusNote": "צפי לסוף החודש: 383 ימי טיפול · מתחת לסף (17 מטופלים/יום) · מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12.8",
-    "monthSplit": "<div class=\"ms-row ms-prev ms-headline\">\n         <span class=\"ms-tag\">בונוס אוגוסט 2026 — סופי (לתשלום)</span>\n         <span class=\"ms-amt zero\">0 ₪</span>\n         <span class=\"ms-sub\">לא זכאי · המכסה לא הושלמה (441/510) · ממוצע 14.7 מטופלים/יום</span>\n       </div><div class=\"ms-row ms-cur\">\n         <span class=\"ms-tag\">ספטמבר 2026 — חודש נוכחי (בתהליך)</span>\n         <span class=\"ms-amt zero\">0 ₪</span>\n         <span class=\"ms-sub\">ימי טיפול עד כה: <b>102/510 ימי טיפול</b><br>צפי לסוף החודש: 383 ימי טיפול · מתחת לסף (17 מטופלים/יום)<br>מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12.8</span>\n       </div>",
-    "tierCurrent": "מדרגה הבאה: 1 (17 מטופלים/יום) · ממוצע נוכחי 12.8",
-    "quarterlyNote": "בונוס יציבות 5,000 ₪ — נדרשים 3 חודשים רצופים מעל הסף · יחושב בסוף הרבעון (אוגוסט 2026 · ספטמבר 2026 · אוקטובר 2026)",
+    "bonusNote": "",
+    "planTitle": "הבונוסים החודש — ספטמבר 2026",
+    "plan": [
+      "\n      <div class=\"bp-head\">\n        <span class=\"bp-title\">בונוס ראשון</span>\n        <span class=\"bp-pay\">2,000 ₪</span>\n      </div>\n      <div class=\"bp-row\"><span class=\"bp-k\">תנאי:</span> <span class=\"bp-cond\">ממוצע של לפחות 17 מטופלים ליום — כלומר 510 ימי טיפול בספטמבר 2026</span></div>\n      <div class=\"bp-row\"><span class=\"bp-k\">מצב:</span> <span class=\"bp-status\">עכשיו: 102 ימי טיפול מתוך 510 · ממוצע 12.8 מטופלים ליום</span></div>\n      <div class=\"bp-extra\">נשארו 22 ימים — צריך בממוצע 18.5 מטופלים ליום עד סוף החודש</div>\n      <div class=\"bp-foot\">\n        <span class=\"bp-chip\">צריך להאיץ</span>\n        \n      </div>"
+    ],
+    "tierCurrent": "",
     "breakdown": [
-      "<div class=\"bk-left\"> <span class=\"bk-label\">בונוס מדרגה 1 (17 מטופלים)</span> <span class=\"bk-formula\">נדרש ממוצע 17 מטופלים/יום</span> </div> <span class=\"bk-amount\">0 ₪</span>",
-      "<div class=\"bk-left\"> <span class=\"bk-label\">בונוס מדרגה 2 (19 מטופלים)</span> <span class=\"bk-formula\">נדרש ממוצע 19 מטופלים/יום</span> </div> <span class=\"bk-amount\">0 ₪</span>",
-      "<div class=\"bk-left\"> <span class=\"bk-label\">בונוס מדרגה 3 (20 מטופלים)</span> <span class=\"bk-formula\">נדרש ממוצע 20 מטופלים/יום</span> </div> <span class=\"bk-amount\">0 ₪</span>",
-      "<div class=\"bk-left\"> <span class=\"bk-label\">בונוס יציבות רבעוני</span> <span class=\"bk-formula\">0/3 חודשים שעמדו בסף · יחושב בסוף הרבעון (אוגוסט 2026 · ספטמבר 2026 · אוקטובר 2026)</span> </div> <span class=\"bk-amount\">0 ₪</span>"
+      "<div class=\"bp-head\"> <span class=\"bp-title\">בונוס ראשון</span> <span class=\"bp-pay\">2,000 ₪</span> </div> <div class=\"bp-row\"><span class=\"bp-k\">תנאי:</span> <span class=\"bp-cond\">ממוצע של לפחות 17 מטופלים ליום — כלומר 510 ימי טיפול בספטמבר 2026</span></div> <div class=\"bp-row\"><span class=\"bp-k\">מצב:</span> <span class=\"bp-status\">עכשיו: 102 ימי טיפול מתוך 510 · ממוצע 12.8 מטופלים ליום</span></div> <div class=\"bp-extra\">נשארו 22 ימים — צריך בממוצע 18.5 מטופלים ליום עד סוף החודש</div> <div class=\"bp-foot\"> <span class=\"bp-chip\">צריך להאיץ</span> </div>"
     ],
     "entries": [
       "<span class=\"log-date\">3/9</span> <span class=\"log-name\">ישראל ישראלי</span>"

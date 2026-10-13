@@ -346,6 +346,18 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: simple two-step bonus + house-page redesign (October 13, 2026)
+
+- From Oct 2026: first bonus 2,000 ₪ at the lowered quota (Ramot 14,
+  Ra'anana 10, Efroni 9, Rehab 9, Pardes 7) and full occupancy (capacity
+  20 / 14 / 13 / 13 / 13) at 3,000 ₪ total. No middle tier. No quarterly
+  bonus from the Aug–Oct 2026 window on. "Secured" mid-month = days already
+  counted ≥ max(gate, patients × days-in-month).
+- House tabs: one «הבונוסים החודש» card — each bonus in plain words with the
+  real figures now and a status chip; full occupancy only while reachable;
+  next-tier / tier-track / quarterly / month-split removed; occupancy history
+  moved to the end. Overview unchanged. Tests 234, SW v17.
+
 ## Managers: intake-meeting bonus (October 13, 2026)
 
 - From Oct 2026: 250 ₪ per intake meeting the manager held that closed into
