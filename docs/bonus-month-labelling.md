@@ -273,6 +273,15 @@ is validated against the offered list before use; error messages are
 HTML-escaped; only sanitised name / manager strings from the month rows
 reach the DOM.
 
+## Intake-meeting bonus (13 Oct 2026)
+
+From Oct 2026: 250 ₪ per confirmed intake meeting (`intakeMeetings.confirmed`
+from the Dashboard feed). Breakdown line «בונוס פגישות קליטה (מהמטופל ה-7)»
+— `N פגישות שנסגרו לקליטה × 250 ₪`, plus `M ממתינות להשלמת 30 יום` for
+pending ones (not paid). Settled months use the same wording (no forbidden
+settled words); the amount can grow after month-end while pending meetings
+confirm. Cards: `data-settled-intake` line; the running card's extras line.
+
 ## Month-aware rules (13 Oct 2026)
 
 Thresholds, gates and the referral rule depend on the month being shown.

@@ -311,3 +311,15 @@ test('houseHeroView({ selected:true }) leads with the short settled title and dr
   assert.equal(plain.headline, 'בונוס יולי 2026 — סופי (לתשלום): זכאי · מדרגה 2 · 2,500 ₪');
   assert.ok(plain.secondary.includes('בתהליך'));
 });
+
+test('winnersBannerView: an intake-only manager is a winner; the intake amount is in the total and the text', () => {
+  const v = BV.winnersBannerView('2026-10', [
+    { name: 'א', manager: 'מ', amount: 0, tier: 0, referral: 0, intake: 500, quarterly: 0 },
+    { name: 'ב', manager: 'נ', amount: 2000, tier: 1, referral: 300, intake: 250, quarterly: 0 }
+  ], null);
+  assert.equal(v.winners.length, 2);
+  assert.equal(v.winners[0].total, 500);
+  assert.equal(v.winners[0].text, 'פגישות קליטה 500 ₪');
+  assert.equal(v.winners[1].total, 2550);
+  assert.equal(v.winners[1].text, 'זכאי · מדרגה 1 · 2,000 ₪ · בונוס הפניות 300 ₪ · פגישות קליטה 250 ₪');
+});
