@@ -346,6 +346,18 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: intake-meeting bonus (October 13, 2026)
+
+- From Oct 2026: 250 ₪ per intake meeting the manager held that closed into
+  an admission of 30+ days, the patient being the admitted house's 7th+.
+  Counted in the admission month; pending (< 30 days, still in) shown, paid
+  once confirmed. Not part of the quarterly check. Credited to the meeting
+  manager even across houses.
+- Data: Dashboard `managersOverview` / `managersHouse` field
+  `intakeMeetings { confirmed, pending, items }` (E-Zone-Dashboard PR #219).
+  Amount in the Oct 2026 rule set; kill switch `INTAKE_BONUS_KILL_SWITCH`.
+  Tests 224 → 233, SW v16.
+
 ## Managers: house roster (5 houses, current as of October 13, 2026)
 
 The Managers app (`ezone-managers`) covers FIVE houses. Hardcoded fallbacks

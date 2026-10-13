@@ -101,6 +101,14 @@ from the dashboard's "Outpatients" sheet (any overlap with the month counts as
 a full month). Kill switch: `REFERRAL_BONUS_KILL_SWITCH` in
 `lib/bonus-eligibility.js`.
 
+**Intake-meeting bonus («בונוס פגישות קליטה»), from Oct 2026:** 250 ₪ per
+intake meeting the manager held that closed into an admission of 30+ days,
+the patient being the house's 7th or later. Counted in the month of
+admission; meetings still under 30 days are shown as pending and paid once
+they confirm. Not part of the quarterly check. Facts come from the
+Dashboard feed's `intakeMeetings` (Leads.meetingWith + Patients.fromLead).
+Kill switch: `INTAKE_BONUS_KILL_SWITCH`.
+
 ## Monthly occupancy (סופי) + CSV export
 
 A permanent **«תפוסה חודשית (סופי)»** card — on the overview a table of every

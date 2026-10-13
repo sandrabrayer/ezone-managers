@@ -1333,7 +1333,7 @@ test('running Oct 2026: the referral bonus is 300 ₪ per day-package patient, a
   call(ctx, 'renderHouseDetail', 'efroni', withRefs);
   const ef = panel('efroni');
   const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
-  assert.equal(bk.length, 5, '3 tiers + quarterly + referral');
+  assert.equal(bk.length, 6, '3 tiers + quarterly + referral + intake meetings');
   assert.match(bk[4], /בונוס הפניות להמשך טיפול[\s\S]*2 מטופלים בחבילה יומית × 300 ₪[\s\S]*bk-amount">600 ₪</);
   assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '600 ₪', 'day 1: occupancy not secured yet, referral 600 counts');
   assert.match(ef.querySelector('[data-stat-label="bonus"]').textContent, /אוקטובר 2026 \(בתהליך\)/, 'labelled as in progress, not final');
@@ -1352,13 +1352,18 @@ const OCT_ROWS = {
   rehab:   { avgDaily: 8, treatmentDays: 248, refs: {} },                               // 0, 0
   pardes:  { avgDaily: 7.3, treatmentDays: 226, refs: {} }                              // 2,000, 0
 };
+/* Intake meetings per house — only set by tests that opt in (INTAKE). */
+let INTAKE = {};
 function novFeed({ failHouse = null } = {}) {
   const calls = [];
   let failing = failHouse;
   const row = (key, month) => {
     const r = month === '2026-10' ? OCT_ROWS[key] : { avgDaily: 9, treatmentDays: 270, refs: { day_2x: 5 } };
-    return { key, avgDaily: r.avgDaily, treatmentDays: r.treatmentDays,
+    const row = { key, avgDaily: r.avgDaily, treatmentDays: r.treatmentDays,
       bonus: { continuity: { maintenance: 0, day_2x: 0, day_daily: 0, ...r.refs, total: STRAY }, ...BACKEND_JUNK }, ...BACKEND_JUNK };
+    const im = (INTAKE[month] || {})[key];
+    if (im) row.intakeMeetings = im;
+    return row;
   };
   const fetchImpl = async (url) => {
     const u = new URL(url, 'http://x');
@@ -1416,7 +1421,7 @@ test('1 Nov 2026 — picking October: the settled house tab shows the referral l
   const ef = panel('efroni');
   assert.equal(/data-hero-headline>([^<]*)</.exec(ef.querySelector('[data-status-banner]').innerHTML)[1], 'אוקטובר 2026 — סופי: זכאי · מדרגה 1 · 2,000 ₪');
   const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
-  assert.equal(bk.length, 5);
+  assert.equal(bk.length, 6, '3 tiers + quarterly + referral + intake meetings');
   assert.match(bk[0], /בונוס מדרגה 1 \(9 מטופלים\)/, 'October tier table');
   assert.match(bk[4], /2 מטופלים בחבילה יומית × 300 ₪[\s\S]*bk-amount">600 ₪</);
   assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '2,600 ₪');
@@ -1458,4 +1463,67 @@ test('1 Nov 2026 — picking September still uses the old rules and pays no refe
   const ramot = byId.get('houseGrid').children.find((c) => /רמות השבים/.test(c.innerHTML)).innerHTML;
   assert.match(ramot, /זכאות לבונוס: <b>17<\/b>/);
   assert.match(ramot, /270\/510 ימי טיפול/);
+});
+
+/* ── Intake-meeting bonus (Sandra, 13 Oct 2026) ───────────────────────────
+ * 250 ₪ per intake meeting the manager held that closed into an admission
+ * of 30+ days, the patient being the house's 7th+. Facts from the Dashboard
+ * feed's `intakeMeetings` ({ confirmed, pending, items }); counted in the
+ * month of ADMISSION; from Oct 2026; pending ones are shown, never paid. */
+const withIntake = async (map, fn) => { INTAKE = map; try { return await fn(); } finally { INTAKE = {}; } };
+const IM = (confirmed, pending) => ({ confirmed, pending, items: [{ date: '2026-10-05', name: '<b>x</b>', house: 'ramot', status: 'confirmed' }] });
+
+test('1 Nov 2026 — settled October: confirmed intake meetings add 250 ₪ each to the KPI and the banner; pending ones do not', () => withIntake(
+  { '2026-10': { rehab: IM(2, 1), ramot: IM(1, 0) } },
+  async () => {
+    const { byId } = await bootNov();
+    // 7,200 (tiers + referrals) + rehab 2×250 + ramot 1×250 = 7,950.
+    assert.equal(byId.get('kpiBonus').textContent, '7,950 ₪');
+    const banner = byId.get('winnersBanner').innerHTML;
+    assert.match(banner, /קיסריה ריהאב[\s\S]*?wb-amt">500 ₪<[\s\S]*?wb-detail">פגישות קליטה 500 ₪</, 'Rehab: intake-only winner');
+    assert.match(banner, /רמות השבים[\s\S]*?wb-amt">2,250 ₪</);
+    const rehabCard = byId.get('houseGrid').children.find((c) => /קיסריה ריהאב/.test(c.innerHTML)).innerHTML;
+    assert.match(rehabCard, /data-settled-intake>פגישות קליטה 500 ₪ · 1 ממתינה להשלמת 30 יום</);
+    assert.doesNotMatch(banner + rehabCard, /<b>x<\/b>/, 'no patient name from the items list is rendered');
+  }));
+
+test('1 Nov 2026 — picking October: the house tab shows the intake line and adds the confirmed amount', () => withIntake(
+  { '2026-10': { efroni: IM(3, 2) } },
+  async () => {
+    const { ctx, byId, panel } = await bootNov();
+    await call(ctx, 'selectBonusMonth_', '2026-10');
+    assert.equal(byId.get('kpiBonus').textContent, '7,950 ₪', '7,200 + 3 × 250');
+    const ef = panel('efroni');
+    const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
+    assert.match(bk[5], /בונוס פגישות קליטה \(מהמטופל ה-7\)[\s\S]*3 פגישות שנסגרו לקליטה × 250 ₪ · 2 ממתינות להשלמת 30 יום[\s\S]*bk-amount">750 ₪</);
+    assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '3,350 ₪', '2,000 tier + 600 referral + 750 intake');
+    assert.equal(ef.querySelector('[data-stat="bonusTotal"]').textContent, '3,350 ₪');
+    for (const w of FORBIDDEN_HISTORY) assert.ok(!allTextOf(ef).includes(w), `settled month never says "${w}"`);
+  }));
+
+test('running Oct 2026: the house tab and card show confirmed intake meetings (250 ₪ each) and name the pending ones', async () => {
+  const { ctx, panel } = await bootOct({}, ['efroni']);
+  const detail = vm.runInContext('state.details.efroni', ctx);
+  call(ctx, 'renderHouseDetail', 'efroni', { ...detail, intakeMeetings: { confirmed: 1, pending: 1, items: [] } });
+  const ef = panel('efroni');
+  const bk = ef.querySelector('[data-breakdown]').children.map((li) => li.innerHTML);
+  assert.match(bk[5], /1 פגישות שנסגרו לקליטה × 250 ₪ · 1 ממתינה להשלמת 30 יום[\s\S]*bk-amount">250 ₪</);
+  assert.equal(ef.querySelector('[data-stat="bonus"]').textContent, '250 ₪');
+  const card = call(ctx, 'buildHouseCard', { ...vm.runInContext('state.housesById.efroni', ctx), intakeMeetings: { confirmed: 2, pending: 0 } }).innerHTML;
+  assert.match(card, /פגישות קליטה 500 ₪/);
+});
+
+test('before Oct 2026 there is no intake-meeting bonus, even if the feed carries counts', () => withIntake(
+  { '2026-09': { ramot: IM(4, 0) } },
+  async () => {
+    const { ctx, byId } = await bootNov();
+    await call(ctx, 'selectBonusMonth_', '2026-09');
+    assert.equal(byId.get('kpiBonus').textContent, '0 ₪');
+    assert.doesNotMatch(byId.get('winnersBanner').innerHTML + byId.get('houseGrid').children.map((c) => c.innerHTML).join(''), /פגישות קליטה/);
+  }));
+
+test('the quarterly check ignores intake meetings', () => {
+  const BE = require('../lib/bonus-eligibility');
+  const occ = BE.monthlyBonusAmount({ ym: '2026-10', key: 'rehab', avgDaily: 8, treatmentDays: 248, intakeMeetings: { confirmed: 20 } }).amount;
+  assert.equal(occ, 0, 'intake data on the row never adds to the occupancy amount');
 });

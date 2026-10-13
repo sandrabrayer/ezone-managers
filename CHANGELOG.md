@@ -3,6 +3,38 @@
 
 ## Unreleased
 
+### Added — intake-meeting bonus, 250 ₪ per meeting, from October 2026 (October 13, 2026)
+
+**What** (Sandra's decision, 13 Oct 2026):
+- **250 ₪ per intake meeting** («פגישה לקליטה») the house manager held
+  (`Leads.meetingWith`) that closed into an admission of **30+ days**, when
+  the patient was the admitted house's **7th patient or later**.
+- Counted in the month of **admission**. `confirmed` meetings are paid;
+  `pending` ones (patient still in the house, under 30 days) are shown —
+  «N ממתינות להשלמת 30 יום» — but not paid until they confirm, so a finished
+  month's amount can still grow.
+- Credited to the manager who held the meeting, even when the patient went
+  to another house (attribution is done by the Dashboard feed).
+- Independent of the occupancy bonus; **not** part of the quarterly 5,000 ₪
+  check. None before Oct 2026.
+- Lives in the Oct 2026 rule set (`intakeMeeting: { amount: 250 }` in
+  `RULE_SETS`) — added before any month of that set was settled. New:
+  `intakeMeetingAmount(feed, ym)`, `intakeEnabled(ym)`, `intakeRuleFor(ym)`,
+  kill switch `INTAKE_BONUS_KILL_SWITCH`.
+- UI: a «בונוס פגישות קליטה (מהמטופל ה-7)» breakdown line
+  (`N פגישות שנסגרו לקליטה × 250 ₪ · M ממתינות להשלמת 30 יום`), the card
+  lines, the settled money KPI and the winners banner (an intake-only
+  manager is a winner). Only counts are read — no patient name from the feed
+  is rendered.
+
+**Data**: the Dashboard's `managersOverview` / `managersHouse` field
+`intakeMeetings { confirmed, pending, items }` — E-Zone-Dashboard PR #219
+(`CHANGELOG-intake-meeting-bonus-feed.md` there). Until that is deployed the
+field is absent and the line shows 0 ₪.
+
+**Tests**: 224 → 233. September 2026 still renders byte-identically
+(snapshot unchanged). SW cache v15 → v16.
+
 ### Changed — lower first bonus tier + outpatient day-package bonus, from October 2026 (October 13, 2026)
 
 **What** (Sandra's decision, 13 Oct 2026; effective for **October 2026 and

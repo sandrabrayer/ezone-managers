@@ -324,24 +324,27 @@
 
   /* ── overview hero (winners banner) ─────────────────────── */
   /**
-   * rows: [{ name, manager, amount, tier, quarterly, referral }] for the
-   * settled month. `amount` = the occupancy bonus; `referral` = the
-   * outpatient day-package bonus (0 before Oct 2026). A manager with only a
-   * referral bonus is still a winner.
+   * rows: [{ name, manager, amount, tier, quarterly, referral, intake }] for
+   * the settled month. `amount` = the occupancy bonus; `referral` = the
+   * outpatient day-package bonus; `intake` = the confirmed intake-meeting
+   * bonus (both 0 before Oct 2026). A manager with only a referral or intake
+   * bonus is still a winner.
    * out : { title, winners:[{..., total, text}], noneText, currentLine }
    */
   function winnersBannerView(prevYm, rows, current) {
     var label = monthLabel(prevYm);
-    var winners = (rows || []).filter(function (r) { return (r.amount > 0) || (r.quarterly > 0) || (r.referral > 0); })
+    var winners = (rows || []).filter(function (r) { return (r.amount > 0) || (r.quarterly > 0) || (r.referral > 0) || (r.intake > 0); })
       .map(function (r) {
         var parts = [];
         if (r.amount > 0) parts.push('זכאי · מדרגה ' + r.tier + ' · ' + fmtCurrency(r.amount));
         if (r.referral > 0) parts.push('בונוס הפניות ' + fmtCurrency(r.referral));
+        if (r.intake > 0) parts.push('פגישות קליטה ' + fmtCurrency(r.intake));
         if (r.quarterly > 0) parts.push('כולל בונוס רבעוני ' + fmtCurrency(r.quarterly));
         return {
           name: r.name, manager: r.manager, amount: r.amount, tier: r.tier, quarterly: r.quarterly,
           referral: r.referral || 0,
-          total: (r.amount || 0) + (r.referral || 0) + (r.quarterly || 0),
+          intake: r.intake || 0,
+          total: (r.amount || 0) + (r.referral || 0) + (r.intake || 0) + (r.quarterly || 0),
           text: parts.join(' · ')
         };
       });

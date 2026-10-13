@@ -429,3 +429,33 @@ test('quarterly check ignores referrals: Oct 2026 with occupancy 0 and referrals
   assert.equal(q.monthsMet, 2);
   assert.equal(q.earned, 0);
 });
+
+/* ── Intake-meeting bonus (Sandra, 13 Oct 2026) ─────────────────────────── */
+
+test('intake-meeting bonus: none before Oct 2026; 250 ₪ per CONFIRMED meeting from Oct 2026; pending not paid', () => {
+  const BE = require('../lib/bonus-eligibility');
+  for (const ym of ['2026-05', '2026-09']) {
+    assert.equal(BE.intakeEnabled(ym), false, ym);
+    assert.equal(BE.intakeMeetingAmount({ confirmed: 3, pending: 1 }, ym).total, 0, ym);
+  }
+  const r = BE.intakeMeetingAmount({ confirmed: 3, pending: 2, items: [{}, {}] }, NEW);
+  assert.deepEqual([r.confirmed, r.pending, r.unit, r.total, r.pendingTotal, r.enabled], [3, 2, 250, 750, 500, true]);
+  assert.equal(BE.intakeMeetingAmount({ confirmed: 1 }, '2027-04').total, 250, 'later months keep the rule');
+});
+
+test('intake-meeting bonus: junk counts are sanitised; only counts are read', () => {
+  const BE = require('../lib/bonus-eligibility');
+  const j = BE.intakeMeetingAmount({ confirmed: '-2', pending: 'x', total: 99999, amount: 5000 }, NEW);
+  assert.deepEqual([j.confirmed, j.pending, j.total], [0, 0, 0]);
+  assert.equal(BE.intakeMeetingAmount({ confirmed: 2.9 }, NEW).total, 500);
+  assert.equal(BE.intakeMeetingAmount(null, NEW).total, 0);
+});
+
+test('intake-meeting kill switch forces 0 and disables the line', (t) => {
+  const BE = require('../lib/bonus-eligibility');
+  assert.equal(BE.INTAKE_BONUS_KILL_SWITCH, false);
+  BE.INTAKE_BONUS_KILL_SWITCH = true;
+  t.after(() => { BE.INTAKE_BONUS_KILL_SWITCH = false; });
+  assert.equal(BE.intakeEnabled(NEW), false);
+  assert.equal(BE.intakeMeetingAmount({ confirmed: 4 }, NEW).total, 0);
+});

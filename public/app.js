@@ -207,6 +207,7 @@ function renderWinnersBanner_(houses) {
       amount: p ? p.amount : 0,
       tier: p ? p.tier : 0,
       referral: p ? settledReferralFor_(h.key, prevYM, p.eligible) : 0,
+      intake: p ? settledIntakeFor_(h.key, prevYM).total : 0,
       quarterly: q.earned
     };
   });
@@ -419,6 +420,32 @@ function referralBonus_(counts, eligible, ym) {
 function referralsEnabled_(ym) {
   return window.BonusEligibility.continuityEnabled(ym) === true;
 }
+/* Intake-meeting («פגישות קליטה») bonus for one house in month `ym`, from the
+ * feed's `intakeMeetings` COUNTS (confirmed / pending). Month-aware: none
+ * before Oct 2026; from Oct 2026, 250 ₪ per confirmed meeting. */
+function intakeBonus_(feed, ym) {
+  return window.BonusEligibility.intakeMeetingAmount(feed || {}, ym);
+}
+function intakeEnabled_(ym) {
+  return window.BonusEligibility.intakeEnabled(ym) === true;
+}
+/* Intake-meeting bonus for a house in a FINISHED month, from that month's
+ * overview row. Counted in the month of admission: `pending` admissions may
+ * still confirm, so the amount can grow until they reach 30 days. */
+function settledIntakeFor_(key, ym) {
+  const byKey = monthByKey_(ym);
+  const ph = byKey ? byKey[key] : null;
+  return intakeBonus_(ph ? ph.intakeMeetings : null, ym);
+}
+/* One short line for a card: "פגישות קליטה 500 ₪ · 1 ממתינה להשלמת 30 יום". */
+function intakeLine_(ib) {
+  if (!ib || !ib.enabled || (ib.total <= 0 && ib.pending <= 0)) return '';
+  const parts = [];
+  if (ib.total > 0) parts.push(`פגישות קליטה ${fmtCurrency(ib.total)}`);
+  if (ib.pending > 0) parts.push(`${fmtInt(ib.pending)} ${ib.pending === 1 ? 'ממתינה' : 'ממתינות'} להשלמת 30 יום`);
+  return parts.join(' · ');
+}
+
 /* Settled referral amount for a house in a FINISHED month, from that month's
  * overview row (counts only). 0 when the row is missing or the month has no
  * referral bonus. */
@@ -593,7 +620,7 @@ function renderOverview(data) {
   const prevTotal = houses.reduce((s, h) => {
     const p = prevMonthSettled_(h.key);
     if (!p) return s;
-    return s + p.amount + settledReferralFor_(h.key, prevYM, p.eligible);
+    return s + p.amount + settledReferralFor_(h.key, prevYM, p.eligible) + settledIntakeFor_(h.key, prevYM).total;
   }, 0);
   const daysInMonth = daysInMonthFromLabel(nowYM);
   const dayOfMonth = Math.min(daysInMonth, now_().getDate());
@@ -826,6 +853,7 @@ function buildHouseCard(h) {
   const secured = status.state === 'locked' || (status.state === 'finished' && status.amount > 0);
   const nowYM = h.month || state.overview?.month || currentMonthYM_();
   const cont = referralBonus_(h.bonus && h.bonus.continuity, secured, nowYM);
+  const intake = intakeBonus_(h.intakeMeetings, nowYM);
   const isProjection = status.state === 'projection';
   const nowLabel = BV.monthLabel(nowYM);
 
@@ -843,6 +871,7 @@ function buildHouseCard(h) {
   // ── Block 1: settled previous month (final state only) ──
   const prev = prevMonthSettled_(key);
   const prevReferral = prev ? settledReferralFor_(key, prev.month, prev.eligible) : 0;
+  const prevIntake = prev ? intakeLine_(settledIntakeFor_(key, prev.month)) : '';
   const settledBlock = prev
     ? `<div class="hc-month hc-settled ${prev.amount > 0 ? 'earned' : 'not-earned'}" data-month-block="settled">
          <div class="hc-month-head">
@@ -851,7 +880,8 @@ function buildHouseCard(h) {
          </div>
          <div class="hc-month-line" data-settled-status>${prev.statusText}</div>
          <div class="hc-month-line dim">ממוצע ${fmtNum1_(prev.avgDaily)} מטופלים/יום · ${fmtInt(prev.treatmentDays)}/${fmtInt(prev.gate)} ימי טיפול</div>${prevReferral > 0 ? `
-         <div class="hc-month-line" data-settled-referral>בונוס הפניות ${fmtCurrency(prevReferral)}</div>` : ''}
+         <div class="hc-month-line" data-settled-referral>בונוס הפניות ${fmtCurrency(prevReferral)}</div>` : ''}${prevIntake ? `
+         <div class="hc-month-line" data-settled-intake>${prevIntake}</div>` : ''}
        </div>`
     : `<div class="hc-month hc-settled not-earned" data-month-block="settled">
          <div class="hc-month-head">
@@ -864,6 +894,8 @@ function buildHouseCard(h) {
   // ── Block 2: running month — ACTUAL days-so-far, then a labelled projection ──
   const extras = [];
   if (cont.total > 0) extras.push(`הפניות ${fmtCurrency(cont.total)}`);
+  const intakeText = intakeLine_(intake);
+  if (intakeText) extras.push(intakeText);
   if (quartly > 0) extras.push(`רבעוני ${fmtCurrency(quartly)}`);
   const currentBlock = cur
     ? `<div class="hc-month hc-current ${cur.state}" data-month-block="current">
@@ -1052,9 +1084,11 @@ function renderHouseDetail(key, data) {
   // Referrals: local, counts only, month-aware (from Oct 2026: 300 ₪ per
   // day-package outpatient, independent of the occupancy bonus).
   const cont = referralBonus_(merged.bonus && merged.bonus.continuity, paid, viewingYM);
+  // Intake meetings: confirmed ones only (pending = not yet 30 days).
+  const intake = intakeBonus_(merged.intakeMeetings, viewingYM);
   const quartly = quarterlyEarnedAmount(merged);
   // Only secured monthly (locked/finished) + actually-earned quarterly.
-  const totalBonus = status.amount + (cont.total || 0) + (quartly || 0);
+  const totalBonus = status.amount + (cont.total || 0) + (intake.total || 0) + (quartly || 0);
 
   const bonusEl = panel.querySelector('[data-stat="bonus"]');
   setStatLabel(panel, 'bonus', cur ? `מובטח עד כה — ${viewingLabel} (בתהליך)` : `בונוס ${viewingLabel} — סופי`);
@@ -1123,7 +1157,7 @@ function renderHouseDetail(key, data) {
   renderQuarterlyTrack(panel, merged, cfg, target);
 
   // Bonus breakdown (educational)
-  renderBreakdown(panel, merged, { ym: viewingYM, above, tier: tier.tier, cfg, target, nights, occ, cont, quartly, totalBonus, monthlyResult, status });
+  renderBreakdown(panel, merged, { ym: viewingYM, above, tier: tier.tier, cfg, target, nights, occ, cont, intake, quartly, totalBonus, monthlyResult, status });
 
   // Logs
   renderEntries(panel.querySelector('[data-log="entries"]'), entries);
@@ -1522,7 +1556,7 @@ function renderOverviewSettled_(ym) {
   // Occupancy + that month's referral bonus (0 before Oct 2026).
   const total = houses.reduce((s, h, i) => {
     const v = views[i];
-    return v ? s + v.amount + settledReferralFor_(h.key, ym, v.eligible) : s;
+    return v ? s + v.amount + settledReferralFor_(h.key, ym, v.eligible) + settledIntakeFor_(h.key, ym).total : s;
   }, 0);
   const avgTotal = known.reduce((s, v) => s + v.avgDaily, 0);
   const dim = daysInMonthFromLabel(ym);
@@ -1553,6 +1587,7 @@ function renderWinnersBannerSettled_(ym, houses, views) {
       amount: v ? v.amount : 0,
       tier: v ? v.tier : 0,
       referral: v ? settledReferralFor_(h.key, ym, v.eligible) : 0,
+      intake: v ? settledIntakeFor_(h.key, ym).total : 0,
       quarterly: q.earned
     };
   });
@@ -1653,6 +1688,7 @@ function buildSettledHouseCard_(h) {
     const earned = s.amount > 0;
     const q = quarterlyLocal_(key, h.month);
     const referral = settledReferralFor_(key, h.month, s.eligible);
+    const intakeText = intakeLine_(settledIntakeFor_(key, h.month));
     const avg = s.avgDaily;
     const denominator = cap || Math.max(avg, threshold) || 1;
     const fillPct = Math.min(100, (avg / denominator) * 100);
@@ -1674,7 +1710,8 @@ function buildSettledHouseCard_(h) {
         </div>
         <div class="hc-month-line" data-settled-status>${s.statusText}</div>
         <div class="hc-month-line dim">ממוצע ${fmtNum1_(avg)} מטופלים/יום · ${s.gateText}</div>${referral > 0 ? `
-        <div class="hc-month-line" data-settled-referral>בונוס הפניות ${fmtCurrency(referral)}</div>` : ''}
+        <div class="hc-month-line" data-settled-referral>בונוס הפניות ${fmtCurrency(referral)}</div>` : ''}${intakeText ? `
+        <div class="hc-month-line" data-settled-intake>${intakeText}</div>` : ''}
         ${q.earned > 0 ? `<div class="hc-month-line dim">רבעוני ${fmtCurrency(q.earned)}</div>` : ''}
       </div>
 
@@ -1803,7 +1840,9 @@ function renderHouseDetailSettled_(panel, key, ym) {
     : { maintenance: 0, day_2x: 0, day_daily: 0, payableCount: 0, unitRate: 0, total: 0 };
   const contState = !sh ? 'loading' : sh.ok ? 'ok' : 'error';
   const quartly = quarterlyLocal_(key, ym).earned;
-  const totalBonus = s.amount + quartly + cont.total;
+  // Intake meetings of that month (from its overview row, which did load).
+  const intake = settledIntakeFor_(key, ym);
+  const totalBonus = s.amount + quartly + cont.total + intake.total;
 
   // Hero: the selected month, final state ("יולי 2026 — סופי: …").
   const hero = BV.houseHeroView({ name, manager, settled: s, prevYm: ym, current: null, selected: true });
@@ -1879,7 +1918,7 @@ function renderHouseDetailSettled_(panel, key, ym) {
   const ctx = { key, cfg, target, nights, tier: s.tier, occ: s.avgDaily, monthlyResult, status, settled: s };
   renderTierTrack(panel, ctx);
   renderQuarterlyTrack(panel, merged, cfg, target);
-  renderBreakdown(panel, merged, { ...ctx, ym, above: s.amount > 0, cont, contState, contError: sh && !sh.ok ? sh.error : '', quartly, totalBonus });
+  renderBreakdown(panel, merged, { ...ctx, ym, above: s.amount > 0, cont, intake, contState, contError: sh && !sh.ok ? sh.error : '', quartly, totalBonus });
 
   renderSettledLogs_(panel, sh, label);
 
@@ -2722,7 +2761,24 @@ function renderBreakdown(panel, data, ctx) {
       amountText: contUnknown ? '—' : undefined,
       zero: !ctx.cont.total,
       gold: ctx.cont.total > 0
-    }] : [])
+    }] : []),
+    // «בונוס פגישות קליטה» — from Oct 2026: 250 ₪ per CONFIRMED meeting
+    // (the patient stayed 30+ days); pending ones are named, not paid.
+    ...(intakeEnabled_(bkYM) ? [(() => {
+      const ib = ctx.intake || intakeBonus_(null, bkYM);
+      const parts = [];
+      parts.push(ib.confirmed > 0
+        ? `${fmtInt(ib.confirmed)} פגישות שנסגרו לקליטה × ${fmtCurrency(ib.unit)}`
+        : 'אין פגישות קליטה מאושרות');
+      if (ib.pending > 0) parts.push(`${fmtInt(ib.pending)} ${ib.pending === 1 ? 'ממתינה' : 'ממתינות'} להשלמת 30 יום`);
+      return {
+        label: 'בונוס פגישות קליטה (מהמטופל ה-7)',
+        formula: parts.join(' · '),
+        amount: ib.total,
+        zero: !ib.total,
+        gold: ib.total > 0
+      };
+    })()] : [])
   ];
 
   // The monthly bonus is the SINGLE-best tier reached — dim lower tier rows
