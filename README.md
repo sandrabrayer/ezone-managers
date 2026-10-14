@@ -68,6 +68,13 @@ house; Sandra and Ron see all. Each house has sub-tabs — בונוסים, מט�
 (patients, outpatients, visits and admissions this month), שיחות משפחה,
 שיחות עם עובדים (private), אירועים חריגים — with follow-up reminders.
 
+Stage 2 (14 Oct 2026) adds two more house sub-tabs:
+- **צוות ומשמרות:** on shift today, the next 14 days, and the staff with tap-to-call phones.
+- **מטפלים:** workdays and the weekly visits.
+
+The data comes from the coordinators app through the Dashboard (`team` in `houseData`). Until
+`MANAGERS_DIGEST_SHEET_ID` is set on both Apps Scripts, the tabs say «עוד לא מחוברים».
+
 ## Bonus history
 
 A **"חודש בונוס"** picker on the overview and on every house tab lists the

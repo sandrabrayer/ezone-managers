@@ -1,6 +1,9 @@
 /* Managers work tool (13 Oct 2026) — the house page's work tabs:
  *   מטופלים        patients in the house, outpatients from the house,
  *                  intake visits and admissions this month
+ *   צוות ומשמרות   who is on shift today, the next 14 days, the staff list
+ *                  (stage 2 — from the coordinators app, via the Dashboard)
+ *   מטפלים         therapists, their workdays and weekly visits
  *   שיחות משפחה    family-call log
  *   שיחות עם עובדים private staff-talk log (author + admins only — enforced
  *                  by the backend, not here)
@@ -33,7 +36,7 @@
       title: 'שיחות אישיות עם עובדים', add: 'רישום שיחה',
       note: 'השיחות כאן נראות רק לך, לסנדרה ולרון.',
       fields: [
-        { k: 'employeeName', label: 'עובד/ת', type: 'text', max: 80, required: true },
+        { k: 'employeeName', label: 'עובד/ת', type: 'employee', required: true },
         { k: 'talkDate', label: 'תאריך', type: 'date', required: true },
         { k: 'talkTime', label: 'שעה', type: 'time' },
         { k: 'summary', label: 'עיקרי השיחה', type: 'textarea', max: 1500, required: true }
@@ -105,6 +108,110 @@
     return h;
   }
 
+  /* ── stage 2: team + therapists (coordinators data) ─────── */
+  var WEEKDAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+  var SHIFT_ORDER = ['בוקר', 'ערב', 'לילה'];
+  var TEAM_REASON = {
+    not_configured: 'הנתונים מאפליקציית הרכזים עוד לא מחוברים.',
+    pending: 'הנתונים מאפליקציית הרכזים עוד לא מחוברים.',
+    unreadable: 'לא הצלחנו לקרוא את הנתונים מאפליקציית הרכזים. נסו שוב מאוחר יותר.',
+    contract_mismatch: 'לא הצלחנו לקרוא את הנתונים מאפליקציית הרכזים. נסו שוב מאוחר יותר.'
+  };
+  function weekdayOf(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay() : -1;
+  }
+  function telHref(phone) { var p = String(phone || ''); return /^0\d{8,9}$/.test(p) ? 'tel:' + p : ''; }
+  function stampText(iso) {
+    var t = Date.parse(String(iso || ''));
+    if (!isFinite(t)) return '';
+    var d = new Date(t), z = function (n) { return n < 10 ? '0' + n : '' + n; };
+    return d.getDate() + '/' + (d.getMonth() + 1) + ' ' + z(d.getHours()) + ':' + z(d.getMinutes());
+  }
+  /* null when the team is usable, else the "not available" card. */
+  function teamGate(d) {
+    var t = d && d.team;
+    if (t && t.available) return null;
+    var msg = TEAM_REASON[(t && t.reason) || 'not_configured'] || TEAM_REASON.unreadable;
+    return '<div class="card work-card"><div class="wk-empty">' + esc(msg) + '</div></div>';
+  }
+  function staleNote(t) {
+    if (!t.stale) return '';
+    var s = stampText(t.updatedAt);
+    return '<div class="wk-note wk-stale">⚠️ הנתונים לא התעדכנו לאחרונה' + (s ? ' (עודכנו ב-' + esc(s) + ')' : '') + '.</div>';
+  }
+  function byShift(rows) {
+    var g = {};
+    rows.forEach(function (r) { (g[r.shift] = g[r.shift] || []).push(r); });
+    return SHIFT_ORDER.filter(function (s) { return g[s]; }).map(function (s) { return { shift: s, rows: g[s] }; });
+  }
+  function shiftLines(rows) {
+    return byShift(rows).map(function (g) {
+      return '<li><span class="wk-shift">' + esc(g.shift) + '</span><span class="wk-name">' +
+        g.rows.map(function (r) { return esc(r.guideName); }).join(', ') + '</span>' +
+        (g.rows.some(function (r) { return r.draft; }) ? '<span class="wk-meta">טיוטה</span>' : '') + '</li>';
+    }).join('');
+  }
+  function staffLine(s) {
+    var tel = telHref(s.phone);
+    return '<li><span class="wk-name">' + esc(s.name) + '</span><span class="wk-meta">' + esc(s.role) +
+      (s.onLeave ? ' · בחופשה' : '') + '</span>' +
+      (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') + '</li>';
+  }
+  function teamHtml(d) {
+    var gate = teamGate(d);
+    if (gate) return gate;
+    var t = d.team, today = t.today || [], shifts = t.shifts || [], staff = t.staff || [];
+    var h = staleNote(t);
+    h += '<div class="card work-card wk-today"><div class="card-title">במשמרת היום</div>';
+    h += today.length ? '<ul class="wk-list wk-shifts">' + shiftLines(today) + '</ul>'
+      : '<div class="wk-empty">אין שיבוץ להיום באפליקציית הרכזים</div>';
+    h += '</div>';
+    var days = [], seen = {};
+    shifts.forEach(function (s) { if (s.date !== d.today && !seen[s.date]) { seen[s.date] = []; days.push(s.date); } if (seen[s.date]) seen[s.date].push(s); });
+    h += '<div class="card work-card wk-week"><div class="card-title">משמרות בשבועיים הקרובים</div>';
+    h += days.length ? days.map(function (day) {
+      return '<div class="card-subtitle">יום ' + esc(WEEKDAYS[weekdayOf(day)] || '') + ' ' + esc(fmtDate(day)) + '</div>' +
+        '<ul class="wk-list wk-shifts">' + shiftLines(seen[day]) + '</ul>';
+    }).join('') : '<div class="wk-empty">עוד לא פורסם שיבוץ לימים הבאים</div>';
+    h += '</div>';
+    var guides = staff.filter(function (s) { return s.kind === 'guide'; });
+    var ther = staff.filter(function (s) { return s.kind === 'therapist'; });
+    h += '<div class="card work-card wk-staff"><div class="card-title">עובדי הבית (' + staff.length + ')</div>';
+    if (!staff.length) h += '<div class="wk-empty">אין עובדים רשומים בבית</div>';
+    if (guides.length) h += '<div class="card-subtitle">מדריכים (' + guides.length + ')</div><ul class="wk-list">' + guides.map(staffLine).join('') + '</ul>';
+    if (ther.length) h += '<div class="card-subtitle">מטפלים (' + ther.length + ')</div><ul class="wk-list">' + ther.map(staffLine).join('') + '</ul>';
+    h += '</div>';
+    return h;
+  }
+  function therapistsHtml(d) {
+    var gate = teamGate(d);
+    if (gate) return gate;
+    var t = d.team, ther = (t.staff || []).filter(function (s) { return s.kind === 'therapist'; }), week = t.therapistWeek || [];
+    var h = staleNote(t);
+    h += '<div class="card work-card wk-ther"><div class="card-title">מטפלים בבית (' + ther.length + ')</div>';
+    h += ther.length ? '<ul class="wk-list">' + ther.map(function (s) {
+      var days = (s.workdays || []).filter(function (x) { return WEEKDAYS[x]; }).map(function (x) { return WEEKDAYS[x]; });
+      var tel = telHref(s.phone);
+      return '<li><span class="wk-name">' + esc(s.name) + '</span><span class="wk-meta">' + esc(s.role) +
+        (days.length ? ' · ימי עבודה: ' + esc(days.join(', ')) : '') + (s.onLeave ? ' · בחופשה' : '') + '</span>' +
+        (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') + '</li>';
+    }).join('') + '</ul>' : '<div class="wk-empty">אין מטפלים רשומים בבית</div>';
+    h += '</div>';
+    h += '<div class="card work-card wk-ther-week"><div class="card-title">לוז טיפולים שבועי</div>';
+    if (!week.length) h += '<div class="wk-empty">הרכזים עוד לא שיבצו טיפולים</div>';
+    for (var day = 0; day < 7; day++) {
+      var rows = week.filter(function (r) { return r.dayOfWeek === day; });
+      if (!rows.length) continue;
+      h += '<div class="card-subtitle">יום ' + esc(WEEKDAYS[day]) + '</div><ul class="wk-list">' + rows.map(function (r) {
+        return '<li><span class="wk-shift">' + esc(r.time || 'ללא שעה') + '</span><span class="wk-name">' + esc(r.therapistName) +
+          '</span><span class="wk-meta">עם ' + esc(r.patientName) + '</span></li>';
+      }).join('') + '</ul>';
+    }
+    h += '</div>';
+    return h;
+  }
+
   function formHtml(logKey, d, today) {
     var def = LOGS[logKey];
     var pats = (d && d.patients) || [];
@@ -119,6 +226,10 @@
       else if (f.type === 'patient') {
         input = '<input id="' + id + '" name="' + f.k + '" maxlength="80" list="' + id + '-list" autocomplete="off"' + req + '>' +
           '<datalist id="' + id + '-list">' + pats.map(function (p) { return '<option value="' + esc(p.name) + '">'; }).join('') + '</datalist>';
+      } else if (f.type === 'employee') {
+        var staff = (d && d.team && d.team.available && d.team.staff) || [];
+        input = '<input id="' + id + '" name="' + f.k + '" maxlength="80" list="' + id + '-list" autocomplete="off"' + req + '>' +
+          '<datalist id="' + id + '-list">' + staff.map(function (s) { return '<option value="' + esc(s.name) + '">'; }).join('') + '</datalist>';
       } else input = '<input id="' + id + '" name="' + f.k + '" maxlength="' + f.max + '"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + req + '>';
       return '<div class="wk-field wk-f-' + f.type + '">' + lab + input + '</div>';
     }).join('') +
@@ -181,7 +292,7 @@
     var out = {}, missing = [];
     def.fields.forEach(function (f) {
       var v = String(values[f.k] == null ? '' : values[f.k]).trim();
-      if (f.max) v = v.slice(0, f.max);
+      v = v.slice(0, f.max || 80);
       out[f.k] = v;
       if (f.required && !v) missing.push(f.label);
     });
@@ -190,6 +301,7 @@
   }
 
   var WorkView = { LOGS: LOGS, esc: esc, fmtDate: fmtDate, patientsHtml: patientsHtml, formHtml: formHtml,
+    teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref,
     logListHtml: logListHtml, logPanelHtml: logPanelHtml, followUpsHtml: followUpsHtml, entryFromForm: entryFromForm };
 
   /* ── DOM wiring (browser only) ──────────────────────────── */
@@ -230,6 +342,10 @@
     if (fu) fu.innerHTML = followUpsHtml(d, u);
     var p = host(panel, 'patients');
     if (p) p.innerHTML = patientsHtml(d);
+    var tm = host(panel, 'team');
+    if (tm) tm.innerHTML = teamHtml(d);
+    var th = host(panel, 'therapists');
+    if (th) th.innerHTML = therapistsHtml(d);
     Object.keys(LOGS).forEach(function (k) {
       var h = host(panel, k);
       if (!h) return;
@@ -245,7 +361,7 @@
   }
 
   async function refresh(panel, key, force) {
-    var subs = ['patients'].concat(Object.keys(LOGS));
+    var subs = ['patients', 'team', 'therapists'].concat(Object.keys(LOGS));
     try {
       var d = await load(key, force);
       renderAll(panel, key, d);

@@ -357,8 +357,12 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   (private to author + admins) · אירועים חריגים, with follow-up reminders.
   Data via `/api/work` → Dashboard `managersWork` (same secret, set as a
   Script Property there).
-- Next: stage 2 (therapists + coordinators schedule, employee list, who's on
-  shift today), stage 3 (manpower cost from staffing).
+- Stage 2 (Oct 14, 2026) adds two house tabs:
+  - «צוות ומשמרות»: on shift today, the next 14 days, and the staff with phones;
+  - «מטפלים»: workdays and the weekly visits.
+- Stage 2 data path: coordinators ManagersHouse digest → Dashboard `managersWork` `team` →
+  `/api/work`. It needs the Script Property `MANAGERS_DIGEST_SHEET_ID` on both Apps Scripts.
+- Next: stage 3 (manpower cost from staffing).
 
 ## Managers: continued-treatment bonus is one-time (October 13, 2026)
 
