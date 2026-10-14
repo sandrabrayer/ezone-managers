@@ -3,6 +3,26 @@
 
 ## Unreleased
 
+### Added — work tool, stage 3: the house manpower cost (October 14, 2026)
+
+**What** (Sandra, 14 Oct: «בכל בית תהיה עלות של הבית עצמו, כל מנהל לעצמו יכול לראות»): a
+«עלות כוח אדם» card on each house's dashboard. It shows:
+- the month's estimated cost;
+- a budget bar with the % used and what is left, or an over-budget warning;
+- the split: guides, from the payroll report, estimate, and missing data when there is any;
+- an honest note when no payroll report has arrived yet.
+
+**How:** `/api/work` op `houseCost`, with the house decided by the server and a manager getting
+only their own. It goes to Dashboard `managersWork` `houseCost` (E-Zone-Dashboard #227), which
+reads the staffing feed `getHouseCostsForManagers` (ezone-staffing #96). The data is house
+totals only and never a worker or salary. The card loads separately, so the dashboard never
+waits on staffing. When the cost can't be read it shows a message, never 0 ₪. SW v23 → v24.
+
+**Also:** `/api/work` now requires a `log` only for `logAdd` / `logUpdate`.
+
+**Tests:** 259 → 263 (cost card: normal, over budget, no budget, unavailable; the server
+scopes `houseCost` to the manager's own house; the family-calls log is refused).
+
 ### Added — expected admissions + «מה אם?» bonus calculator on the dashboard (October 14, 2026)
 
 **What** (Sandra, 14 Oct: expected admissions this week, and a bonus calculator that plays all

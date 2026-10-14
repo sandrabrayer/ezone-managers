@@ -373,7 +373,13 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
 - The dashboard also has a «מה אם?» bonus calculator (all bonuses together) and expected
   admissions (Dashboard `houseData.expectedAdmissions`, open leads, next 14 days).
 - Each tab and bonus box has its own colour.
-- Next: stage 3 (manpower cost from staffing).
+- Stage 3 (Oct 14, 2026): a «עלות כוח אדם» card for each house, visible to that house's
+  manager and to the admins.
+- Data path: `/api/work` `houseCost` → Dashboard `managersWork` `houseCost` → staffing
+  `getHouseCostsForManagers`, house totals only.
+- Script Properties:
+  - staffing `MANAGERS_COST_READ_SECRET`;
+  - Dashboard `STAFFING_SHEETS_URL` and `STAFFING_COST_SECRET`.
 
 ## Managers: continued-treatment bonus is one-time (October 13, 2026)
 

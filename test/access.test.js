@@ -175,6 +175,17 @@ test('personal-code access', async (t) => {
     assert.deepEqual(JSON.parse(calls.at(-1).body.patch), { followUpDone: true, deleted: false }, 'only the two known flags pass');
   });
 
+  await t.test('house cost: a manager only ever gets their OWN house cost; the family-calls log is refused', async () => {
+    mockUpstream(() => '{"ok":true,"cost":{"available":false,"reason":"not_configured"}}');
+    const cookie = await auth.login(server, auth.ORAN_CODE);
+    const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseCost', house: 'raanana', month: '2026-10' } });
+    assert.equal(r.status, 200);
+    assert.deepEqual([calls[0].body.op, calls[0].body.house, calls[0].body.role, calls[0].body.month], ['houseCost', 'ramot', 'manager', '2026-10']);
+    assert.equal(calls[0].body.log, undefined, 'no log field on a read op');
+    const fc = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'logAdd', log: 'familyCalls', entry: {} } });
+    assert.equal(fc.status, 400);
+  });
+
   await t.test('the backend refusing the secret shows as 503, not as data', async () => {
     mockUpstream(() => '{"ok":false,"error":"unauthorized"}');
     const cookie = await auth.login(server, auth.ORAN_CODE);

@@ -214,3 +214,37 @@ test('dashboard: an older server without expectedAdmissions shows a dash, not a 
   assert.match(h, /<b>—<\/b><span>קליטות צפויות השבוע/);
   assert.match(h, /הנתון יופיע אחרי עדכון השרת/);
 });
+
+/* ---- Stage 3: manpower cost card (14 Oct 2026) ---- */
+const COST = { ok: true, month: '2026-10', cost: { available: true, month: '2026-10', hasActuals: true, stale: false,
+  total: 182346, confirmed: 150000, estimated: 32346, missingData: 0, instructors: 98000, budget: 186400 } };
+
+test('cost card: total, budget bar with % and what is left, the split, an honest note', () => {
+  const h = W.costHtml(COST);
+  assert.match(h, /עלות כוח אדם — אוקטובר 2026/);
+  assert.match(h, /<b>182,346 ₪<\/b><span>עלות משוערת לחודש/);
+  assert.match(h, /class="cost-bar"><div class="cost-fill" style="width:98%">/);
+  assert.match(h, /תקציב 186,400 ₪ · 98% מהתקציב · נשארו 4,054 ₪/);
+  assert.match(h, /<b>98,000 ₪<\/b><span>מדריכים[\s\S]*<b>150,000 ₪<\/b><span>לפי דוח שכר[\s\S]*<b>32,346 ₪<\/b><span>הערכה/);
+  assert.ok(!h.includes('חסרים נתונים'), 'the missing-data tile only when there is some');
+  assert.match(h, /חלק מהעלות כבר לפי דוח השכר/);
+});
+
+test('cost card: over budget is flagged; no budget → no bar; no payroll yet → all-estimate note', () => {
+  const over = W.costHtml({ month: '2026-10', cost: Object.assign({}, COST.cost, { total: 200000 }) });
+  assert.match(over, /class="cost-bar over"[\s\S]*width:100%[\s\S]*חריגה של 13,600 ₪/);
+  const nob = W.costHtml({ month: '2026-10', cost: Object.assign({}, COST.cost, { budget: null, hasActuals: false, missingData: 5000 }) });
+  assert.ok(!nob.includes('cost-bar'));
+  assert.match(nob, /עדיין אין דוח שכר לחודש הזה/);
+  assert.match(nob, /<b>5,000 ₪<\/b><span>חסרים נתונים/);
+});
+
+test('cost card: not available → a message, never 0 ₪', () => {
+  for (const reason of ['not_configured', 'unauthorized', 'unreachable', 'no_house', 'error']) {
+    const h = W.costHtml({ month: '2026-10', cost: { available: false, reason } });
+    assert.ok(!h.includes('₪'), reason);
+    assert.match(h, /wk-empty/);
+  }
+  assert.match(W.costHtml({ cost: { available: false, reason: 'not_configured' } }), /עוד לא מחובר/);
+  assert.match(W.costHtml(null), /לא הצלחנו לקרוא/);
+});
