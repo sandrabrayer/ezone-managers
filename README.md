@@ -1,8 +1,8 @@
 # ezone-managers
 
-Read-only, mobile-first PWA dashboard for house managers in the **איזון (E-Zone)** psychiatric residential network.
+Mobile-first PWA work tool for house managers in the **איזון (E-Zone)** psychiatric residential network.
 
-It reads data via the existing E-Zone Apps Script endpoints — it never writes anything.
+It reads house data and saves manager notes through the shared E-Zone Apps Script backend. Each person has a personal code and a stable identity; house and private-note permissions are enforced on both servers.
 
 ## Endpoints consumed
 
@@ -18,8 +18,9 @@ It reads data via the existing E-Zone Apps Script endpoints — it never writes 
   house, for the permanent «תפוסה חודשית (סופי)» table (see below)
 
 All of them are proxied through `server.js` to the E-Zone Apps Script `/exec`
-endpoint. **These three actions are the only ones the app may call** — every
-other dashboard action needs a key the Managers app does not have.
+endpoint with authenticated JSON POST requests. The work tabs additionally use
+`POST /api/work` → `managersWork` for house data, adding notes and updating follow-ups.
+The server supplies the secret, role, house and stable actor ID from the session.
 
 The endpoint URL is configured via the `APPS_SCRIPT_URL` env var. It is **required** — there is no hardcoded fallback, and the server refuses to start if it is not set.
 
@@ -29,7 +30,8 @@ The app is **no longer open**. Every person logs in with their own code
 (Railway variable `MANAGER_ACCESS`); a house manager sees only their own
 house, Sandra and Ron see all houses, and staff talks are private to their
 author and the admins. Everything is enforced in `server.js` — see
-`docs/access.md` for the model and the set-up steps. (From 12 Sep to 13 Oct
+`docs/access.md` for the model and configuration. **Protocol 2 requires a staged rollout:**
+see [the deployment order](docs/managers-hardening-rollout.md) before merging either repository. (From 12 Sep to 13 Oct
 2026 the app was open by decision; that model is retired.)
 
 What is still enforced:

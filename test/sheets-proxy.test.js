@@ -30,9 +30,11 @@ test('sheets proxy (mocked upstream)', async (t) => {
   COOKIE = await auth.login(server, auth.ADMIN_CODE);
 
   let lastFetchUrl = null;
+  let lastBody, lastMethod;
 
   function mockUpstream(body, { status = 200, contentType = 'application/json' } = {}) {
-    global.fetch = async (url) => {
+    global.fetch = async (url, opts) => {
+      lastBody = JSON.parse(opts.body); lastMethod = opts.method;
       lastFetchUrl = String(url);
       return {
         status,
@@ -48,14 +50,18 @@ test('sheets proxy (mocked upstream)', async (t) => {
     assert.equal(r.status, 200);
     assert.equal(r.text, '{"houses":[]}');
     assert.equal(r.headers['cache-control'], 'no-store');
-    assert.equal(lastFetchUrl, 'https://apps-script.test/exec?action=managersOverview');
+    assert.equal(lastFetchUrl, 'https://apps-script.test/exec');
   });
 
   await t.test('forwards ONLY allowlisted query keys (action, house, month)', async () => {
     mockUpstream('{}');
     await request(server,
       '/api/sheets?action=managersOverview&house=ramot&month=2026-07&evil=1&redirect=x');
-    const qs = new URL(lastFetchUrl).searchParams;
+    assert.equal(lastMethod, 'POST');
+    assert.equal(new URL(lastFetchUrl).search, '');
+    assert.equal(lastBody.actorId, 'person-sandra');
+    assert.equal(lastBody.secret, process.env.MANAGERS_WORK_SECRET);
+    const qs = new URLSearchParams(lastBody);
     assert.equal(qs.get('action'), 'managersOverview');
     assert.equal(qs.get('house'), 'ramot');
     assert.equal(qs.get('month'), '2026-07');
@@ -68,7 +74,7 @@ test('sheets proxy (mocked upstream)', async (t) => {
     const r = await request(server, '/api/sheets?action=occupancySnapshots');
     assert.equal(r.status, 200);
     assert.equal(r.text, '{"ok":true,"rows":[]}');
-    assert.equal(lastFetchUrl, 'https://apps-script.test/exec?action=occupancySnapshots',
+    assert.equal(lastFetchUrl, 'https://apps-script.test/exec',
       'the permanent occupancy view uses the SAME proxy path as managersOverview');
   });
 

@@ -3,6 +3,19 @@
 
 ## Unreleased
 
+### Security — coordinated Managers protocol 2 (October 14, 2026; pending deployment)
+
+- Authenticate all upstream reads with a JSON-body secret and session-derived
+  identity/scope; compatible Dashboard changes are required.
+- Require immutable unique IDs in `MANAGER_ACCESS` and sessions; use backend
+  `canEdit` instead of matching display names. SW cache v19 → v20.
+- Gate Railway activation on an authenticated protocol/capability probe through
+  `/healthz`; fail closed on a secret mismatch, old backend or timeout.
+- Document legacy-note handling and the staged deployment/configuration order
+  in `docs/managers-hardening-rollout.md`. No live account values are assumed.
+- Add same-name, code-reuse, readiness and cross-repository integration checks.
+
+
 ### Added — work tool, stage 1: personal-code login + house work tabs (October 13, 2026)
 
 **What** (Sandra, 13 Oct 2026 — "not only bonuses: a work tool, like the

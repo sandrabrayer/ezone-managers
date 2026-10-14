@@ -14,13 +14,15 @@ their own code.
 ## How it works
 
 - **Codes** live in the Railway variable `MANAGER_ACCESS` (JSON):
-  `[{"code":"…","name":"אורן","house":"ramot"}, {"code":"…","name":"סנדרה","role":"admin"}, …]`.
-  6–12 digits, unique. Validated at start-up; anything odd stops the process
+  `[{"id":"person-oran","code":"…","name":"אורן","house":"ramot"}, {"id":"person-sandra","code":"…","name":"סנדרה","role":"admin"}, …]`.
+  Codes: 6–12 digits, unique. Every person also needs a unique immutable `id`
+  (3–64 ASCII letters/digits, `_` or `-`, starting with a letter/digit).
+  Keep the ID when changing a name or code; never reassign it to another person. Validated at start-up; anything odd stops the process
   (Railway keeps the previous deployment serving).
 - **Session**: after a correct code the server sets `mgr_session` — HttpOnly,
   SameSite=Strict, Secure in production, 30 days. It is signed (HMAC-SHA256)
   with a key derived from `MANAGERS_WORK_SECRET`. It never contains the code
-  itself, only a fingerprint; changing or removing someone's code in
+  itself, only a fingerprint and the stable ID; changing or removing someone's code in
   `MANAGER_ACCESS` logs them out everywhere.
 - **Login** is rate-limited: 10 attempts per 15 minutes per IP.
 - **Every data route needs the session** (`/api/me`, `/api/sheets`,
@@ -32,7 +34,7 @@ their own code.
   the manager's own house whatever the browser sends.
 - **Work tool** (`/api/work`, JSON only — a cross-site form cannot send it):
   the server calls the Dashboard Apps Script action `managersWork` by POST,
-  adding `MANAGERS_WORK_SECRET` and the house / role / name it decided. The
+  adding `MANAGERS_WORK_SECRET` and the house / role / name / actor ID it decided. The
   browser never sees the secret or the Apps Script URL.
 - Kept from before: the per-IP rate limit on proxied calls, `X-Robots-Tag:
   noindex, nofollow`, `robots.txt`, CSP `script-src 'self'`, no secret in any
@@ -42,8 +44,40 @@ their own code.
 
 1. Railway → ezone-managers → Variables:
    - `MANAGERS_WORK_SECRET` — a long random value (24+ characters).
-   - `MANAGER_ACCESS` — the JSON above.
+   - `MANAGER_ACCESS` — the JSON above; Sandra and Ron each need a separate
+     `role: "admin"` entry. Each manager needs exactly their authorized house.
+   - `NODE_ENV=production` — enables Secure cookies and HSTS.
+   - `APPS_SCRIPT_URL` — the compatible protocol-2 deployment.
 2. Dashboard Apps Script → Project Settings → Script Properties:
    `MANAGERS_WORK_SECRET` — **the same value**.
 3. To give someone a new code or remove one, edit `MANAGER_ACCESS` in
    Railway; the app redeploys on its own.
+
+## Protocol 2 privacy and readiness (14 Oct 2026)
+
+The three read actions also require the shared secret in a JSON POST body.
+GET, a query-string secret, a missing secret and a wrong secret are refused in
+Apps Script before any sheet read/write, independently of `PROXY_SECRET_MODE`.
+Both servers scope manager data. Cross-house intake bonuses retain their counts,
+but another house's patient details are excluded from the manager's response.
+
+New log rows append `authorId` after all existing columns. Author names are
+for display only. A same-named account cannot read private notes or modify
+someone else's records. The backend returns `canEdit`; the UI follows it.
+**Historical rows without `authorId` remain available to admins:** private staff
+talks are admin-only, and only admins may modify any legacy row. There is no
+automatic name-based reassignment. Any migration needs separately verified
+record-to-person ownership. Existing rows and cells are not rewritten.
+
+`GET /healthz` returns 200 only after an authenticated, data-free
+`managersWork / capabilities` probe confirms protocol 2 and all required
+capabilities. Missing configuration, a different secret, an old backend, an
+upstream error or an 8-second timeout returns 503. Results are cached for ten
+seconds and concurrent probes share a request. Railway checks this endpoint
+with a 120-second activation timeout. A failed candidate must not be promoted.
+This confirms the protocol and secret; it does **not** prove that production
+user-to-house assignments are correct or that Sheets writes have succeeded.
+
+See [the coordinated rollout](managers-hardening-rollout.md). Old sessions
+lack an ID and require a fresh login after activation. Keep all codes and
+secrets in their existing secure configuration; never paste them into a PR.

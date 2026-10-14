@@ -5,9 +5,9 @@ const ORAN_CODE = '10000002';   // ramot manager
 const HANAN_CODE = '10000003';  // efroni manager
 process.env.MANAGERS_WORK_SECRET = 'test-work-secret-0123456789abcdef';
 process.env.MANAGER_ACCESS = JSON.stringify([
-  { code: ADMIN_CODE, name: 'סנדרה', role: 'admin' },
-  { code: ORAN_CODE, name: 'אורן', house: 'ramot' },
-  { code: HANAN_CODE, name: 'חנן', house: 'efroni' }
+  { id: 'person-sandra', code: ADMIN_CODE, name: 'סנדרה', role: 'admin' },
+  { id: 'person-oran', code: ORAN_CODE, name: 'אורן', house: 'ramot' },
+  { id: 'person-hanan', code: HANAN_CODE, name: 'חנן', house: 'efroni' }
 ]);
 const http = require('node:http');
 

@@ -133,7 +133,7 @@
     if (!rows || !rows.length) return '<div class="wk-empty">עדיין אין רישומים</div>';
     return '<ul class="wk-log">' + rows.map(function (r) {
       var w = def.when(r);
-      var canEdit = me && (me.role === 'admin' || me.name === r.author);
+      var canEdit = r.canEdit === true;
       var fu = '';
       if (r.followUpDate) {
         fu = r.followUpDone
@@ -169,7 +169,7 @@
     return '<div class="wk-followups"><div class="wk-fu-title">🔔 ' + esc(plural(due.length, 'תזכורת אחת למעקב', 'תזכורות למעקב')) + '</div><ul>' +
       due.map(function (f) {
         var r = byId[f.log + '|' + f.id] || {};
-        var canEdit = me && (me.role === 'admin' || me.name === r.author);
+        var canEdit = r.canEdit === true;
         return '<li><span>' + esc(LOG_LABEL[f.log] || '') + ' · ' + esc(LOGS[f.log] ? LOGS[f.log].head(r) : '') + ' · ' + esc(fmtDate(f.date)) + '</span>' +
           (canEdit ? '<button type="button" class="wk-link" data-wk-done="' + f.log + '|' + esc(f.id) + '">בוצע</button>' : '') + '</li>';
       }).join('') + '</ul></div>';
