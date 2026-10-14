@@ -1854,3 +1854,16 @@ body.is-locked { overflow: hidden; }
 .calc-tip { margin-top: 8px; font-size: 14px; font-weight: 600; color: #A7F3D0; }
 .calc-tip:empty, .calc-note:empty { display: none; }
 .calc-note { margin-top: 4px; font-size: 12px; color: var(--text-mute); }
+
+/* Manpower cost card (stage 3) */
+.dash-cost { background: linear-gradient(160deg, rgba(139, 92, 246, 0.26), rgba(236, 72, 153, 0.08)), var(--card); border-color: rgba(167, 139, 250, 0.45); }
+.cost-total { text-align: center; margin: 4px 0 10px; }
+.cost-total b { display: block; font-family: 'Frank Ruhl Libre', serif; font-size: 34px; font-weight: 900; color: #fff; }
+.cost-total span { font-size: 13px; color: var(--text-mute); }
+.cost-bar { height: 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.cost-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #10B981, #FBBF24); }
+.cost-bar.over .cost-fill { background: linear-gradient(90deg, #F59E0B, #F43F5E); }
+.cost-budget { font-size: 13px; margin: 6px 0 12px; color: var(--text-mute); text-align: center; }
+.cost-over { color: #FCA5A5; }
+.cost-tiles .dash-tile b { font-size: 17px; }
+.cost-note { margin: 10px 0 0; color: var(--text-mute); }

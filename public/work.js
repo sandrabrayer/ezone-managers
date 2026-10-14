@@ -289,6 +289,51 @@
     return h;
   }
 
+  /* ── stage 3: the house's manpower cost (14 Oct 2026) ─────── */
+  var COST_REASON = {
+    not_configured: 'הנתון מאפליקציית הסטאפינג עוד לא מחובר.',
+    unauthorized: 'הנתון מאפליקציית הסטאפינג עוד לא מחובר.',
+    no_house: 'אין נתוני עלות לבית הזה בסטאפינג.'
+  };
+  var HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+  function monthHe(ym) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
+    return m ? HE_MONTHS[+m[2] - 1] + ' ' + m[1] : '';
+  }
+  function ils(n) {
+    var v = Math.round(Number(n) || 0);
+    return v.toLocaleString('en-US') + ' ₪';
+  }
+  function costHtml(r) {
+    var c = r && r.cost;
+    var title = '<div class="card-title">עלות כוח אדם' + (r && r.month ? ' — ' + esc(monthHe(r.month)) : '') + '</div>';
+    if (!c || !c.available) {
+      var msg = (c && COST_REASON[c.reason]) || 'לא הצלחנו לקרוא את העלות מהסטאפינג. נסו שוב מאוחר יותר.';
+      return title + '<div class="wk-empty">' + esc(msg) + '</div>';
+    }
+    var total = Math.max(0, Number(c.total) || 0);
+    var budget = c.budget === null || c.budget === undefined ? null : Math.max(0, Number(c.budget) || 0);
+    var h = title + '<div class="cost-total"><b>' + esc(ils(total)) + '</b><span>עלות משוערת לחודש</span></div>';
+    if (budget) {
+      var pct = Math.round((total / budget) * 100);
+      var over = total > budget;
+      h += '<div class="cost-bar' + (over ? ' over' : '') + '"><div class="cost-fill" style="width:' + Math.min(100, Math.max(0, pct)) + '%"></div></div>' +
+        '<div class="cost-budget">' + esc('תקציב ' + ils(budget) + ' · ' + pct + '% מהתקציב') +
+        (over ? ' · <b class="cost-over">' + esc('חריגה של ' + ils(total - budget)) + '</b>'
+              : ' · ' + esc('נשארו ' + ils(budget - total))) + '</div>';
+    }
+    h += '<div class="dash-tiles cost-tiles">' +
+      tile('t-blue', ils(c.instructors), 'מדריכים') +
+      tile('t-green', ils(c.confirmed), 'לפי דוח שכר') +
+      tile('t-amber', ils(c.estimated), 'הערכה') +
+      (Number(c.missingData) > 0 ? tile('t-pink', ils(c.missingData), 'חסרים נתונים') : '') + '</div>';
+    h += '<div class="wk-note cost-note">' + esc(c.hasActuals
+      ? 'חלק מהעלות כבר לפי דוח השכר, והשאר הערכה.'
+      : 'עדיין אין דוח שכר לחודש הזה — כל הסכום הוא הערכה.') +
+      (c.stale ? ' ' + esc('(הנתון לא התעדכן לאחרונה)') : '') + '</div>';
+    return h;
+  }
+
   function formHtml(logKey, d, today) {
     var def = LOGS[logKey];
     var pats = (d && d.patients) || [];
@@ -378,7 +423,7 @@
   }
 
   var WorkView = { LOGS: LOGS, esc: esc, fmtDate: fmtDate, patientsHtml: patientsHtml, formHtml: formHtml,
-    teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml,
+    teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml, costHtml: costHtml,
     logListHtml: logListHtml, logPanelHtml: logPanelHtml, followUpsHtml: followUpsHtml, entryFromForm: entryFromForm };
 
   /* ── DOM wiring (browser only) ──────────────────────────── */
@@ -409,6 +454,20 @@
       return d;
     }).finally(function () { delete loading[key]; });
     return loading[key];
+  }
+
+  var costCache = {};
+  function loadCost(panel, key) {
+    var hostEl = panel.querySelector('[data-dash-cost]');
+    if (!hostEl) return;
+    var c = costCache[key];
+    if (c && Date.now() - c.at < 600000) { hostEl.innerHTML = costHtml(c.data); return; }
+    post({ op: 'houseCost', house: key }).then(function (r) {
+      costCache[key] = { at: Date.now(), data: r };
+      hostEl.innerHTML = costHtml(r);
+    }).catch(function () {
+      hostEl.innerHTML = costHtml({ cost: { available: false, reason: 'error' } });
+    });
   }
 
   function host(panel, sub) { return panel.querySelector('[data-sub-panel="' + sub + '"]'); }
@@ -520,6 +579,7 @@
     if (!panel || !panel.querySelector('[data-subtabs]')) return;
     wire(panel, key);
     refresh(panel, key, false);
+    loadCost(panel, key);
   }
 
   root.WorkView = WorkView;

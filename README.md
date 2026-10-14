@@ -73,6 +73,8 @@ Dashboard (14 Oct 2026):
   - a bonus dial (`BonusView.bonusGaugeView`) with a «מה אם?» calculator
     (`BonusView.bonusCalcView`);
   - expected admissions this week and over the next 14 days;
+  - the house manpower cost (stage 3, op `houseCost` → Dashboard → staffing feed, house totals
+    only);
   - today in the house (on shift, therapy sessions, reminders);
   - visits and admissions this week and month;
   - the latest unusual events.
