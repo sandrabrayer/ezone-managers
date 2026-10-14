@@ -1718,3 +1718,5 @@ body.is-locked { overflow: hidden; }
 }
 .wk-staff .wk-list li, .wk-ther .wk-list li { flex-wrap: wrap; }
 .wk-stale { color: #FCD34D; margin: 12px 0 0; }
+/* Username field: a normal text field (the code field keeps its spaced digits). */
+.login-box #loginUser { letter-spacing: normal; font-size: 18px; direction: rtl; unicode-bidi: plaintext; }
