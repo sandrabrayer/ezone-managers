@@ -364,6 +364,13 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `/api/work`. It needs the Script Property `MANAGERS_DIGEST_SHEET_ID` on both Apps Scripts.
 - Login asks for a username (the person's name in `MANAGER_ACCESS`, or an optional Latin `user`)
   plus the code, both of the same person (Oct 14, 2026).
+- Dashboard «ראשי» (Oct 14, 2026), the first house tab:
+  - a bonus dial;
+  - today in the house (on shift, therapy sessions, reminders);
+  - visits and admissions;
+  - the latest events.
+- «שיחות משפחה» was removed on Oct 14, 2026.
+- Each tab and bonus box has its own colour.
 - Next: stage 3 (manpower cost from staffing).
 
 ## Managers: continued-treatment bonus is one-time (October 13, 2026)

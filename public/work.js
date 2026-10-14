@@ -1,10 +1,12 @@
 /* Managers work tool (13 Oct 2026) — the house page's work tabs:
+ *   ראשי           the dashboard (14 Oct 2026): today in the house, this
+ *                  month's visits / admissions, latest events (the bonus
+ *                  dial on the same tab is drawn by app.js)
  *   מטופלים        patients in the house, outpatients from the house,
  *                  intake visits and admissions this month
  *   צוות ומשמרות   who is on shift today, the next 14 days, the staff list
  *                  (stage 2 — from the coordinators app, via the Dashboard)
  *   מטפלים         therapists, their workdays and weekly visits
- *   שיחות משפחה    family-call log
  *   שיחות עם עובדים private staff-talk log (author + admins only — enforced
  *                  by the backend, not here)
  *   אירועים חריגים unusual-events log
@@ -18,20 +20,6 @@
   'use strict';
 
   var LOGS = {
-    familyCalls: {
-      title: 'שיחות עם בני משפחה', add: 'רישום שיחה',
-      fields: [
-        { k: 'patientName', label: 'מטופל/ת', type: 'patient', required: true },
-        { k: 'contactName', label: 'איש/אשת קשר', type: 'text', max: 80, required: true },
-        { k: 'relation', label: 'קרבה', type: 'text', max: 40, placeholder: 'אמא, אח, אפוטרופוס…' },
-        { k: 'callDate', label: 'תאריך', type: 'date', required: true },
-        { k: 'callTime', label: 'שעה', type: 'time' },
-        { k: 'summary', label: 'תיאור קצר', type: 'textarea', max: 1000, required: true }
-      ],
-      head: function (r) { return r.patientName + ' — ' + r.contactName + (r.relation ? ' (' + r.relation + ')' : ''); },
-      body: function (r) { return [r.summary]; },
-      when: function (r) { return [r.callDate, r.callTime]; }
-    },
     staffTalks: {
       title: 'שיחות אישיות עם עובדים', add: 'רישום שיחה',
       note: 'השיחות כאן נראות רק לך, לסנדרה ולרון.',
@@ -59,7 +47,7 @@
       when: function (r) { return [r.eventDate, r.eventTime]; }
     }
   };
-  var LOG_LABEL = { familyCalls: 'שיחת משפחה', staffTalks: 'שיחה עם עובד/ת', events: 'אירוע חריג' };
+  var LOG_LABEL = { staffTalks: 'שיחה עם עובד/ת', events: 'אירוע חריג' };
   var OUTCOME_LABELS = { not_relevant: 'לא רלוונטי', thinking: 'חושבים על זה', entered: 'נכנסים לטיפול', postponed: 'נדחה', cancelled: 'התבטל' };
 
   function esc(s) {
@@ -212,6 +200,82 @@
     return h;
   }
 
+  /* ── dashboard: today in the house + this month (14 Oct 2026) ── */
+  function addDaysIso(iso, n) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!m) return '';
+    var t = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n));
+    return t.toISOString().slice(0, 10);
+  }
+  function tile(cls, value, label) {
+    return '<div class="dash-tile ' + cls + '"><b>' + esc(value) + '</b><span>' + esc(label) + '</span></div>';
+  }
+  function dashboardHtml(d) {
+    d = d || {};
+    var today = d.today || '';
+    var wd = weekdayOf(today);
+    var t = d.team && d.team.available ? d.team : null;
+    var pats = d.patients || [], visits = d.visits || [], adm = d.admissions || [], outs = d.outpatients || [];
+    var due = ((d.followUps) || []).filter(function (f) { return LOGS[f.log]; });
+    var onShift = t ? (t.today || []) : [];
+    var sessions = t ? (t.therapistWeek || []).filter(function (r) { return r.dayOfWeek === wd; }) : [];
+    var weekStart = wd >= 0 ? addDaysIso(today, -wd) : '';
+    var weekEnd = weekStart ? addDaysIso(weekStart, 6) : '';
+    var weekVisits = visits.filter(function (v) { return weekStart && v.date >= weekStart && v.date <= weekEnd; });
+    var upcoming = visits.filter(function (v) { return today && v.date >= today; }).sort(function (a, b) {
+      var ka = a.date + (a.time || ''), kb = b.date + (b.time || ''); return ka < kb ? -1 : ka > kb ? 1 : 0;
+    }).slice(0, 5);
+    var events = ((d.logs && d.logs.events) || []).slice(0, 3);
+
+    var h = '<div class="card dash-card dash-today"><div class="card-title">היום בבית — יום ' + esc(WEEKDAYS[wd] || '') + ' ' + esc(fmtDate(today)) + '</div>';
+    h += '<div class="dash-tiles">' +
+      tile('t-teal', pats.length, 'מטופלים בבית') +
+      tile('t-blue', t ? onShift.length : '—', 'במשמרת היום') +
+      tile('t-violet', t ? sessions.length : '—', 'טיפולים היום') +
+      tile('t-amber', due.length, 'תזכורות פתוחות') + '</div>';
+    if (!t) {
+      h += '<div class="wk-empty">' + esc(TEAM_REASON[(d.team && d.team.reason) || 'not_configured'] || TEAM_REASON.unreadable) + '</div>';
+    } else {
+      h += '<div class="card-subtitle">במשמרת היום</div>' + (onShift.length
+        ? '<ul class="wk-list wk-shifts">' + shiftLines(onShift) + '</ul>'
+        : '<div class="wk-empty">אין שיבוץ להיום</div>');
+      h += '<div class="card-subtitle">טיפולים היום</div>' + (sessions.length
+        ? '<ul class="wk-list wk-shifts">' + sessions.map(function (r) {
+          return '<li><span class="wk-shift">' + esc(r.time || 'ללא שעה') + '</span><span class="wk-name">' + esc(r.therapistName) +
+            '</span><span class="wk-meta">עם ' + esc(r.patientName) + '</span></li>';
+        }).join('') + '</ul>'
+        : '<div class="wk-empty">אין טיפולים משובצים להיום</div>');
+    }
+    h += '</div>';
+
+    h += '<div class="card dash-card dash-month"><div class="card-title">ביקורים וקליטות</div>';
+    h += '<div class="dash-tiles">' +
+      tile('t-pink', weekVisits.length, 'ביקורים השבוע') +
+      tile('t-blue', visits.length, 'ביקורים החודש') +
+      tile('t-green', adm.length, 'נקלטו החודש') +
+      tile('t-violet', outs.length, 'מטופלי חוץ מהבית') + '</div>';
+    h += '<div class="card-subtitle">ביקורים קרובים</div>' + (upcoming.length
+      ? '<ul class="wk-list">' + upcoming.map(function (v) {
+        return '<li><span class="wk-name">' + esc(v.name) + '</span><span class="wk-meta">' + esc(fmtDate(v.date)) +
+          (v.time ? ' ' + esc(v.time) : '') + (v.meetingWith ? ' · עם ' + esc(v.meetingWith) : '') + '</span></li>';
+      }).join('') + '</ul>'
+      : '<div class="wk-empty">אין ביקורים קרובים ברשימה</div>');
+    if (adm.length) {
+      h += '<div class="card-subtitle">נקלטו לאחרונה</div><ul class="wk-list">' + adm.slice(0, 3).map(function (a) {
+        return '<li><span class="wk-name">' + esc(a.name) + '</span><span class="wk-meta">' + esc(fmtDate(a.date)) + '</span></li>';
+      }).join('') + '</ul>';
+    }
+    h += '</div>';
+
+    h += '<div class="card dash-card dash-events"><div class="card-title">אירועים חריגים אחרונים</div>' + (events.length
+      ? '<ul class="wk-list">' + events.map(function (r) {
+        return '<li><span class="wk-name">' + esc(LOGS.events.head(r)) + '</span><span class="wk-meta">' + esc(fmtDate(r.eventDate)) + '</span></li>';
+      }).join('') + '</ul>'
+      : '<div class="wk-empty">אין אירועים חריגים רשומים</div>') +
+      '<button type="button" class="dash-go" data-go-sub="events">לאירועים החריגים ←</button></div>';
+    return h;
+  }
+
   function formHtml(logKey, d, today) {
     var def = LOGS[logKey];
     var pats = (d && d.patients) || [];
@@ -273,7 +337,7 @@
 
   /* Follow-ups due (date ≤ today, not done) — one line each. */
   function followUpsHtml(d, me) {
-    var due = (d && d.followUps) || [];
+    var due = ((d && d.followUps) || []).filter(function (f) { return LOGS[f.log]; });
     if (!due.length) return '';
     var byId = {};
     Object.keys(LOGS).forEach(function (k) { ((d.logs && d.logs[k]) || []).forEach(function (r) { byId[k + '|' + r.id] = r; }); });
@@ -301,7 +365,7 @@
   }
 
   var WorkView = { LOGS: LOGS, esc: esc, fmtDate: fmtDate, patientsHtml: patientsHtml, formHtml: formHtml,
-    teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref,
+    teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml,
     logListHtml: logListHtml, logPanelHtml: logPanelHtml, followUpsHtml: followUpsHtml, entryFromForm: entryFromForm };
 
   /* ── DOM wiring (browser only) ──────────────────────────── */
@@ -342,6 +406,8 @@
     if (fu) fu.innerHTML = followUpsHtml(d, u);
     var p = host(panel, 'patients');
     if (p) p.innerHTML = patientsHtml(d);
+    var dh = panel.querySelector('[data-dash-house]');
+    if (dh) dh.innerHTML = dashboardHtml(d);
     var tm = host(panel, 'team');
     if (tm) tm.innerHTML = teamHtml(d);
     var th = host(panel, 'therapists');
@@ -370,6 +436,8 @@
         ? 'כלי העבודה עוד לא הופעל בשרת. פנו לסנדרה.'
         : 'שגיאה בטעינת הנתונים: ' + (e && e.message ? e.message : '');
       subs.forEach(function (s) { var h = host(panel, s); if (h) h.innerHTML = '<div class="card work-card"><div class="wk-empty error">' + esc(msg) + '</div></div>'; });
+      var dh = panel.querySelector('[data-dash-house]');
+      if (dh) dh.innerHTML = '<div class="card dash-card"><div class="wk-empty error">' + esc(msg) + '</div></div>';
     }
   }
 
@@ -389,6 +457,13 @@
       var t = ev.target;
       var subBtn = t.closest && t.closest('[data-sub]');
       if (subBtn) { showSub(panel, subBtn.getAttribute('data-sub')); return; }
+      var go = t.closest && t.closest('[data-go-sub]');
+      if (go) {
+        showSub(panel, go.getAttribute('data-go-sub'));
+        var nav = panel.querySelector('[data-subtabs]');
+        if (nav && nav.scrollIntoView) nav.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        return;
+      }
       var done = t.closest && t.closest('[data-wk-done]');
       var del = t.closest && t.closest('[data-wk-del]');
       if (!done && !del) return;

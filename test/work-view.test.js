@@ -11,11 +11,11 @@ const DATA = {
   visits: [{ date: '2026-10-11', time: '', name: 'ביקור ב', meetingWith: 'אורן', outcome: 'thinking' }, { date: '2026-10-08', time: '10:30', name: 'ביקור א', meetingWith: 'אורן', outcome: 'entered' }],
   admissions: [{ name: 'יוסי', date: '2026-10-05' }],
   logs: {
-    familyCalls: [{ id: 'f1', patientName: 'דנה', contactName: 'רות', relation: 'אמא', callDate: '2026-10-12', callTime: '18:05', summary: 'עדכון', followUpDate: '2026-10-13', followUpDone: false, author: 'אורן' }],
-    staffTalks: [],
+    familyCalls: [{ id: 'f1', patientName: 'דנה', contactName: 'רות', callDate: '2026-10-12', summary: 'old', followUpDate: '2026-10-13', followUpDone: false, author: 'אורן' }],
+    staffTalks: [{ id: 's1', employeeName: 'נועה', talkDate: '2026-10-12', talkTime: '18:05', summary: 'שיחת משוב', followUpDate: '2026-10-13', followUpDone: false, author: 'אורן' }],
     events: [{ id: 'e1', eventDate: '2026-10-10', eventTime: '', patientName: '', whatHappened: 'הצפה במטבח', actionTaken: 'הוזמן אינסטלטור', followUpDate: '', followUpDone: false, author: 'סנדרה' }]
   },
-  followUps: [{ log: 'familyCalls', id: 'f1', date: '2026-10-13' }]
+  followUps: [{ log: 'staffTalks', id: 's1', date: '2026-10-13' }, { log: 'familyCalls', id: 'f1', date: '2026-10-13' }]
 };
 const ORAN = { name: 'אורן', role: 'manager', house: 'ramot' };
 
@@ -34,28 +34,28 @@ test('patients tab: patients, outpatients, visits and admissions — every value
 });
 
 test('log form: the defined fields, required marks, today as the default date, patients offered as suggestions', () => {
-  const f = W.formHtml('familyCalls', DATA, '2026-10-13');
-  for (const name of ['patientName', 'contactName', 'relation', 'callDate', 'callTime', 'summary', 'followUpDate']) {
+  const f = W.formHtml('events', DATA, '2026-10-13');
+  for (const name of ['eventDate', 'eventTime', 'patientName', 'whatHappened', 'actionTaken', 'followUpDate']) {
     assert.match(f, new RegExp(`name="${name}"`), name);
   }
-  assert.match(f, /name="callDate" type="date" value="2026-10-13" required/);
+  assert.match(f, /name="eventDate" type="date" value="2026-10-13" required/);
   assert.match(f, /<option value="דנה">/);
   assert.match(f, /<option value="&lt;img src=x onerror=alert\(1\)&gt;">/);
-  assert.match(f, /איש\/אשת קשר \*/);
+  assert.match(f, /מה קרה \*/);
   assert.match(W.formHtml('staffTalks', DATA, '2026-10-13'), /name="employeeName"/);
   assert.match(W.formHtml('events', DATA, '2026-10-13'), /name="whatHappened"[\s\S]*name="actionTaken"/);
 });
 
 test('log list: newest data as given; follow-up states; edit buttons only for the author or an admin', () => {
-  const mine = W.logListHtml('familyCalls', DATA.logs.familyCalls, ORAN);
-  assert.match(mine, /דנה — רות \(אמא\)[\s\S]*12\/10\/26 18:05 · אורן/);
-  assert.match(mine, /מעקב: 13\/10\/26[\s\S]*data-wk-done="familyCalls\|f1"/);
-  assert.match(mine, /data-wk-del="familyCalls\|f1"/);
+  const mine = W.logListHtml('staffTalks', DATA.logs.staffTalks, ORAN);
+  assert.match(mine, /נועה[\s\S]*12\/10\/26 18:05 · אורן/);
+  assert.match(mine, /מעקב: 13\/10\/26[\s\S]*data-wk-done="staffTalks\|s1"/);
+  assert.match(mine, /data-wk-del="staffTalks\|s1"/);
   const notMine = W.logListHtml('events', DATA.logs.events, ORAN);
   assert.doesNotMatch(notMine, /data-wk-del|data-wk-done/, 'Oran cannot delete Sandra\'s entry');
   assert.match(notMine, /הצפה במטבח[\s\S]*מה נעשה: הוזמן אינסטלטור/);
   assert.match(W.logListHtml('events', DATA.logs.events, { name: 'סנדרה', role: 'admin' }), /data-wk-del/);
-  assert.match(W.logListHtml('staffTalks', [], ORAN), /עדיין אין רישומים/);
+  assert.match(W.logListHtml('events', [], ORAN), /עדיין אין רישומים/);
 });
 
 test('staff-talks panel says who can read it', () => {
@@ -64,16 +64,17 @@ test('staff-talks panel says who can read it', () => {
 
 test('follow-ups strip: one line per due item, with a done button for the author', () => {
   const h = W.followUpsHtml(DATA, ORAN);
-  assert.match(h, /תזכורת אחת למעקב/);
-  assert.match(h, /שיחת משפחה · דנה — רות \(אמא\) · 13\/10\/26[\s\S]*data-wk-done="familyCalls\|f1"/);
+  assert.match(h, /תזכורת אחת למעקב/, 'the removed family-calls log never shows');
+  assert.match(h, /שיחה עם עובד\/ת · נועה · 13\/10\/26[\s\S]*data-wk-done="staffTalks\|s1"/);
+  assert.doesNotMatch(h, /familyCalls|שיחת משפחה/);
   assert.equal(W.followUpsHtml({ followUps: [] }, ORAN), '');
 });
 
 test('entryFromForm: only defined fields, trimmed and capped; missing required fields named in Hebrew', () => {
-  const r = W.entryFromForm('familyCalls', { patientName: ' דנה ', contactName: '', callDate: '2026-10-12', summary: 'x'.repeat(2000), extra: 'drop me', followUpDate: '' });
-  assert.deepEqual(r.missing, ['איש/אשת קשר']);
+  const r = W.entryFromForm('events', { patientName: ' דנה ', eventDate: '2026-10-12', whatHappened: '', actionTaken: 'x'.repeat(2000), extra: 'drop me', followUpDate: '' });
+  assert.deepEqual(r.missing, ['מה קרה']);
   assert.equal(r.entry.patientName, 'דנה');
-  assert.equal(r.entry.summary.length, 1000);
+  assert.equal(r.entry.actionTaken.length, 1500);
   assert.equal('extra' in r.entry, false);
 });
 
@@ -145,4 +146,46 @@ test('staff-talk form offers the house staff as suggestions (escaped)', () => {
   const h = W.formHtml('staffTalks', d, d.today);
   assert.match(h, /<datalist id="wk-staffTalks-employeeName-list"><option value="אבי">/);
   assert.ok(!h.includes('"><img>'));
+});
+
+/* ---- Dashboard (14 Oct 2026) ---- */
+test('family calls are gone from the app (no log definition)', () => {
+  assert.equal(W.LOGS.familyCalls, undefined);
+  assert.deepEqual(Object.keys(W.LOGS), ['staffTalks', 'events']);
+});
+
+test('dashboard: today in the house — patients, on shift, today\'s therapy sessions, open reminders', () => {
+  const d = Object.assign({}, DATA, { today: '2026-10-13', team: TEAM }); // 13/10/26 is a Tuesday (2)
+  const h = W.dashboardHtml(d);
+  assert.match(h, /היום בבית — יום שלישי 13\/10\/26/);
+  assert.match(h, /<b>2<\/b><span>מטופלים בבית/);
+  assert.match(h, /<b>3<\/b><span>במשמרת היום/);
+  assert.match(h, /<b>1<\/b><span>טיפולים היום[\s\S]*<b>1<\/b><span>תזכורות פתוחות/);
+  assert.match(h, /טיפולים היום<\/div><ul[\s\S]*10:00[\s\S]*ד&quot;ר כהן[\s\S]*עם דנה/);
+  assert.ok(!h.includes('<b>x</b>'), 'escaped');
+});
+
+test('dashboard: visits this week / month, admissions, outpatients, upcoming visits, latest events', () => {
+  const d = Object.assign({}, DATA, {
+    today: '2026-10-13', team: TEAM,
+    visits: [
+      { date: '2026-10-15', time: '11:00', name: 'ביקור קרוב', meetingWith: 'אורן' },
+      { date: '2026-10-11', time: '', name: 'ביקור ראשון בשבוע', meetingWith: 'אורן' },
+      { date: '2026-10-02', time: '', name: 'ביקור ישן', meetingWith: 'אורן' },
+      { date: '2026-10-20', time: '', name: 'שבוע הבא', meetingWith: '' }
+    ]
+  });
+  const h = W.dashboardHtml(d);
+  assert.match(h, /<b>2<\/b><span>ביקורים השבוע/, 'Sun 11/10 – Sat 17/10');
+  assert.match(h, /<b>4<\/b><span>ביקורים החודש[\s\S]*<b>1<\/b><span>נקלטו החודש[\s\S]*<b>1<\/b><span>מטופלי חוץ מהבית/);
+  assert.match(h, /ביקורים קרובים[\s\S]*ביקור קרוב[\s\S]*15\/10\/26 11:00[\s\S]*שבוע הבא/);
+  assert.ok(!/ביקורים קרובים[\s\S]*ביקור ישן/.test(h.split('נקלטו לאחרונה')[0]), 'past visits are not "upcoming"');
+  assert.match(h, /אירועים חריגים אחרונים[\s\S]*הצפה במטבח|אירועים חריגים אחרונים[\s\S]*אירוע/);
+  assert.match(h, /data-go-sub="events"/);
+});
+
+test('dashboard: no coordinators data → honest message and dashes, never fake zeros', () => {
+  const h = W.dashboardHtml(Object.assign({}, DATA, { team: { available: false, reason: 'not_configured' } }));
+  assert.match(h, /<b>—<\/b><span>במשמרת היום[\s\S]*<b>—<\/b><span>טיפולים היום/);
+  assert.match(h, /עוד לא מחוברים/);
 });

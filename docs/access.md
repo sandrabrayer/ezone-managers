@@ -1,7 +1,7 @@
 # Access — a personal code per person (13 Oct 2026)
 
 **Replaces the open-app model of 12 Sep 2026.** The Managers app became a work
-tool holding family-call notes, private staff conversations, unusual events
+tool holding private staff conversations, unusual events
 and (stage 3) manpower costs, so Sandra decided: every person logs in with
 their own code.
 

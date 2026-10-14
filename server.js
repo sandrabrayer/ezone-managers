@@ -257,7 +257,7 @@ app.get('/api/sheets', requireUser, async (req, res) => {
 
 // ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
 const WORK_OPS = new Set(['houseData', 'logAdd', 'logUpdate']);
-const WORK_LOGS = new Set(['familyCalls', 'staffTalks', 'events']);
+const WORK_LOGS = new Set(['staffTalks', 'events']);   // family calls removed from the app (14 Oct 2026)
 const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 app.post('/api/work', requireUser, async (req, res) => {

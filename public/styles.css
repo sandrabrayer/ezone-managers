@@ -1,8 +1,8 @@
 :root {
-  --bg: #2D0A14;
-  --bg-2: #3A0E1B;
-  --card: #421221;
-  --card-2: #4E1729;
+  --bg: #35101E;
+  --bg-2: #2A1536;
+  --card: #4C1A2D;
+  --card-2: #57203A;
   --line: rgba(255, 107, 107, 0.18);
   --line-strong: rgba(244, 114, 182, 0.35);
   --text: #FDE7EE;
@@ -1720,3 +1720,115 @@ body.is-locked { overflow: hidden; }
 .wk-stale { color: #FCD34D; margin: 12px 0 0; }
 /* Username field: a normal text field (the code field keeps its spaced digits). */
 .login-box #loginUser { letter-spacing: normal; font-size: 18px; direction: rtl; unicode-bidi: plaintext; }
+
+
+/* ============================================================
+ * Colour pass + manager dashboard (14 Oct 2026)
+ * Every section has its own colour; bonus boxes are filled, not just
+ * titled, in their colour. Palette: amber, green, blue, violet, teal,
+ * coral, pink.
+ * ============================================================ */
+:root {
+  --c-amber: #F59E0B; --c-green: #10B981; --c-blue: #3B82F6; --c-violet: #8B5CF6;
+  --c-teal: #14B8A6; --c-coral: #F43F5E; --c-pink: #EC4899;
+}
+
+/* Bonus boxes — each one filled in its own colour */
+.bp-item {
+  background: linear-gradient(135deg, var(--fill-1), var(--fill-2));
+  border: 1px solid var(--edge);
+  border-inline-start: 6px solid var(--accent);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
+}
+.bp-first    { --fill-1: rgba(245, 158, 11, 0.34); --fill-2: rgba(245, 158, 11, 0.12); --edge: rgba(252, 211, 77, 0.55); }
+.bp-mid      { --fill-1: rgba(249, 115, 22, 0.34); --fill-2: rgba(249, 115, 22, 0.12); --edge: rgba(251, 146, 60, 0.55); }
+.bp-full     { --fill-1: rgba(16, 185, 129, 0.34); --fill-2: rgba(16, 185, 129, 0.12); --edge: rgba(52, 211, 153, 0.55); }
+.bp-intake   { --fill-1: rgba(59, 130, 246, 0.36); --fill-2: rgba(59, 130, 246, 0.12); --edge: rgba(96, 165, 250, 0.55); }
+.bp-referral { --fill-1: rgba(139, 92, 246, 0.38); --fill-2: rgba(139, 92, 246, 0.12); --edge: rgba(192, 132, 252, 0.55); }
+.bp-quarterly{ --fill-1: rgba(236, 72, 153, 0.34); --fill-2: rgba(236, 72, 153, 0.12); --edge: rgba(244, 114, 182, 0.55); }
+.bp-cond { color: rgba(255, 255, 255, 0.82); }
+.bp-extra { background: rgba(0, 0, 0, 0.22); }
+
+/* Bonus-tab KPI tiles — four colours */
+.kpis .kpi:nth-child(1) { background: linear-gradient(160deg, rgba(20, 184, 166, 0.32), rgba(20, 184, 166, 0.10)), var(--card); border-color: rgba(45, 212, 191, 0.45); }
+.kpis .kpi:nth-child(2) { background: linear-gradient(160deg, rgba(244, 63, 94, 0.30), rgba(244, 63, 94, 0.10)), var(--card); border-color: rgba(251, 113, 133, 0.45); }
+.kpis .kpi:nth-child(3) { background: linear-gradient(160deg, rgba(59, 130, 246, 0.32), rgba(59, 130, 246, 0.10)), var(--card); border-color: rgba(96, 165, 250, 0.45); }
+.kpis .kpi:nth-child(4) { background: linear-gradient(160deg, rgba(245, 158, 11, 0.32), rgba(245, 158, 11, 0.10)), var(--card); border-color: rgba(252, 211, 77, 0.45); }
+
+/* Sub-tabs — each tab its own colour */
+.subtab { --tab: var(--c-pink); border-color: color-mix(in srgb, var(--tab) 55%, transparent); color: color-mix(in srgb, var(--tab) 45%, #fff); background: color-mix(in srgb, var(--tab) 14%, transparent); }
+.subtab.is-active { background: var(--tab); color: #fff; border-color: transparent; box-shadow: 0 6px 18px color-mix(in srgb, var(--tab) 45%, transparent); }
+.subtab[data-sub="home"]       { --tab: var(--c-pink); }
+.subtab[data-sub="bonus"]      { --tab: var(--c-amber); }
+.subtab[data-sub="patients"]   { --tab: var(--c-teal); }
+.subtab[data-sub="team"]       { --tab: var(--c-blue); }
+.subtab[data-sub="therapists"] { --tab: var(--c-violet); }
+.subtab[data-sub="staffTalks"] { --tab: var(--c-green); }
+.subtab[data-sub="events"]     { --tab: var(--c-coral); }
+
+/* Work sections — cards tinted in the tab's colour */
+[data-sub-panel] { --sec: var(--c-pink); }
+[data-sub-panel="patients"]   { --sec: var(--c-teal); }
+[data-sub-panel="team"]       { --sec: var(--c-blue); }
+[data-sub-panel="therapists"] { --sec: var(--c-violet); }
+[data-sub-panel="staffTalks"] { --sec: var(--c-green); }
+[data-sub-panel="events"]     { --sec: var(--c-coral); }
+[data-sub-panel] .work-card {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--sec) 26%, transparent), color-mix(in srgb, var(--sec) 8%, transparent)), var(--card);
+  border-color: color-mix(in srgb, var(--sec) 50%, transparent);
+}
+[data-sub-panel] .work-card .card-title { color: color-mix(in srgb, var(--sec) 35%, #fff); }
+[data-sub-panel] .work-card .card-subtitle { color: color-mix(in srgb, var(--sec) 50%, #fff); }
+[data-sub-panel] .wk-btn { background: var(--sec); }
+.wk-patients { --sec: var(--c-teal); }
+[data-sub-panel="patients"] .wk-out    { --sec: var(--c-violet); }
+[data-sub-panel="patients"] .wk-visits { --sec: var(--c-blue); }
+[data-sub-panel="team"] .wk-today { --sec: var(--c-green); }
+[data-sub-panel="team"] .wk-staff { --sec: var(--c-amber); }
+[data-sub-panel="therapists"] .wk-ther-week { --sec: var(--c-pink); }
+.wk-kpi { background: color-mix(in srgb, var(--sec, var(--c-blue)) 22%, rgba(0,0,0,0.15)); }
+
+/* Bonus tab: entries / exits logs */
+.logs .log-card:nth-child(1) { background: linear-gradient(160deg, rgba(16, 185, 129, 0.24), rgba(16, 185, 129, 0.06)), var(--card); border-color: rgba(52, 211, 153, 0.4); }
+.logs .log-card:nth-child(2) { background: linear-gradient(160deg, rgba(244, 63, 94, 0.24), rgba(244, 63, 94, 0.06)), var(--card); border-color: rgba(251, 113, 133, 0.4); }
+
+/* ---- Dashboard ---- */
+.dash-card { position: relative; overflow: hidden; }
+.dash-card .card-subtitle { margin-top: 14px; }
+.dash-bonus { --tone: var(--c-amber); background: linear-gradient(160deg, color-mix(in srgb, var(--tone) 30%, transparent), color-mix(in srgb, var(--tone) 8%, transparent)), var(--card); border-color: color-mix(in srgb, var(--tone) 55%, transparent); text-align: center; }
+.dash-bonus.tone-good { --tone: var(--c-green); }
+.dash-bonus.tone-ok   { --tone: var(--c-amber); }
+.dash-bonus.tone-warn { --tone: #F97316; }
+.dash-bonus.tone-bad  { --tone: var(--c-coral); }
+.dash-bonus .card-title { text-align: start; }
+.gauge-wrap { position: relative; max-width: 280px; margin: 4px auto 0; }
+.gauge { display: block; width: 100%; height: auto; }
+.g-track { fill: none; stroke: rgba(255, 255, 255, 0.10); stroke-width: 18; stroke-linecap: round; }
+.g-zone  { fill: none; stroke-width: 4; opacity: 0.55; }
+.g-fill  { fill: none; stroke: var(--tone); stroke-width: 18; stroke-linecap: round; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--tone) 70%, transparent)); }
+.g-proj  { stroke: #fff; stroke-width: 3; stroke-linecap: round; }
+.g-needle { stroke: #fff; stroke-width: 4; stroke-linecap: round; }
+.g-hub { fill: #fff; }
+.gauge-center { text-align: center; margin-top: 2px; }
+.gauge-value { font-family: 'Frank Ruhl Libre', serif; font-weight: 900; font-size: 34px; line-height: 1; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); }
+.gauge-of { font-size: 13px; color: var(--text-mute); margin-top: 4px; }
+.gauge-head { font-size: 18px; font-weight: 700; margin-top: 8px; color: color-mix(in srgb, var(--tone) 40%, #fff); }
+.gauge-hint { font-size: 14px; margin: 8px auto 0; max-width: 420px; background: rgba(0, 0, 0, 0.22); border-radius: var(--r-sm); padding: 6px 10px; }
+.gauge-legend { font-size: 12px; color: var(--text-mute); margin-top: 8px; }
+.gl-proj { display: inline-block; width: 14px; height: 3px; background: #fff; vertical-align: middle; border-radius: 2px; }
+.gauge-earned { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.14); }
+.gauge-earned strong { font-family: 'Frank Ruhl Libre', serif; font-size: 26px; color: var(--gold); text-shadow: 0 0 12px var(--gold-glow); }
+.dash-go { margin-top: 12px; font: inherit; font-size: 14px; font-weight: 700; color: #fff; background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 999px; padding: 7px 16px; cursor: pointer; }
+.dash-go:hover { background: rgba(255, 255, 255, 0.2); }
+.dash-today  { background: linear-gradient(160deg, rgba(20, 184, 166, 0.26), rgba(20, 184, 166, 0.06)), var(--card); border-color: rgba(45, 212, 191, 0.45); }
+.dash-month  { background: linear-gradient(160deg, rgba(59, 130, 246, 0.26), rgba(59, 130, 246, 0.06)), var(--card); border-color: rgba(96, 165, 250, 0.45); }
+.dash-events { background: linear-gradient(160deg, rgba(244, 63, 94, 0.24), rgba(244, 63, 94, 0.06)), var(--card); border-color: rgba(251, 113, 133, 0.45); }
+.dash-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.dash-tile { border-radius: var(--r-md); padding: 10px 6px; text-align: center; background: color-mix(in srgb, var(--tc) 30%, rgba(0, 0, 0, 0.2)); border: 1px solid color-mix(in srgb, var(--tc) 60%, transparent); }
+.dash-tile b { display: block; font-family: 'Frank Ruhl Libre', serif; font-size: 26px; font-weight: 900; line-height: 1.1; color: #fff; }
+.dash-tile span { font-size: 12px; color: rgba(255, 255, 255, 0.85); }
+.t-teal { --tc: var(--c-teal); } .t-blue { --tc: var(--c-blue); } .t-violet { --tc: var(--c-violet); }
+.t-amber { --tc: var(--c-amber); } .t-pink { --tc: var(--c-pink); } .t-green { --tc: var(--c-green); }
+@media (max-width: 520px) {
+  .dash-tiles { grid-template-columns: repeat(2, 1fr); }
+}
