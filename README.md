@@ -63,7 +63,7 @@ static mount; see `docs/bonus-month-labelling.md`.
 
 ## Access and work tabs (13 Oct 2026)
 
-Personal code per person (`docs/access.md`): a house manager sees only their
+Username + personal code per person (`docs/access.md`): a house manager sees only their
 house; Sandra and Ron see all. Each house has sub-tabs — בונוסים, מטופלים
 (patients, outpatients, visits and admissions this month), שיחות משפחה,
 שיחות עם עובדים (private), אירועים חריגים — with follow-up reminders.

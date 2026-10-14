@@ -13,8 +13,16 @@ their own code.
 
 ## How it works
 
+- **Login = username + personal code (14 Oct 2026).** Both must belong to the same person.
+  - The username is the person's `name` in `MANAGER_ACCESS` (for example «אורן»). An optional
+    Latin `user` (3–20 characters of a-z 0-9 . _ -) also works.
+  - Case and surrounding spaces are ignored, and usernames must be unique.
+  - A wrong pair always gets the same answer («שם משתמש או קוד שגויים»), so a failed login
+    never tells which part was wrong.
+
 - **Codes** live in the Railway variable `MANAGER_ACCESS` (JSON):
-  `[{"code":"…","name":"אורן","house":"ramot"}, {"code":"…","name":"סנדרה","role":"admin"}, …]`.
+  `[{"code":"…","name":"אורן","house":"ramot"}, {"code":"…","name":"סנדרה","user":"sandra","role":"admin"}, …]`
+  (`user` is optional).
   6–12 digits, unique. Validated at start-up; anything odd stops the process
   (Railway keeps the previous deployment serving).
 - **Session**: after a correct code the server sets `mgr_session` — HttpOnly,

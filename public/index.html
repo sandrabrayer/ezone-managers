@@ -26,6 +26,8 @@
     <form class="login-box" id="loginForm" autocomplete="off">
       <img class="brand-emblem" src="/icons/ezone-emblem-192.png" alt="" width="48" height="48" />
       <div class="login-title">איזון — מנהלים</div>
+      <label for="loginUser">שם משתמש</label>
+      <input id="loginUser" name="username" type="text" maxlength="40" autocomplete="username" autocapitalize="none" spellcheck="false" required />
       <label for="loginCode">הקוד האישי שלך</label>
       <input id="loginCode" name="code" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="current-password" required />
       <button type="submit">כניסה</button>

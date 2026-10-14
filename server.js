@@ -172,8 +172,9 @@ app.post('/api/login', (req, res) => {
   if (!allowLogin(clientIp(req))) {
     return res.status(429).json({ error: 'יותר מדי ניסיונות. נסו שוב בעוד רבע שעה.' });
   }
-  const u = access.findUserByCode(USERS, req.body && req.body.code);
-  if (!u) return res.status(401).json({ error: 'קוד שגוי' });
+  const b = req.body || {};
+  const u = access.findUser(USERS, b.username, b.code);
+  if (!u) return res.status(401).json({ error: 'שם משתמש או קוד שגויים' });
   setSessionCookie(res, access.signSession(u, SESSION_KEY), access.SESSION_DAYS * 86400);
   res.json({ ok: true, user: publicUser(u) });
 });

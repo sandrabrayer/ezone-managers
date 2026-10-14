@@ -1,4 +1,4 @@
-/* Personal-code login (13 Oct 2026). The server decides everything (who you
+/* Login: username + personal code (13–14 Oct 2026). The server decides everything (who you
  * are, which house you may see); this file only shows the login screen, asks
  * /api/me who is logged in, and offers "יציאה". */
 (function (root) {
@@ -14,7 +14,7 @@
     document.body.classList.add('is-locked');
     var msg = el('loginMsg');
     if (msg) msg.textContent = message || '';
-    var input = el('loginCode');
+    var input = el('loginUser') && !el('loginUser').value ? el('loginUser') : el('loginCode');
     if (input) setTimeout(function () { input.focus(); }, 50);
   }
 
@@ -38,15 +38,17 @@
       form.addEventListener('submit', async function (ev) {
         ev.preventDefault();
         var code = String(el('loginCode').value || '').replace(/\D/g, '');
+        var username = String(el('loginUser').value || '').trim();
+        if (!username || !code) { el('loginMsg').textContent = 'נא למלא שם משתמש וקוד'; return; }
         var btn = form.querySelector('button');
         btn.disabled = true;
         el('loginMsg').textContent = 'בודק…';
         try {
-          var r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code }) });
+          var r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username, code: code }) });
           var d = {};
           try { d = await r.json(); } catch (e) { d = {}; }
           if (r.ok) { root.location.reload(); return; }
-          el('loginMsg').textContent = r.status === 503 ? 'הכניסה עוד לא הוגדרה. פנו לסנדרה.' : (d.error || 'קוד שגוי');
+          el('loginMsg').textContent = r.status === 503 ? 'הכניסה עוד לא הוגדרה. פנו לסנדרה.' : (d.error || 'שם משתמש או קוד שגויים');
         } catch (e) {
           el('loginMsg').textContent = 'אין חיבור. נסו שוב.';
         }

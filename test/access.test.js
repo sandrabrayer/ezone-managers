@@ -65,11 +65,29 @@ test('personal-code access', async (t) => {
     assert.equal(calls.length, 0, 'the upstream is never reached');
   });
 
+  await t.test('login needs the username AND the code of the SAME person; a wrong pair says nothing about which part was wrong', async () => {
+    const tries = [
+      { username: 'אורן', code: '12345678' },          // right user, wrong code
+      { username: 'סנדרה', code: auth.ORAN_CODE },     // someone else's code
+      { username: 'nobody', code: auth.ORAN_CODE },     // unknown user
+      { code: auth.ORAN_CODE },                         // no username
+      { username: 'אורן' }                               // no code
+    ];
+    for (const body of tries) {
+      const r = await req(server, '/api/login', { method: 'POST', body });
+      assert.equal(r.status, 401, JSON.stringify(body));
+      assert.equal(JSON.parse(r.text).error, 'שם משתמש או קוד שגויים');
+      assert.equal(r.headers['set-cookie'], undefined);
+    }
+    const spaced = await req(server, '/api/login', { method: 'POST', body: { username: '  אורן ', code: auth.ORAN_CODE } });
+    assert.equal(spaced.status, 200, 'surrounding spaces are ignored');
+  });
+
   await t.test('a wrong code is refused; a right one sets an HttpOnly, SameSite=Strict session cookie', async () => {
-    const bad = await req(server, '/api/login', { method: 'POST', body: { code: '12345678' } });
+    const bad = await req(server, '/api/login', { method: 'POST', body: { username: 'אורן', code: '12345678' } });
     assert.equal(bad.status, 401);
     assert.equal(bad.headers['set-cookie'], undefined);
-    const ok = await req(server, '/api/login', { method: 'POST', body: { code: auth.ORAN_CODE } });
+    const ok = await req(server, '/api/login', { method: 'POST', body: { username: 'אורן', code: auth.ORAN_CODE } });
     assert.equal(ok.status, 200);
     assert.deepEqual(JSON.parse(ok.text).user, { name: 'אורן', role: 'manager', house: 'ramot' });
     const c = ok.headers['set-cookie'][0];
@@ -80,8 +98,8 @@ test('personal-code access', async (t) => {
   await t.test('login needs JSON and is rate-limited per IP (10 per window)', async () => {
     const form = await req(server, '/api/login', { method: 'POST', body: 'code=1', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
     assert.equal(form.status, 415);
-    for (let i = 0; i < 10; i++) await req(server, '/api/login', { method: 'POST', body: { code: '00000000' } });
-    const blocked = await req(server, '/api/login', { method: 'POST', body: { code: auth.ADMIN_CODE } });
+    for (let i = 0; i < 10; i++) await req(server, '/api/login', { method: 'POST', body: { username: 'x', code: '00000000' } });
+    const blocked = await req(server, '/api/login', { method: 'POST', body: { username: 'סנדרה', code: auth.ADMIN_CODE } });
     assert.equal(blocked.status, 429, 'even the right code is refused once the limit is hit');
   });
 
@@ -218,6 +236,26 @@ test('lib/access: MANAGER_ACCESS validation (fail closed on anything odd)', () =
   assert.equal(bad([{ code: '12345678', name: 'a', house: 'ramot' }, { code: '12345678', name: 'b', role: 'admin' }]), false, 'duplicate code');
   assert.equal(bad([{ code: '12345678', name: '<b>', role: 'admin' }]), false, 'markup in a name');
   assert.equal(bad([{ code: '12345678', name: 'ok', role: 'admin' }]), true);
+});
+
+test('lib/access: usernames — the name always works; an optional Latin `user` too; case and spaces ignored; unique', () => {
+  const a = accessLib.parseAccess(JSON.stringify([
+    { code: '11112222', name: 'אורן', house: 'ramot' },
+    { code: '33334444', name: 'סנדרה', user: 'Sandra', role: 'admin' }
+  ]));
+  assert.equal(a.ok, true);
+  const f = (u, c) => (accessLib.findUser(a.users, u, c) || {}).name || null;
+  assert.equal(f('אורן', '11112222'), 'אורן');
+  assert.equal(f('סנדרה', '33334444'), 'סנדרה');
+  assert.equal(f(' SANDRA ', '33334444'), 'סנדרה');
+  assert.equal(f('sandra', '11112222'), null, 'someone else\'s code');
+  assert.equal(f('אורן', '33334444'), null);
+  assert.equal(f('', '11112222'), null);
+  assert.equal(f('אורן', ''), null);
+  const bad = (v) => accessLib.parseAccess(JSON.stringify(v)).ok;
+  assert.equal(bad([{ code: '12345678', name: 'a', user: 'x!', role: 'admin' }]), false, 'bad Latin user name');
+  assert.equal(bad([{ code: '12345678', name: 'רון', role: 'admin' }, { code: '87654321', name: 'רון', house: 'ramot' }]), false, 'two people with one name');
+  assert.equal(bad([{ code: '12345678', name: 'a', user: 'ron', role: 'admin' }, { code: '87654321', name: 'Ron', house: 'ramot' }]), false, 'user clashes with another name');
 });
 
 test('docs: the open-access doc is replaced by the access doc', () => {

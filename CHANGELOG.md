@@ -3,6 +3,23 @@
 
 ## Unreleased
 
+### Changed — login asks for a username as well as the code (October 14, 2026)
+
+**What:** the login screen has «שם משתמש» above «הקוד האישי שלך». The username and the code must
+belong to the same person.
+- The username is the person's name in `MANAGER_ACCESS` (סנדרה, רון, שחר, אורן, חנן, רנטה, חן).
+  An optional Latin `user` field also works.
+- Case and spaces are ignored, and usernames are validated unique at start-up.
+- Any wrong pair gets one answer: «שם משתמש או קוד שגויים».
+
+**Why:** Sandra, 14 Oct: «צריך גם שם משתמש».
+
+**How:** `lib/access.js` `findUser` compares every code timing-safely first, so a failed login
+takes the same time whether or not the username exists. The rate limit is unchanged. No Railway
+change is needed, because the existing names are the usernames. SW v20 → v21.
+
+**Tests:** 243 → 245 (a username + code pairing test, lib username rules; login helpers updated).
+
 ### Added — work tool, stage 2: team, shifts and therapists (October 14, 2026)
 
 **What:** two new house tabs.
