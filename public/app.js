@@ -2329,6 +2329,7 @@ function renderOccupancyEverywhere_() {
  * per bonus: what it pays, the condition in plain words, where the house
  * stands NOW in real figures, and a status chip. Every string is escaped. */
 function renderBonusPlan_(panel, view) {
+  renderBonusGauge_(panel, view);
   const ul = panel.querySelector('[data-breakdown]');
   if (!ul || !view) return;
   ul.innerHTML = '';
@@ -2359,6 +2360,128 @@ function renderBonusPlan_(panel, view) {
   if (total) total.textContent = fmtCurrency(view.total);
   const note = panel.querySelector('[data-bonus-fallback-note]');
   if (note) note.textContent = view.totalNote || '';
+}
+
+/* The dashboard dial (14 Oct 2026). Numbers only in the SVG; every string
+ * comes from BonusView.bonusGaugeView and is escaped. */
+function gaugeSvg_(pct, projPct, tone) {
+  const R = 80, CX = 100, CY = 100, LEN = Math.PI * R;
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  const pt = (q, r) => {
+    const a = Math.PI * (1 - q / 100);
+    return [(CX + r * Math.cos(a)).toFixed(1), (CY - r * Math.sin(a)).toFixed(1)];
+  };
+  const [nx, ny] = pt(p, 66);
+  let proj = '';
+  if (projPct != null && Number.isFinite(Number(projPct))) {
+    const q = Math.max(0, Math.min(100, Number(projPct)));
+    const [x1, y1] = pt(q, 70), [x2, y2] = pt(q, 92);
+    proj = `<line class="g-proj" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+  }
+  const t = ['good', 'ok', 'warn', 'bad'].includes(tone) ? tone : 'ok';
+  return `<svg class="gauge g-${t}" viewBox="0 0 200 112" role="img" aria-hidden="true">
+    <defs><linearGradient id="gGrad" x1="0" x2="1"><stop offset="0" stop-color="#F87171"/><stop offset="0.5" stop-color="#FCD34D"/><stop offset="1" stop-color="#34D399"/></linearGradient></defs>
+    <path class="g-track" d="M20,100 A80,80 0 0 1 180,100"/>
+    <path class="g-zone" d="M20,100 A80,80 0 0 1 180,100" stroke="url(#gGrad)"/>
+    <path class="g-fill" d="M20,100 A80,80 0 0 1 180,100" stroke-dasharray="${(LEN * p / 100).toFixed(1)} ${LEN.toFixed(1)}"/>
+    ${proj}
+    <line class="g-needle" x1="${CX}" y1="${CY}" x2="${nx}" y2="${ny}"/>
+    <circle class="g-hub" cx="${CX}" cy="${CY}" r="7"/>
+  </svg>`;
+}
+
+function renderBonusGauge_(panel, plan) {
+  const host = panel.querySelector('[data-dash-bonus]');
+  const BVg = typeof window !== 'undefined' ? window.BonusView : null;
+  if (!host || !plan || !BVg || !BVg.bonusGaugeView) return;
+  const g = BVg.bonusGaugeView(plan);
+  const e = escapeHtml_;
+  host.className = `card dash-card dash-bonus tone-${['good', 'ok', 'warn', 'bad'].includes(g.tone) ? g.tone : 'ok'}`;
+  host.innerHTML = `
+    <div class="card-title">הבונוס שלי — ${e(plan.monthLabel || '')}</div>
+    <div class="gauge-wrap">
+      ${gaugeSvg_(g.pct, g.projPct, g.tone)}
+      <div class="gauge-center">
+        <div class="gauge-value">${e(g.valueText)}</div>
+        <div class="gauge-of">${e(g.ofText)}</div>
+      </div>
+    </div>
+    <div class="gauge-head">${e(g.headline)}</div>
+    ${g.hint ? `<div class="gauge-hint">${e(g.hint)}</div>` : ''}
+    ${g.projPct != null ? '<div class="gauge-legend"><span class="gl-proj"></span> הקו הלבן = לאן תגיעו בקצב הנוכחי</div>' : ''}
+    <div class="gauge-earned"><span>${e(g.earnedLabel)}</span><strong>${e(g.earnedText)}</strong></div>
+    ${plan.calc && BVg.bonusCalcView ? calcShellHtml_(plan.calc) : ''}
+    <button type="button" class="dash-go" data-go-sub="bonus">לכל פרטי הבונוסים ←</button>`;
+  host._calcCtx = plan.calc || null;
+  if (plan.calc && BVg.bonusCalcView) updateCalc_(host);
+  if (!host.getAttribute('data-calc-wired')) {
+    host.setAttribute('data-calc-wired', '1');
+    host.addEventListener('input', (ev) => {
+      if (ev.target && ev.target.closest && ev.target.closest('[data-calc]')) updateCalc_(host);
+    });
+  }
+}
+
+/* «מה אם?» — the sliders start at today's pace; every figure comes from
+ * BonusView.bonusCalcView (same step rule as the bonus boxes). */
+function calcShellHtml_(ctx) {
+  const elapsed = Math.max(1, Number(ctx.elapsedDays) || 1);
+  const pace = Math.round((Number(ctx.daysSoFar) || 0) / elapsed);
+  const max = Number(ctx.capacity) > 0 ? Number(ctx.capacity) : 30;
+  return `
+    <div class="calc" data-calc>
+      <div class="calc-title">🎮 מחשבון בונוס — מה אם?</div>
+      <label class="calc-row">
+        <span>מטופלים ליום מעכשיו ועד סוף החודש: <b data-calc-out="perDay">${Math.min(max, pace)}</b></span>
+        <input type="range" min="0" max="${max}" step="1" value="${Math.min(max, pace)}" data-calc-in="perDay" aria-label="מטופלים ליום עד סוף החודש">
+      </label>
+      <label class="calc-row">
+        <span>עוד פגישות קליטה (המטופל ה-7 ומעלה): <b data-calc-out="extraIntake">0</b></span>
+        <input type="range" min="0" max="10" step="1" value="0" data-calc-in="extraIntake" aria-label="פגישות קליטה נוספות">
+      </label>
+      <label class="calc-row">
+        <span>עוד מטופלים שיעברו לטיפול יום: <b data-calc-out="extraReferral">0</b></span>
+        <input type="range" min="0" max="10" step="1" value="0" data-calc-in="extraReferral" aria-label="מטופלים נוספים בטיפול יום">
+      </label>
+      <div class="calc-proj" data-calc-proj></div>
+      <ul class="calc-lines" data-calc-lines></ul>
+      <div class="calc-total"><span>סה״כ בונוס צפוי</span><strong data-calc-total>—</strong></div>
+      <div class="calc-tip" data-calc-tip></div>
+      <div class="calc-note" data-calc-note></div>
+    </div>`;
+}
+
+function updateCalc_(host) {
+  const BVg = typeof window !== 'undefined' ? window.BonusView : null;
+  const ctx = host._calcCtx;
+  if (!ctx || !BVg || !BVg.bonusCalcView) return;
+  const val = (k) => {
+    const el = host.querySelector(`[data-calc-in="${k}"]`);
+    return el ? Number(el.value) : 0;
+  };
+  const v = BVg.bonusCalcView(ctx, { perDay: val('perDay'), extraIntake: val('extraIntake'), extraReferral: val('extraReferral') });
+  if (!v) return;
+  const set = (sel, text) => { const el = host.querySelector(sel); if (el) el.textContent = text; };
+  set('[data-calc-out="perDay"]', String(v.perDay));
+  set('[data-calc-out="extraIntake"]', String(val('extraIntake')));
+  set('[data-calc-out="extraReferral"]', String(val('extraReferral')));
+  set('[data-calc-proj]', v.projectedText);
+  set('[data-calc-total]', v.totalText);
+  set('[data-calc-tip]', v.tip);
+  set('[data-calc-note]', v.pendingNote);
+  const ul = host.querySelector('[data-calc-lines]');
+  if (ul) {
+    ul.textContent = '';
+    v.lines.forEach((ln) => {
+      const li = document.createElement('li');
+      li.className = `calc-line cl-${ln.k}`;
+      const a = document.createElement('span'); a.textContent = ln.label;
+      const b = document.createElement('b'); b.textContent = ln.amountText;
+      li.appendChild(a);
+      li.appendChild(b);
+      ul.appendChild(li);
+    });
+  }
 }
 
 /* Activity log row: date + name, exactly as the feed supplies them.

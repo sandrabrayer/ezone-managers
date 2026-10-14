@@ -366,8 +366,29 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   (private to author + admins) · אירועים חריגים, with follow-up reminders.
   Data via `/api/work` → Dashboard `managersWork` (same secret, set as a
   Script Property there).
-- Next: stage 2 (therapists + coordinators schedule, employee list, who's on
-  shift today), stage 3 (manpower cost from staffing).
+- Stage 2 (Oct 14, 2026) adds two house tabs:
+  - «צוות ומשמרות»: on shift today, the next 14 days, and the staff with phones;
+  - «מטפלים»: workdays and the weekly visits.
+- Stage 2 data path: coordinators ManagersHouse digest → Dashboard `managersWork` `team` →
+  `/api/work`. It needs the Script Property `MANAGERS_DIGEST_SHEET_ID` on both Apps Scripts.
+- Login asks for a username (the person's name in `MANAGER_ACCESS`, or an optional Latin `user`)
+  plus the code, both of the same person (Oct 14, 2026).
+- Dashboard «ראשי» (Oct 14, 2026), the first house tab:
+  - a bonus dial;
+  - today in the house (on shift, therapy sessions, reminders);
+  - visits and admissions;
+  - the latest events.
+- «שיחות משפחה» was removed on Oct 14, 2026.
+- The dashboard also has a «מה אם?» bonus calculator (all bonuses together) and expected
+  admissions (Dashboard `houseData.expectedAdmissions`, open leads, next 14 days).
+- Each tab and bonus box has its own colour.
+- Stage 3 (Oct 14, 2026): a «עלות כוח אדם» card for each house, visible to that house's
+  manager and to the admins.
+- Data path: `/api/work` `houseCost` → Dashboard `managersWork` `houseCost` → staffing
+  `getHouseCostsForManagers`, house totals only.
+- Script Properties:
+  - staffing `MANAGERS_COST_READ_SECRET`;
+  - Dashboard `STAFFING_SHEETS_URL` and `STAFFING_COST_SECRET`.
 
 ## Managers: continued-treatment bonus is one-time (October 13, 2026)
 

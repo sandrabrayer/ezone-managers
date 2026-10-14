@@ -179,8 +179,9 @@ app.post('/api/login', (req, res) => {
   if (!allowLogin(clientIp(req))) {
     return res.status(429).json({ error: 'יותר מדי ניסיונות. נסו שוב בעוד רבע שעה.' });
   }
-  const u = access.findUserByCode(USERS, req.body && req.body.code);
-  if (!u) return res.status(401).json({ error: 'קוד שגוי' });
+  const b = req.body || {};
+  const u = access.findUser(USERS, b.username, b.code);
+  if (!u) return res.status(401).json({ error: 'שם משתמש או קוד שגויים' });
   setSessionCookie(res, access.signSession(u, SESSION_KEY), access.SESSION_DAYS * 86400);
   res.json({ ok: true, user: publicUser(u) });
 });
@@ -262,8 +263,8 @@ app.get('/api/sheets', requireUser, async (req, res) => {
 });
 
 // ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
-const WORK_OPS = new Set(['houseData', 'logAdd', 'logUpdate']);
-const WORK_LOGS = new Set(['familyCalls', 'staffTalks', 'events']);
+const WORK_OPS = new Set(['houseData', 'houseCost', 'logAdd', 'logUpdate']);
+const WORK_LOGS = new Set(['staffTalks', 'events']);   // family calls removed from the app (14 Oct 2026)
 const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 app.post('/api/work', requireUser, async (req, res) => {
@@ -283,8 +284,8 @@ app.post('/api/work', requireUser, async (req, res) => {
     return res.status(403).json({ error: 'forbidden' });
   }
   const body = { action: 'managersWork', secret: WORK_SECRET, op, house, role: u.role, actor: u.name, actorId: u.id };
-  if (op === 'houseData' && YM_RE.test(String(b.month || ''))) body.month = String(b.month);
-  if (op !== 'houseData') {
+  if ((op === 'houseData' || op === 'houseCost') && YM_RE.test(String(b.month || ''))) body.month = String(b.month);
+  if (op === 'logAdd' || op === 'logUpdate') {
     if (!WORK_LOGS.has(String(b.log || ''))) return res.status(400).json({ error: 'unknown_log' });
     body.log = String(b.log);
   }

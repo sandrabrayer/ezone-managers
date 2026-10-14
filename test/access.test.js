@@ -65,11 +65,29 @@ test('personal-code access', async (t) => {
     assert.equal(calls.length, 0, 'the upstream is never reached');
   });
 
+  await t.test('login needs the username AND the code of the SAME person; a wrong pair says nothing about which part was wrong', async () => {
+    const tries = [
+      { username: 'אורן', code: '12345678' },          // right user, wrong code
+      { username: 'סנדרה', code: auth.ORAN_CODE },     // someone else's code
+      { username: 'nobody', code: auth.ORAN_CODE },     // unknown user
+      { code: auth.ORAN_CODE },                         // no username
+      { username: 'אורן' }                               // no code
+    ];
+    for (const body of tries) {
+      const r = await req(server, '/api/login', { method: 'POST', body });
+      assert.equal(r.status, 401, JSON.stringify(body));
+      assert.equal(JSON.parse(r.text).error, 'שם משתמש או קוד שגויים');
+      assert.equal(r.headers['set-cookie'], undefined);
+    }
+    const spaced = await req(server, '/api/login', { method: 'POST', body: { username: '  אורן ', code: auth.ORAN_CODE } });
+    assert.equal(spaced.status, 200, 'surrounding spaces are ignored');
+  });
+
   await t.test('a wrong code is refused; a right one sets an HttpOnly, SameSite=Strict session cookie', async () => {
-    const bad = await req(server, '/api/login', { method: 'POST', body: { id: 'person-oran', code: '12345678' } });
+    const bad = await req(server, '/api/login', { method: 'POST', body: { username: 'אורן', code: '12345678' } });
     assert.equal(bad.status, 401);
     assert.equal(bad.headers['set-cookie'], undefined);
-    const ok = await req(server, '/api/login', { method: 'POST', body: { code: auth.ORAN_CODE } });
+    const ok = await req(server, '/api/login', { method: 'POST', body: { username: 'אורן', code: auth.ORAN_CODE } });
     assert.equal(ok.status, 200);
     assert.deepEqual(JSON.parse(ok.text).user, { id: 'person-oran', name: 'אורן', role: 'manager', house: 'ramot' });
     const c = ok.headers['set-cookie'][0];
@@ -80,8 +98,8 @@ test('personal-code access', async (t) => {
   await t.test('login needs JSON and is rate-limited per IP (10 per window)', async () => {
     const form = await req(server, '/api/login', { method: 'POST', body: 'code=1', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
     assert.equal(form.status, 415);
-    for (let i = 0; i < 10; i++) await req(server, '/api/login', { method: 'POST', body: { id: 'person-oran', code: '00000000' } });
-    const blocked = await req(server, '/api/login', { method: 'POST', body: { code: auth.ADMIN_CODE } });
+    for (let i = 0; i < 10; i++) await req(server, '/api/login', { method: 'POST', body: { username: 'x', code: '00000000' } });
+    const blocked = await req(server, '/api/login', { method: 'POST', body: { username: 'סנדרה', code: auth.ADMIN_CODE } });
     assert.equal(blocked.status, 429, 'even the right code is refused once the limit is hit');
   });
 
@@ -157,6 +175,17 @@ test('personal-code access', async (t) => {
     assert.deepEqual(JSON.parse(calls.at(-1).body.patch), { followUpDone: true, deleted: false }, 'only the two known flags pass');
   });
 
+  await t.test('house cost: a manager only ever gets their OWN house cost; the family-calls log is refused', async () => {
+    mockUpstream(() => '{"ok":true,"cost":{"available":false,"reason":"not_configured"}}');
+    const cookie = await auth.login(server, auth.ORAN_CODE);
+    const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseCost', house: 'raanana', month: '2026-10' } });
+    assert.equal(r.status, 200);
+    assert.deepEqual([calls[0].body.op, calls[0].body.house, calls[0].body.role, calls[0].body.month], ['houseCost', 'ramot', 'manager', '2026-10']);
+    assert.equal(calls[0].body.log, undefined, 'no log field on a read op');
+    const fc = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'logAdd', log: 'familyCalls', entry: {} } });
+    assert.equal(fc.status, 400);
+  });
+
   await t.test('the backend refusing the secret shows as 503, not as data', async () => {
     mockUpstream(() => '{"ok":false,"error":"unauthorized"}');
     const cookie = await auth.login(server, auth.ORAN_CODE);
@@ -218,6 +247,26 @@ test('lib/access: MANAGER_ACCESS validation (fail closed on anything odd)', () =
   assert.equal(bad([{ id: 'person-oran', code: '12345678', name: 'a', house: 'ramot' }, { id: 'person-oran', code: '12345678', name: 'b', role: 'admin' }]), false, 'duplicate code');
   assert.equal(bad([{ id: 'person-oran', code: '12345678', name: '<b>', role: 'admin' }]), false, 'markup in a name');
   assert.equal(bad([{ id: 'person-oran', code: '12345678', name: 'ok', role: 'admin' }]), true);
+});
+
+test('lib/access: usernames — the name always works; an optional Latin `user` too; case and spaces ignored; unique', () => {
+  const a = accessLib.parseAccess(JSON.stringify([
+    { id: 'person-oran', code: '11112222', name: 'אורן', house: 'ramot' },
+    { id: 'person-sandra', code: '33334444', name: 'סנדרה', user: 'Sandra', role: 'admin' }
+  ]));
+  assert.equal(a.ok, true);
+  const f = (u, c) => (accessLib.findUser(a.users, u, c) || {}).name || null;
+  assert.equal(f('אורן', '11112222'), 'אורן');
+  assert.equal(f('סנדרה', '33334444'), 'סנדרה');
+  assert.equal(f(' SANDRA ', '33334444'), 'סנדרה');
+  assert.equal(f('sandra', '11112222'), null, 'someone else\'s code');
+  assert.equal(f('אורן', '33334444'), null);
+  assert.equal(f('', '11112222'), null);
+  assert.equal(f('אורן', ''), null);
+  const bad = (v) => accessLib.parseAccess(JSON.stringify(v.map((row, i) => ({ id: `person-${i}`, ...row })))).ok;
+  assert.equal(bad([{ code: '12345678', name: 'a', user: 'x!', role: 'admin' }]), false, 'bad Latin user name');
+  assert.equal(bad([{ code: '12345678', name: 'רון', role: 'admin' }, { code: '87654321', name: 'רון', house: 'ramot' }]), false, 'two people with one name');
+  assert.equal(bad([{ code: '12345678', name: 'a', user: 'ron', role: 'admin' }, { code: '87654321', name: 'Ron', house: 'ramot' }]), false, 'user clashes with another name');
 });
 
 test('docs: the open-access doc is replaced by the access doc', () => {

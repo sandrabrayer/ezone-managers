@@ -64,7 +64,7 @@ test('same name does not imply same identity; code rotation retains identity; co
   assert.equal(a.readSession(token, key, [rotated]), null);
   const replacement = parse([{ ...row, id: 'person-two' }]).users[0];
   assert.equal(a.readSession(token, key, [replacement]), null);
-  assert.equal(parse([row, { ...row, id: 'person-two', code: '33334444' }]).ok, true);
+  assert.equal(parse([row, { ...row, id: 'person-two', code: '33334444' }]).ok, false, 'duplicate login names remain forbidden');
   assert.equal(parse([row, { ...row, code: '33334444' }]).ok, false, 'duplicate ids fail');
   assert.equal(parse([{ ...row, id: undefined }]).ok, false);
 });

@@ -9,9 +9,9 @@ test('real Managers HTTP routes → real Dashboard Code.gs, synthetic users and 
   process.env.NODE_ENV = 'test';
   process.env.APPS_SCRIPT_URL = 'https://synthetic.test/exec';
   const auth = require('./helpers-auth');
-  const sameNameCode = '10000004';
+  const otherCode = '10000004';
   process.env.MANAGER_ACCESS = JSON.stringify([...JSON.parse(process.env.MANAGER_ACCESS),
-    { id:'person-other-oran', name:'אורן', house:'ramot', code:sameNameCode }]);
+    { id:'person-other-oran', name:'אורן אחר', house:'ramot', code:otherCode }]);
   const { loadGs } = require(path.join(process.env.DASHBOARD_CHECKOUT, 'test/helpers/gs-sandbox'));
   const g = loadGs({ props: { MANAGERS_WORK_SECRET: process.env.MANAGERS_WORK_SECRET, PROXY_SECRET_MODE:'enforce' } });
   g.sandbox.Session = {getScriptTimeZone:() => 'UTC'};
@@ -31,7 +31,7 @@ test('real Managers HTTP routes → real Dashboard Code.gs, synthetic users and 
   await new Promise(resolve => server.once('listening', resolve));
   t.after(() => server.close());
   const mine = await auth.login(server, auth.ORAN_CODE);
-  const sameName = await auth.login(server, sameNameCode);
+  const other = await auth.login(server, otherCode, 'אורן אחר');
   const elsewhere = await auth.login(server, auth.HANAN_CODE);
   const admin = await auth.login(server, auth.ADMIN_CODE);
   const work = async (cookie, body) => {
@@ -49,14 +49,19 @@ test('real Managers HTTP routes → real Dashboard Code.gs, synthetic users and 
   const owned = (await work(mine,{op:'houseData'})).data;
   assert.equal(owned.ok, true, JSON.stringify(owned));
   assert.equal(owned.logs.staffTalks.length, 1);
-  for (const cookie of [sameName, elsewhere]) {
+  for (const cookie of [other, elsewhere]) {
     const d = (await work(cookie,{op:'houseData',house:'ramot'})).data;
     assert.deepEqual(d.logs.staffTalks, []);
     assert.deepEqual(d.followUps, []);
   }
   assert.equal((await work(admin,{op:'houseData',house:'ramot'})).data.logs.staffTalks.length, 1);
-  assert.equal((await work(sameName,{op:'logUpdate',log:'staffTalks',id,patch:{deleted:true}})).data.error, 'forbidden');
+  assert.equal((await work(other,{op:'logUpdate',log:'staffTalks',id,patch:{deleted:true}})).data.error, 'forbidden');
   assert.equal((await work(mine,{op:'logUpdate',log:'staffTalks',id,patch:{followUpDone:true}})).data.ok, true);
+  const cost = await work(mine, {op:'houseCost',house:'efroni',role:'admin',actorId:'person-sandra',month:'2026-10'});
+  assert.equal(cost.data.ok, true);
+  assert.equal(cost.data.house, 'ramot');
+  assert.deepEqual([sent.at(-1).house,sent.at(-1).actorId], ['ramot','person-oran']);
+  assert.deepEqual(cost.data.cost, {available:false,reason:'not_configured'});
   const r = await auth.request(server,'/api/sheets?action=managersHouse&house=efroni',{headers:{Cookie:mine}});
   assert.equal(r.status,403);
   g.run(`managersOverview_ = function () { return {ok:true,houses:[{key:'ramot',patientsNow:4},{key:'efroni',patientsNow:3}],totals:{activePatients:7}}; };`);

@@ -26,6 +26,8 @@
     <form class="login-box" id="loginForm" autocomplete="off">
       <img class="brand-emblem" src="/icons/ezone-emblem-192.png" alt="" width="48" height="48" />
       <div class="login-title">איזון — מנהלים</div>
+      <label for="loginUser">שם משתמש</label>
+      <input id="loginUser" name="username" type="text" maxlength="40" autocomplete="username" autocapitalize="none" spellcheck="false" required />
       <label for="loginCode">הקוד האישי שלך</label>
       <input id="loginCode" name="code" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="current-password" required />
       <button type="submit">כניסה</button>
@@ -149,20 +151,36 @@
 
       <!-- Work tabs (13 Oct 2026): the bonus page plus the manager's work tools. -->
       <nav class="subtabs" data-subtabs role="tablist" aria-label="תפריט הבית">
-        <button type="button" class="subtab is-active" data-sub="bonus" role="tab" aria-selected="true">בונוסים</button>
+        <button type="button" class="subtab is-active" data-sub="home" role="tab" aria-selected="true">ראשי</button>
+        <button type="button" class="subtab" data-sub="bonus" role="tab" aria-selected="false">בונוסים</button>
         <button type="button" class="subtab" data-sub="patients" role="tab" aria-selected="false">מטופלים</button>
-        <button type="button" class="subtab" data-sub="familyCalls" role="tab" aria-selected="false">שיחות משפחה</button>
+        <button type="button" class="subtab" data-sub="team" role="tab" aria-selected="false">צוות ומשמרות</button>
+        <button type="button" class="subtab" data-sub="therapists" role="tab" aria-selected="false">מטפלים</button>
         <button type="button" class="subtab" data-sub="staffTalks" role="tab" aria-selected="false">שיחות עם עובדים</button>
         <button type="button" class="subtab" data-sub="events" role="tab" aria-selected="false">אירועים חריגים</button>
       </nav>
       <div data-followups></div>
 
+      <!-- The manager's dashboard (14 Oct 2026): the bonus dial (app.js, from
+           BonusView.bonusGaugeView) + today / this week in the house (work.js). -->
+      <section data-sub-panel="home">
+        <div class="card dash-card dash-bonus" data-dash-bonus>
+          <div class="card-title">הבונוס שלי</div>
+          <div class="wk-empty">טוען…</div>
+        </div>
+        <div data-dash-house><div class="card dash-card"><div class="wk-empty">טוען את נתוני הבית…</div></div></div>
+        <div class="card dash-card dash-cost" data-dash-cost>
+          <div class="card-title">עלות כוח אדם</div>
+          <div class="wk-empty">טוען…</div>
+        </div>
+      </section>
       <section data-sub-panel="patients" hidden></section>
-      <section data-sub-panel="familyCalls" hidden></section>
+      <section data-sub-panel="team" hidden></section>
+      <section data-sub-panel="therapists" hidden></section>
       <section data-sub-panel="staffTalks" hidden></section>
       <section data-sub-panel="events" hidden></section>
 
-      <section data-sub-panel="bonus">
+      <section data-sub-panel="bonus" hidden>
       <!-- The bonuses of the month, one block each: what it pays, the
            condition in plain words and the real figures now (13 Oct 2026). -->
       <div class="card bonus-plan-card" data-bonus-plan>

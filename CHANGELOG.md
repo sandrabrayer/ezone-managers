@@ -8,13 +8,126 @@
 - Authenticate all upstream reads with a JSON-body secret and session-derived
   identity/scope; compatible Dashboard changes are required.
 - Require immutable unique IDs in `MANAGER_ACCESS` and sessions; use backend
-  `canEdit` instead of matching display names. SW cache v19 → v20.
+  `canEdit` instead of matching display names. SW cache v24 → v25.
 - Gate Railway activation on an authenticated protocol/capability probe through
   `/healthz`; fail closed on a secret mismatch, old backend or timeout.
 - Document legacy-note handling and the staged deployment/configuration order
   in `docs/managers-hardening-rollout.md`. No live account values are assumed.
 - Add same-name, code-reuse, readiness and cross-repository integration checks.
 
+### Added — work tool, stage 3: the house manpower cost (October 14, 2026)
+
+**What** (Sandra, 14 Oct: «בכל בית תהיה עלות של הבית עצמו, כל מנהל לעצמו יכול לראות»): a
+«עלות כוח אדם» card on each house's dashboard. It shows:
+- the month's estimated cost;
+- a budget bar with the % used and what is left, or an over-budget warning;
+- the split: guides, from the payroll report, estimate, and missing data when there is any;
+- an honest note when no payroll report has arrived yet.
+
+**How:** `/api/work` op `houseCost`, with the house decided by the server and a manager getting
+only their own. It goes to Dashboard `managersWork` `houseCost` (E-Zone-Dashboard #227), which
+reads the staffing feed `getHouseCostsForManagers` (ezone-staffing #96). The data is house
+totals only and never a worker or salary. The card loads separately, so the dashboard never
+waits on staffing. When the cost can't be read it shows a message, never 0 ₪. SW v23 → v24.
+
+**Also:** `/api/work` now requires a `log` only for `logAdd` / `logUpdate`.
+
+**Tests:** 259 → 263 (cost card: normal, over budget, no budget, unavailable; the server
+scopes `houseCost` to the manager's own house; the family-calls log is refused).
+
+### Added — expected admissions + «מה אם?» bonus calculator on the dashboard (October 14, 2026)
+
+**What** (Sandra, 14 Oct: expected admissions this week, and a bonus calculator that plays all
+the bonuses together, in the same box as the dial):
+- **Bonus calculator** inside the dial card, with three sliders:
+  - patients per day from now to the end of the month (starts at today's pace);
+  - more intake meetings;
+  - more patients moving to day treatment.
+
+  It shows the treatment days the month would reach, each bonus line (occupancy step, intake
+  × 250 ₪, continued treatment × 300 ₪), the total, and a tip (for example «עם 16 מטופלים ליום
+  … מגיעים לבונוס ראשון»). Running month only.
+- **Expected admissions:** a «קליטות צפויות השבוע» tile and a list of the next 14 days. Each
+  entry shows the stage in words, and this week's entries are highlighted. The data is the
+  Dashboard `houseData.expectedAdmissions` (E-Zone-Dashboard #226). An older server shows «—».
+  The «מטופלי חוץ מהבית» tile moved off the dashboard; the outpatients list is still in
+  «מטופלים».
+
+**How:** `BonusView.bonusCalcView` uses the same step rule as the bonus boxes and the
+month-aware rule sets. `bonusPlanView` now also returns `calc` (its starting point, running month
+only). `app.js` only wires the sliders and writes `textContent`. SW v22 → v23.
+
+**Tests:** 253 → 259 (calculator: starting point, today's pace, all together, clamping;
+expected admissions: this week, next week, past and old server).
+
+### Added — manager dashboard, colour pass, family calls removed (October 14, 2026)
+
+**What** (Sandra, 14 Oct: a dashboard per manager with a bonus dial; what is happening in the
+house today and this week; remove family calls; much more colour):
+- **New first house tab «ראשי» (dashboard):**
+  - **Bonus dial:** a gauge toward the next occupancy bonus still in play, plus a «לאן תגיעו
+    בקצב הנוכחי» projection line, a plain-words headline, what is needed until the end of the
+    month, and the total already earned. A link opens «בונוסים».
+  - **היום בבית:** patients in the house, on shift today, therapy sessions today and open
+    reminders, with the lists.
+  - **ביקורים וקליטות:** visits this week and this month, admissions, outpatients from the house,
+    upcoming visits and the latest admissions.
+  - **אירועים חריגים אחרונים.**
+- **«שיחות משפחה» removed:** the tab, the form and the reminders for it are gone, and
+  `/api/work` refuses that log. Rows already in the Dashboard sheet are kept.
+- **Colour:**
+  - each bonus box is filled in its own colour (amber, blue, violet, green);
+  - each sub-tab has its own colour, and its section's cards are tinted to match;
+  - the KPI tiles have four colours, and entries and exits are green and coral;
+  - the base background is slightly lighter.
+
+**How:** the dial's wording and maths live in `BonusView.bonusGaugeView`, built from
+`bonusPlanView`, which now also returns `days` and `projected`. `app.js` only draws the SVG.
+The house part is `WorkView.dashboardHtml`, and every value is escaped. SW v21 → v22.
+
+**Tests:** 245 → 253 (gauge: running, on-track, settled and clamped; dashboard: today, week
+and month, not connected; family calls gone; log tests moved to staff talks and events).
+Also checked in Chromium at 390 px.
+
+### Changed — login asks for a username as well as the code (October 14, 2026)
+
+**What:** the login screen has «שם משתמש» above «הקוד האישי שלך». The username and the code must
+belong to the same person.
+- The username is the person's name in `MANAGER_ACCESS` (סנדרה, רון, שחר, אורן, חנן, רנטה, חן).
+  An optional Latin `user` field also works.
+- Case and spaces are ignored, and usernames are validated unique at start-up.
+- Any wrong pair gets one answer: «שם משתמש או קוד שגויים».
+
+**Why:** Sandra, 14 Oct: «צריך גם שם משתמש».
+
+**How:** `lib/access.js` `findUser` compares every code timing-safely first, so a failed login
+takes the same time whether or not the username exists. The rate limit is unchanged. No Railway
+change is needed, because the existing names are the usernames. SW v20 → v21.
+
+**Tests:** 243 → 245 (a username + code pairing test, lib username rules; login helpers updated).
+
+### Added — work tool, stage 2: team, shifts and therapists (October 14, 2026)
+
+**What:** two new house tabs.
+- **צוות ומשמרות:**
+  - who is on shift today, grouped בוקר / ערב / לילה;
+  - shifts for the next 14 days, with draft schedules marked «טיוטה»;
+  - the house staff, guides and therapists, with a tap-to-call phone.
+- **מטפלים:** therapists with their workdays and «בחופשה», and the weekly visit schedule by day
+  (untimed visits show «ללא שעה»).
+- The staff-talks form now suggests the house staff names.
+
+**Why:** Sandra, 13 Oct: managers should see the therapists, the coordinators' schedules, the
+staff list and who is on shift today.
+
+**How:** the data comes from the coordinators app. Its ManagersHouse digest
+(ezone-coordinators #270) is read by the Dashboard `managersWork` `houseData` → `team`
+(E-Zone-Dashboard #224). The managers server is unchanged: no new endpoint, env var or secret.
+Every value is escaped. Phones become `tel:` links only when they are a valid Israeli number.
+Not connected, unreadable or stale data shows an honest message, never an empty list.
+SW v19 → v20.
+
+**Tests:** 237 → 243 (+6 in `test/work-view.test.js`). Also checked at 390 px in Chromium.
 
 ### Added — work tool, stage 1: personal-code login + house work tabs (October 13, 2026)
 

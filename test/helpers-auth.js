@@ -28,9 +28,11 @@ function request(server, path, { headers = {}, method = 'GET', body } = {}) {
   });
 }
 
-/* Log in with a code; returns the Cookie header value. */
-async function login(server, code) {
-  const r = await request(server, '/api/login', { method: 'POST', body: { code } });
+const NAME_BY_CODE = { [ADMIN_CODE]: 'סנדרה', [ORAN_CODE]: 'אורן', [HANAN_CODE]: 'חנן' };
+
+/* Log in with a code (+ that person's username); returns the Cookie header value. */
+async function login(server, code, username = NAME_BY_CODE[code]) {
+  const r = await request(server, '/api/login', { method: 'POST', body: { username, code } });
   if (r.status !== 200) throw new Error(`login failed ${r.status} ${r.text}`);
   return String(r.headers['set-cookie'][0]).split(';')[0];
 }

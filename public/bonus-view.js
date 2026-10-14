@@ -376,6 +376,8 @@
       : 0;
 
     var items = [];
+    var calcIntake = { confirmed: 0, pending: 0 };
+    var calcReferral = 0;
     var prevAmount = 0;
     tiers.forEach(function (t, i) {
       var need = Math.max(gate, Math.ceil(t.patients * dim));
@@ -433,6 +435,7 @@
     // Intake meetings — 250 ₪ per meeting (from Oct 2026).
     if (BE.intakeEnabled && BE.intakeEnabled(ym)) {
       var ib = opts.intake || BE.intakeMeetingAmount(null, ym);
+      calcIntake = { confirmed: ib.confirmed || 0, pending: ib.pending || 0 };
       var iState = ib.total > 0 ? 'earned' : ib.pending > 0 ? 'pending' : 'none';
       var iParts = [];
       if (ib.confirmed > 0) iParts.push(fmtInt(ib.confirmed) + ' ' + (ib.confirmed === 1 ? 'פגישה עומדת' : 'פגישות עומדות') + ' בתנאים = ' + fmtCurrency(ib.total));
@@ -456,6 +459,7 @@
       var rState = opts.referralState || 'ok';
       var rb = opts.referral || BE.continuityAmount(null, false, ym);
       var known = rState === 'ok';
+      if (known) calcReferral = rb.payableCount || 0;
       var rStatus;
       if (rState === 'loading') rStatus = 'טוען נתונים…';
       else if (rState === 'error') rStatus = 'שגיאה בטעינת הנתונים' + (opts.referralError ? ': ' + opts.referralError : '');
@@ -502,7 +506,128 @@
       total: total,
       totalKnown: totalKnown,
       totalLabel: settled ? 'סה״כ לתשלום — ' + label : 'סה״כ שכבר הושג — ' + label,
-      totalNote: totalKnown ? '' : 'לא כולל בונוס המשך טיפול — הנתונים לא נטענו'
+      totalNote: totalKnown ? '' : 'לא כולל בונוס המשך טיפול — הנתונים לא נטענו',
+      settled: settled,
+      monthLabel: label,
+      days: days,
+      projected: projected,
+      // What the «מה אם?» calculator starts from (running month only).
+      calc: settled ? null : { key: key, ym: ym, capacity: cap, daysSoFar: days, elapsedDays: elapsed,
+        intake: calcIntake, referralCount: calcReferral }
+    };
+  }
+
+  /* ── «מה אם?» bonus calculator (14 Oct 2026) ─────────────── */
+  /**
+   * Plays the month forward with the manager's own numbers, by the SAME
+   * step rule as the bonus boxes (a step is met when the month's treatment
+   * days reach max(gate, patients × days in month)).
+   * c: plan.calc; o: { perDay, extraIntake, extraReferral }
+   * out: { perDay, perDayMax, projectedDays, occupancy, intake, referral,
+   *        total, lines:[{k,label,amountText}], totalText, tip }
+   */
+  function bonusCalcView(c, o) {
+    if (!c) return null;
+    var opts = o || {};
+    var ym = c.ym;
+    var dim = daysInMonth(ym);
+    var cap = Number(c.capacity) > 0 ? Number(c.capacity) : 0;
+    var elapsed = Math.max(1, Math.min(dim, Number(c.elapsedDays) || 1));
+    var remaining = Math.max(0, dim - elapsed);
+    var done = Math.max(0, Number(c.daysSoFar) || 0);
+    var perDayMax = cap || 30;
+    var perDay = Math.max(0, Math.min(perDayMax, Math.round(Number(opts.perDay) || 0)));
+    var extraIntake = Math.max(0, Math.min(20, Math.round(Number(opts.extraIntake) || 0)));
+    var extraReferral = Math.max(0, Math.min(20, Math.round(Number(opts.extraReferral) || 0)));
+    var projectedDays = done + remaining * perDay;
+
+    var tiers = tiersAscFor(c.key, ym);
+    var gate = tiers[0] ? tiers[0].patients * (BE.GATE_DAYS_FACTOR || 30) : 0;
+    var met = null, next = null;
+    tiers.forEach(function (t, i) {
+      var need = Math.max(gate, Math.ceil(t.patients * dim));
+      var isFull = cap > 0 && t.patients >= cap;
+      var title = i === 0 ? 'בונוס ראשון' : isFull ? 'בונוס תפוסה מלאה' : 'בונוס ביניים';
+      if (projectedDays >= need) met = { amount: t.amount, title: title };
+      else if (!next) next = { need: need, title: title, amount: t.amount };
+    });
+    var occupancy = met ? met.amount : 0;
+
+    var iu = BE.intakeEnabled && BE.intakeEnabled(ym) ? BE.intakeMeetingAmount(null, ym).unit : 0;
+    var intakeCount = (c.intake ? (c.intake.confirmed || 0) + (c.intake.pending || 0) : 0) + extraIntake;
+    var intake = iu * intakeCount;
+    var ru = BE.continuityEnabled && BE.continuityEnabled(ym) ? (BE.continuityAmount({ starts: 1 }, true, ym).unitRate || 0) : 0;
+    var refCount = (Number(c.referralCount) || 0) + extraReferral;
+    var referral = ru * refCount;
+    var total = occupancy + intake + referral;
+
+    var lines = [{ k: 'occupancy', label: met ? 'בונוס תפוסה — ' + met.title : 'בונוס תפוסה — לא מגיעים', amountText: fmtCurrency(occupancy) }];
+    if (iu) lines.push({ k: 'intake', label: 'פגישות קליטה — ' + fmtInt(intakeCount) + ' × ' + fmtCurrency(iu), amountText: fmtCurrency(intake) });
+    if (ru) lines.push({ k: 'referral', label: 'המשך טיפול — ' + fmtInt(refCount) + ' × ' + fmtCurrency(ru), amountText: fmtCurrency(referral) });
+
+    var tip = '';
+    if (next && remaining > 0) {
+      var perDayNeed = Math.ceil((next.need - done) / remaining);
+      tip = (met ? 'מגיעים ל' + met.title + ' ✓ · ' : '') + (perDayNeed > perDayMax
+        ? next.title + ' כבר לא אפשרי החודש, גם בבית מלא'
+        : 'עם ' + fmtInt(perDayNeed) + ' מטופלים ליום עד סוף החודש מגיעים ל' + next.title + ' (' + fmtCurrency(next.amount) + ')');
+    } else if (!next && tiers.length) {
+      tip = 'בקצב הזה מגיעים לכל בונוסי התפוסה!';
+    }
+    return {
+      perDay: perDay, perDayMax: perDayMax, remaining: remaining,
+      perDayLabel: fmtInt(perDay) + ' מטופלים בכל יום ב-' + fmtInt(remaining) + ' הימים שנשארו',
+      projectedDays: projectedDays,
+      projectedText: 'סה״כ ' + fmtInt(projectedDays) + ' ימי טיפול ב' + monthLabel(ym),
+      occupancy: occupancy, intake: intake, referral: referral, total: total,
+      lines: lines,
+      totalText: fmtCurrency(total),
+      tip: tip,
+      pendingNote: c.intake && c.intake.pending ? 'כולל ' + fmtInt(c.intake.pending) + ' פגישות שממתינות להשלמת 30 יום' : ''
+    };
+  }
+
+  /* ── dashboard gauge (14 Oct 2026) ──────────────────────── */
+  /**
+   * The dial on the manager's dashboard, from a bonusPlanView result.
+   * It points at the NEXT occupancy step still in play: the first bonus
+   * until it is earned, then the higher step if it can still be reached.
+   * out: { pct, projPct (null when settled), tone, stepTitle, valueText,
+   *        ofText, headline, hint, chip, earnedText, earnedLabel }
+   */
+  var GAUGE_TONE = { earned: 'good', 'on-track': 'ok', behind: 'warn', unreachable: 'bad', missed: 'bad' };
+  function bonusGaugeView(plan) {
+    var p = plan || { items: [] };
+    var steps = (p.items || []).filter(function (it) { return it.id === 'first' || it.id === 'mid' || it.id === 'full'; });
+    var target = null;
+    for (var i = 0; i < steps.length; i++) { if (steps[i].state !== 'earned') { target = steps[i]; break; } }
+    var allDone = !target && steps.length > 0;
+    if (!target) target = steps[steps.length - 1] || null;
+    var days = Math.max(0, Number(p.days) || 0);
+    var need = target ? Math.max(1, Number(target.need) || 1) : 1;
+    var pct = Math.max(0, Math.min(100, Math.round((days / need) * 100)));
+    var projPct = p.settled ? null : Math.max(0, Math.min(100, Math.round(((Number(p.projected) || 0) / need) * 100)));
+    var state = allDone ? 'earned' : target ? target.state : 'none';
+    var headline;
+    if (!target) headline = 'אין יעד בונוס תפוסה ל' + (p.monthLabel || 'חודש זה');
+    else if (allDone) headline = p.settled ? 'כל בונוסי התפוסה הושגו ב' + p.monthLabel : 'כל בונוסי התפוסה כבר הושגו החודש!';
+    else if (p.settled) headline = target.title + ' לא הושג ב' + p.monthLabel;
+    else if (state === 'on-track') headline = 'בקצב הנכון ל' + target.title;
+    else if (state === 'behind') headline = 'צריך להאיץ כדי להגיע ל' + target.title;
+    else if (state === 'unreachable') headline = target.title + ' כבר לא אפשרי החודש';
+    else headline = target.title;
+    return {
+      pct: allDone ? 100 : pct,
+      projPct: allDone ? null : projPct,
+      tone: GAUGE_TONE[state] || 'ok',
+      stepTitle: target ? target.title : '',
+      valueText: fmtInt(days),
+      ofText: target ? 'מתוך ' + fmtInt(need) + ' ימי טיפול' : '',
+      headline: headline,
+      hint: allDone ? '' : (target && target.extra) || '',
+      chip: target ? (allDone ? STEP_CHIPS.earned : target.chip) : '',
+      earnedText: fmtCurrency(p.total || 0),
+      earnedLabel: p.totalLabel || ''
     };
   }
 
@@ -605,6 +730,8 @@
     currentMonthLine: currentMonthLine,
     houseHeroView: houseHeroView,
     bonusPlanView: bonusPlanView,
+    bonusGaugeView: bonusGaugeView,
+    bonusCalcView: bonusCalcView,
     STEP_CHIPS: STEP_CHIPS
   };
 }));

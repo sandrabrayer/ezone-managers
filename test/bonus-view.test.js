@@ -325,3 +325,93 @@ test('winnersBannerView: an intake-only manager is a winner; the intake amount i
   assert.equal(v.winners[1].total, 2550);
   assert.equal(v.winners[1].text, 'זכאי · מדרגה 1 · 2,000 ₪ · בונוס הפניות 300 ₪ · פגישות קליטה 250 ₪');
 });
+
+/* ---- Dashboard gauge (14 Oct 2026) ---- */
+const gaugeFor = (o) => BV.bonusGaugeView(BV.bonusPlanView(Object.assign({ key: 'ramot', ym: '2026-10', capacity: 20, referralState: 'ok' }, o)));
+
+test('gauge: running month points at the first bonus — progress, projection, behind tone, hint', () => {
+  const g = gaugeFor({ settled: false, daysSoFar: 175, elapsedDays: 14, treatmentDays: 175, avgDaily: 12.5 });
+  assert.equal(g.stepTitle, 'בונוס ראשון');
+  assert.equal(g.pct, 40);            // 175 / 434
+  assert.equal(g.projPct, 89);        // 12.5 × 31 = 388 / 434
+  assert.equal(g.tone, 'warn');
+  assert.equal(g.valueText, '175');
+  assert.equal(g.ofText, 'מתוך 434 ימי טיפול');
+  assert.equal(g.headline, 'צריך להאיץ כדי להגיע לבונוס ראשון');
+  assert.match(g.hint, /נשארו 17 ימים/);
+  assert.match(g.earnedLabel, /שכבר הושג — אוקטובר 2026/);
+});
+
+test('gauge: on track → ok tone; first earned → the dial moves to the higher step', () => {
+  const ok = gaugeFor({ settled: false, daysSoFar: 210, elapsedDays: 14, treatmentDays: 210, avgDaily: 15 });
+  assert.equal(ok.tone, 'ok');
+  assert.equal(ok.headline, 'בקצב הנכון לבונוס ראשון');
+  const plan = BV.bonusPlanView({ key: 'ramot', ym: '2026-10', capacity: 20, settled: false, daysSoFar: 450, elapsedDays: 25, treatmentDays: 450, avgDaily: 18, referralState: 'ok' });
+  const next = plan.items.find((it) => it.id !== 'first' && (it.id === 'mid' || it.id === 'full'));
+  const g = BV.bonusGaugeView(plan);
+  if (next) {
+    assert.equal(g.stepTitle, next.title);
+    assert.ok(g.pct < 100);
+  } else {
+    assert.equal(g.pct, 100);
+    assert.equal(g.tone, 'good');
+  }
+});
+
+test('gauge: a settled month has no projection line and says the result plainly', () => {
+  const g = gaugeFor({ settled: true, treatmentDays: 344, avgDaily: 11.5, ym: '2026-09' });
+  assert.equal(g.projPct, null);
+  assert.equal(g.tone, 'bad');
+  assert.equal(g.pct, 67);   // 344 / 510 (September: 17 × 30)
+  assert.equal(g.headline, 'בונוס ראשון לא הושג בספטמבר 2026');
+  assert.equal(g.earnedLabel, 'סה״כ לתשלום — ספטמבר 2026');
+});
+
+test('gauge: pct is clamped to 0..100 and an empty plan never throws', () => {
+  const g = BV.bonusGaugeView(BV.bonusPlanView({ key: 'ramot', ym: '2026-10', capacity: 20, settled: false, daysSoFar: 99999, elapsedDays: 31, treatmentDays: 99999, avgDaily: 20, referralState: 'ok' }));
+  assert.ok(g.pct >= 0 && g.pct <= 100);
+  const empty = BV.bonusGaugeView(null);
+  assert.equal(empty.pct, 0);
+  assert.equal(empty.tone, 'ok');
+});
+
+/* ---- «מה אם?» calculator (14 Oct 2026) ---- */
+const calcCtx = () => BV.bonusPlanView({ key: 'ramot', ym: '2026-10', settled: false, capacity: 20, daysSoFar: 175, elapsedDays: 14,
+  treatmentDays: 175, avgDaily: 12.5, referralState: 'ok', intake: { confirmed: 0, pending: 3, unit: 250, total: 0 } }).calc;
+
+test('calculator: the running plan carries its starting point; a settled plan has none', () => {
+  assert.deepEqual(calcCtx(), { key: 'ramot', ym: '2026-10', capacity: 20, daysSoFar: 175, elapsedDays: 14, intake: { confirmed: 0, pending: 3 }, referralCount: 0 });
+  assert.equal(BV.bonusPlanView({ key: 'ramot', ym: '2026-09', settled: true, capacity: 20, treatmentDays: 344, avgDaily: 11.5, referralState: 'ok' }).calc, null);
+  assert.equal(BV.bonusCalcView(null, {}), null);
+});
+
+test('calculator: today\'s pace misses the first bonus; it names the patients per day that reach it', () => {
+  const v = BV.bonusCalcView(calcCtx(), { perDay: 13 });
+  assert.equal(v.projectedDays, 175 + 17 * 13);
+  assert.equal(v.occupancy, 0);
+  assert.equal(v.intake, 750, '3 pending meetings × 250 (they count once they complete 30 days)');
+  assert.equal(v.total, 750);
+  assert.equal(v.tip, 'עם 16 מטופלים ליום עד סוף החודש מגיעים לבונוס ראשון (2,000 ₪)');
+  assert.match(v.pendingNote, /3 פגישות שממתינות/);
+});
+
+test('calculator: all bonuses together — occupancy step by the SAME rule as the boxes, plus intake and referral', () => {
+  const v = BV.bonusCalcView(calcCtx(), { perDay: 16, extraIntake: 2, extraReferral: 1 });
+  assert.equal(v.projectedDays, 447);
+  assert.equal(v.occupancy, 2000);
+  assert.equal(v.intake, 1250);
+  assert.equal(v.referral, 300);
+  assert.equal(v.total, 3550);
+  assert.equal(v.totalText, '3,550 ₪');
+  assert.deepEqual(v.lines.map((l) => l.k), ['occupancy', 'intake', 'referral']);
+  // Full occupancy (20 × 31 = 620) is out of reach even at capacity.
+  assert.equal(v.tip, 'מגיעים לבונוס ראשון ✓ · בונוס תפוסה מלאה כבר לא אפשרי החודש, גם בבית מלא');
+});
+
+test('calculator: inputs are clamped (0..capacity, 0..20) and never NaN', () => {
+  const v = BV.bonusCalcView(calcCtx(), { perDay: 999, extraIntake: -5, extraReferral: 'x' });
+  assert.equal(v.perDay, 20);
+  assert.equal(v.intake, 750);
+  assert.equal(v.referral, 0);
+  assert.ok(Number.isFinite(v.total));
+});

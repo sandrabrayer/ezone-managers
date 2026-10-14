@@ -1,7 +1,7 @@
 # Access — a personal code per person (13 Oct 2026)
 
 **Replaces the open-app model of 12 Sep 2026.** The Managers app became a work
-tool holding family-call notes, private staff conversations, unusual events
+tool holding private staff conversations, unusual events
 and (stage 3) manpower costs, so Sandra decided: every person logs in with
 their own code.
 
@@ -13,8 +13,16 @@ their own code.
 
 ## How it works
 
+- **Login = username + personal code (14 Oct 2026).** Both must belong to the same person.
+  - The username is the person's `name` in `MANAGER_ACCESS` (for example «אורן»). An optional
+    Latin `user` (3–20 characters of a-z 0-9 . _ -) also works.
+  - Case and surrounding spaces are ignored, and usernames must be unique.
+  - A wrong pair always gets the same answer («שם משתמש או קוד שגויים»), so a failed login
+    never tells which part was wrong.
+
 - **Codes** live in the Railway variable `MANAGER_ACCESS` (JSON):
-  `[{"id":"person-oran","code":"…","name":"אורן","house":"ramot"}, {"id":"person-sandra","code":"…","name":"סנדרה","role":"admin"}, …]`.
+  `[{"id":"person-oran","code":"…","name":"אורן","house":"ramot"}, {"id":"person-sandra","code":"…","name":"סנדרה","user":"sandra","role":"admin"}, …]`.
+  (`user` is optional).
   Codes: 6–12 digits, unique. Every person also needs a unique immutable `id`
   (3–64 ASCII letters/digits, `_` or `-`, starting with a letter/digit).
   Keep the ID when changing a name or code; never reassign it to another person. Validated at start-up; anything odd stops the process
