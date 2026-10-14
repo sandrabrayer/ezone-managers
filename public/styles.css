@@ -1691,3 +1691,30 @@ body.is-locked { overflow: hidden; }
   .wk-form { grid-template-columns: 1fr; }
   .user-chip #userName { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+/* Work tool stage 2 — team, shifts, therapists */
+.wk-shifts li { justify-content: flex-start; flex-wrap: wrap; }
+.wk-shift {
+  flex: 0 0 auto;
+  min-width: 52px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #FBCFE8;
+  background: rgba(236, 72, 153, 0.14);
+  border-radius: 999px;
+  padding: 2px 10px;
+  text-align: center;
+}
+.wk-shifts .wk-name { flex: 1 1 auto; }
+.wk-ther-week .wk-list li { justify-content: flex-start; flex-wrap: wrap; }
+.wk-ther-week .wk-meta { margin-inline-start: auto; }
+.wk-tel {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: #93C5FD;
+  text-decoration: none;
+  direction: ltr;
+  white-space: nowrap;
+}
+.wk-staff .wk-list li, .wk-ther .wk-list li { flex-wrap: wrap; }
+.wk-stale { color: #FCD34D; margin: 12px 0 0; }

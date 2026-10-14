@@ -76,3 +76,73 @@ test('entryFromForm: only defined fields, trimmed and capped; missing required f
   assert.equal(r.entry.summary.length, 1000);
   assert.equal('extra' in r.entry, false);
 });
+
+/* ---- Stage 2: team + therapists (coordinators data via the Dashboard) ---- */
+const TEAM = {
+  available: true, stale: false, updatedAt: '2026-10-13T06:00:00.000Z',
+  today: [
+    { date: '2026-10-13', shift: 'לילה', guideName: 'גל', draft: false },
+    { date: '2026-10-13', shift: 'בוקר', guideName: 'אבי', draft: false },
+    { date: '2026-10-13', shift: 'בוקר', guideName: '<b>x</b>', draft: false }
+  ],
+  shifts: [
+    { date: '2026-10-13', shift: 'בוקר', guideName: 'אבי', draft: false },
+    { date: '2026-10-14', shift: 'ערב', guideName: 'רון ש', draft: true }
+  ],
+  staff: [
+    { name: 'אבי', kind: 'guide', role: 'מדריך/ה', phone: '0501234567', onLeave: false, workdays: [] },
+    { name: 'ד"ר כהן', kind: 'therapist', role: 'פסיכיאטר/ית', phone: 'javascript:alert(1)', onLeave: true, workdays: [0, 2] }
+  ],
+  therapistWeek: [
+    { dayOfWeek: 2, time: '10:00', therapistName: 'ד"ר כהן', patientName: 'דנה' },
+    { dayOfWeek: 0, time: '', therapistName: 'ד"ר כהן', patientName: '<script>' }
+  ]
+};
+const WITH_TEAM = Object.assign({}, DATA, { team: TEAM });
+
+test('team tab: today grouped by shift in order, escaped; the next days by date; draft marked', () => {
+  const h = W.teamHtml(WITH_TEAM);
+  assert.match(h, /במשמרת היום[\s\S]*<span class="wk-shift">בוקר<\/span><span class="wk-name">אבי, &lt;b&gt;x&lt;\/b&gt;<\/span>[\s\S]*<span class="wk-shift">לילה<\/span><span class="wk-name">גל/);
+  assert.ok(!h.includes('<b>x</b>'));
+  assert.match(h, /משמרות בשבועיים הקרובים[\s\S]*יום רביעי 14\/10\/26[\s\S]*ערב<\/span><span class="wk-name">רון ש<\/span><span class="wk-meta">טיוטה/);
+  assert.ok(!/יום שלישי 13\/10\/26/.test(h), 'today is not repeated in the next-days list');
+});
+
+test('team tab: staff list split by role; tel: links only for a valid phone', () => {
+  const h = W.teamHtml(WITH_TEAM);
+  assert.match(h, /עובדי הבית \(2\)[\s\S]*מדריכים \(1\)[\s\S]*מטפלים \(1\)/);
+  assert.match(h, /href="tel:0501234567"/);
+  assert.ok(!h.includes('javascript:'), 'never a non-tel link');
+  assert.match(h, /פסיכיאטר\/ית · בחופשה/);
+  assert.equal(W.telHref('0501234567'), 'tel:0501234567');
+  assert.equal(W.telHref('+972501234567'), '');
+});
+
+test('therapists tab: workdays in Hebrew, weekly visits by day, untimed shown honestly, escaped', () => {
+  const h = W.therapistsHtml(WITH_TEAM);
+  assert.match(h, /מטפלים בבית \(1\)[\s\S]*ד&quot;ר כהן[\s\S]*ימי עבודה: ראשון, שלישי · בחופשה/);
+  assert.match(h, /יום ראשון[\s\S]*ללא שעה[\s\S]*עם &lt;script&gt;[\s\S]*יום שלישי[\s\S]*10:00/);
+  assert.ok(!h.includes('<script>'));
+});
+
+test('team / therapists: not connected, unreadable, an old backend (no team) → an honest message, never an empty list', () => {
+  const nc = Object.assign({}, DATA, { team: { available: false, reason: 'not_configured' } });
+  assert.match(W.teamHtml(nc), /עוד לא מחוברים/);
+  assert.match(W.therapistsHtml(nc), /עוד לא מחוברים/);
+  assert.match(W.teamHtml(Object.assign({}, DATA, { team: { available: false, reason: 'unreadable' } })), /לא הצלחנו לקרוא/);
+  assert.match(W.teamHtml(DATA), /עוד לא מחוברים/);
+  assert.ok(!/במשמרת היום/.test(W.teamHtml(nc)));
+});
+
+test('team: stale data carries a visible warning; fresh data none', () => {
+  assert.ok(!W.teamHtml(WITH_TEAM).includes('wk-stale'));
+  const stale = Object.assign({}, DATA, { team: Object.assign({}, TEAM, { stale: true }) });
+  assert.match(W.teamHtml(stale), /wk-stale[\s\S]*לא התעדכנו לאחרונה/);
+});
+
+test('staff-talk form offers the house staff as suggestions (escaped)', () => {
+  const d = Object.assign({}, DATA, { team: Object.assign({}, TEAM, { staff: TEAM.staff.concat([{ name: '"><img>', kind: 'guide', role: '', phone: '', workdays: [] }]) }) });
+  const h = W.formHtml('staffTalks', d, d.today);
+  assert.match(h, /<datalist id="wk-staffTalks-employeeName-list"><option value="אבי">/);
+  assert.ok(!h.includes('"><img>'));
+});

@@ -3,6 +3,29 @@
 
 ## Unreleased
 
+### Added — work tool, stage 2: team, shifts and therapists (October 14, 2026)
+
+**What:** two new house tabs.
+- **צוות ומשמרות:**
+  - who is on shift today, grouped בוקר / ערב / לילה;
+  - shifts for the next 14 days, with draft schedules marked «טיוטה»;
+  - the house staff, guides and therapists, with a tap-to-call phone.
+- **מטפלים:** therapists with their workdays and «בחופשה», and the weekly visit schedule by day
+  (untimed visits show «ללא שעה»).
+- The staff-talks form now suggests the house staff names.
+
+**Why:** Sandra, 13 Oct: managers should see the therapists, the coordinators' schedules, the
+staff list and who is on shift today.
+
+**How:** the data comes from the coordinators app. Its ManagersHouse digest
+(ezone-coordinators #270) is read by the Dashboard `managersWork` `houseData` → `team`
+(E-Zone-Dashboard #224). The managers server is unchanged: no new endpoint, env var or secret.
+Every value is escaped. Phones become `tel:` links only when they are a valid Israeli number.
+Not connected, unreadable or stale data shows an honest message, never an empty list.
+SW v19 → v20.
+
+**Tests:** 237 → 243 (+6 in `test/work-view.test.js`). Also checked at 390 px in Chromium.
+
 ### Added — work tool, stage 1: personal-code login + house work tabs (October 13, 2026)
 
 **What** (Sandra, 13 Oct 2026 — "not only bonuses: a work tool, like the
