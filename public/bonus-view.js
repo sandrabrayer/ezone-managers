@@ -376,6 +376,8 @@
       : 0;
 
     var items = [];
+    var calcIntake = { confirmed: 0, pending: 0 };
+    var calcReferral = 0;
     var prevAmount = 0;
     tiers.forEach(function (t, i) {
       var need = Math.max(gate, Math.ceil(t.patients * dim));
@@ -433,6 +435,7 @@
     // Intake meetings — 250 ₪ per meeting (from Oct 2026).
     if (BE.intakeEnabled && BE.intakeEnabled(ym)) {
       var ib = opts.intake || BE.intakeMeetingAmount(null, ym);
+      calcIntake = { confirmed: ib.confirmed || 0, pending: ib.pending || 0 };
       var iState = ib.total > 0 ? 'earned' : ib.pending > 0 ? 'pending' : 'none';
       var iParts = [];
       if (ib.confirmed > 0) iParts.push(fmtInt(ib.confirmed) + ' ' + (ib.confirmed === 1 ? 'פגישה עומדת' : 'פגישות עומדות') + ' בתנאים = ' + fmtCurrency(ib.total));
@@ -456,6 +459,7 @@
       var rState = opts.referralState || 'ok';
       var rb = opts.referral || BE.continuityAmount(null, false, ym);
       var known = rState === 'ok';
+      if (known) calcReferral = rb.payableCount || 0;
       var rStatus;
       if (rState === 'loading') rStatus = 'טוען נתונים…';
       else if (rState === 'error') rStatus = 'שגיאה בטעינת הנתונים' + (opts.referralError ? ': ' + opts.referralError : '');
@@ -506,7 +510,80 @@
       settled: settled,
       monthLabel: label,
       days: days,
-      projected: projected
+      projected: projected,
+      // What the «מה אם?» calculator starts from (running month only).
+      calc: settled ? null : { key: key, ym: ym, capacity: cap, daysSoFar: days, elapsedDays: elapsed,
+        intake: calcIntake, referralCount: calcReferral }
+    };
+  }
+
+  /* ── «מה אם?» bonus calculator (14 Oct 2026) ─────────────── */
+  /**
+   * Plays the month forward with the manager's own numbers, by the SAME
+   * step rule as the bonus boxes (a step is met when the month's treatment
+   * days reach max(gate, patients × days in month)).
+   * c: plan.calc; o: { perDay, extraIntake, extraReferral }
+   * out: { perDay, perDayMax, projectedDays, occupancy, intake, referral,
+   *        total, lines:[{k,label,amountText}], totalText, tip }
+   */
+  function bonusCalcView(c, o) {
+    if (!c) return null;
+    var opts = o || {};
+    var ym = c.ym;
+    var dim = daysInMonth(ym);
+    var cap = Number(c.capacity) > 0 ? Number(c.capacity) : 0;
+    var elapsed = Math.max(1, Math.min(dim, Number(c.elapsedDays) || 1));
+    var remaining = Math.max(0, dim - elapsed);
+    var done = Math.max(0, Number(c.daysSoFar) || 0);
+    var perDayMax = cap || 30;
+    var perDay = Math.max(0, Math.min(perDayMax, Math.round(Number(opts.perDay) || 0)));
+    var extraIntake = Math.max(0, Math.min(20, Math.round(Number(opts.extraIntake) || 0)));
+    var extraReferral = Math.max(0, Math.min(20, Math.round(Number(opts.extraReferral) || 0)));
+    var projectedDays = done + remaining * perDay;
+
+    var tiers = tiersAscFor(c.key, ym);
+    var gate = tiers[0] ? tiers[0].patients * (BE.GATE_DAYS_FACTOR || 30) : 0;
+    var met = null, next = null;
+    tiers.forEach(function (t, i) {
+      var need = Math.max(gate, Math.ceil(t.patients * dim));
+      var isFull = cap > 0 && t.patients >= cap;
+      var title = i === 0 ? 'בונוס ראשון' : isFull ? 'בונוס תפוסה מלאה' : 'בונוס ביניים';
+      if (projectedDays >= need) met = { amount: t.amount, title: title };
+      else if (!next) next = { need: need, title: title, amount: t.amount };
+    });
+    var occupancy = met ? met.amount : 0;
+
+    var iu = BE.intakeEnabled && BE.intakeEnabled(ym) ? BE.intakeMeetingAmount(null, ym).unit : 0;
+    var intakeCount = (c.intake ? (c.intake.confirmed || 0) + (c.intake.pending || 0) : 0) + extraIntake;
+    var intake = iu * intakeCount;
+    var ru = BE.continuityEnabled && BE.continuityEnabled(ym) ? (BE.continuityAmount({ starts: 1 }, true, ym).unitRate || 0) : 0;
+    var refCount = (Number(c.referralCount) || 0) + extraReferral;
+    var referral = ru * refCount;
+    var total = occupancy + intake + referral;
+
+    var lines = [{ k: 'occupancy', label: met ? 'בונוס תפוסה — ' + met.title : 'בונוס תפוסה — לא מגיעים', amountText: fmtCurrency(occupancy) }];
+    if (iu) lines.push({ k: 'intake', label: 'פגישות קליטה — ' + fmtInt(intakeCount) + ' × ' + fmtCurrency(iu), amountText: fmtCurrency(intake) });
+    if (ru) lines.push({ k: 'referral', label: 'המשך טיפול — ' + fmtInt(refCount) + ' × ' + fmtCurrency(ru), amountText: fmtCurrency(referral) });
+
+    var tip = '';
+    if (next && remaining > 0) {
+      var perDayNeed = Math.ceil((next.need - done) / remaining);
+      tip = (met ? 'מגיעים ל' + met.title + ' ✓ · ' : '') + (perDayNeed > perDayMax
+        ? next.title + ' כבר לא אפשרי החודש, גם בבית מלא'
+        : 'עם ' + fmtInt(perDayNeed) + ' מטופלים ליום עד סוף החודש מגיעים ל' + next.title + ' (' + fmtCurrency(next.amount) + ')');
+    } else if (!next && tiers.length) {
+      tip = 'בקצב הזה מגיעים לכל בונוסי התפוסה!';
+    }
+    return {
+      perDay: perDay, perDayMax: perDayMax, remaining: remaining,
+      perDayLabel: fmtInt(perDay) + ' מטופלים בכל יום ב-' + fmtInt(remaining) + ' הימים שנשארו',
+      projectedDays: projectedDays,
+      projectedText: 'סה״כ ' + fmtInt(projectedDays) + ' ימי טיפול ב' + monthLabel(ym),
+      occupancy: occupancy, intake: intake, referral: referral, total: total,
+      lines: lines,
+      totalText: fmtCurrency(total),
+      tip: tip,
+      pendingNote: c.intake && c.intake.pending ? 'כולל ' + fmtInt(c.intake.pending) + ' פגישות שממתינות להשלמת 30 יום' : ''
     };
   }
 
@@ -654,6 +731,7 @@
     houseHeroView: houseHeroView,
     bonusPlanView: bonusPlanView,
     bonusGaugeView: bonusGaugeView,
+    bonusCalcView: bonusCalcView,
     STEP_CHIPS: STEP_CHIPS
   };
 }));

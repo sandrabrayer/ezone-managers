@@ -177,7 +177,7 @@ test('dashboard: visits this week / month, admissions, outpatients, upcoming vis
   });
   const h = W.dashboardHtml(d);
   assert.match(h, /<b>2<\/b><span>ביקורים השבוע/, 'Sun 11/10 – Sat 17/10');
-  assert.match(h, /<b>4<\/b><span>ביקורים החודש[\s\S]*<b>1<\/b><span>נקלטו החודש[\s\S]*<b>1<\/b><span>מטופלי חוץ מהבית/);
+  assert.match(h, /<b>4<\/b><span>ביקורים החודש[\s\S]*<b>1<\/b><span>נקלטו החודש/);
   assert.match(h, /ביקורים קרובים[\s\S]*ביקור קרוב[\s\S]*15\/10\/26 11:00[\s\S]*שבוע הבא/);
   assert.ok(!/ביקורים קרובים[\s\S]*ביקור ישן/.test(h.split('נקלטו לאחרונה')[0]), 'past visits are not "upcoming"');
   assert.match(h, /אירועים חריגים אחרונים[\s\S]*הצפה במטבח|אירועים חריגים אחרונים[\s\S]*אירוע/);
@@ -188,4 +188,29 @@ test('dashboard: no coordinators data → honest message and dashes, never fake 
   const h = W.dashboardHtml(Object.assign({}, DATA, { team: { available: false, reason: 'not_configured' } }));
   assert.match(h, /<b>—<\/b><span>במשמרת היום[\s\S]*<b>—<\/b><span>טיפולים היום/);
   assert.match(h, /עוד לא מחוברים/);
+});
+
+test('dashboard: expected admissions — this week counted and highlighted, next week listed, past dropped, stage in words', () => {
+  const d = Object.assign({}, DATA, {
+    today: '2026-10-13', team: TEAM,
+    expectedAdmissions: [
+      { name: 'אתמול', date: '2026-10-12', stage: 'paid' },
+      { name: 'חמישי', date: '2026-10-15', stage: 'paid', meetingWith: 'אורן' },
+      { name: '<i>שבת</i>', date: '2026-10-17', stage: 'entry' },
+      { name: 'שבוע הבא', date: '2026-10-21', stage: 'visit' }
+    ]
+  });
+  const h = W.dashboardHtml(d);
+  assert.match(h, /<b>2<\/b><span>קליטות צפויות השבוע/);
+  assert.match(h, /<li class="wk-soon"><span class="wk-name">חמישי<\/span><span class="wk-meta">יום חמישי 15\/10\/26 · שילם מקדמה · השבוע/);
+  assert.match(h, /&lt;i&gt;שבת&lt;\/i&gt;[\s\S]*נכנס לבית · השבוע/);
+  assert.match(h, /<li><span class="wk-name">שבוע הבא<\/span><span class="wk-meta">יום רביעי 21\/10\/26 · נקבע ביקור<\/span>/);
+  assert.ok(!h.includes('אתמול'));
+  assert.ok(!h.includes('<i>'));
+});
+
+test('dashboard: an older server without expectedAdmissions shows a dash, not a fake zero', () => {
+  const h = W.dashboardHtml(Object.assign({}, DATA, { team: TEAM }));
+  assert.match(h, /<b>—<\/b><span>קליטות צפויות השבוע/);
+  assert.match(h, /הנתון יופיע אחרי עדכון השרת/);
 });

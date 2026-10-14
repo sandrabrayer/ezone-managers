@@ -1832,3 +1832,25 @@ body.is-locked { overflow: hidden; }
 @media (max-width: 520px) {
   .dash-tiles { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Expected admissions this week — highlighted */
+.wk-list li.wk-soon { background: rgba(16, 185, 129, 0.16); border-radius: var(--r-sm); padding-inline: 8px; }
+
+/* «מה אם?» calculator inside the dial card */
+.calc { margin-top: 16px; padding: 14px; border-radius: var(--r-md); text-align: start;
+  background: linear-gradient(160deg, rgba(139, 92, 246, 0.34), rgba(59, 130, 246, 0.18)); border: 1px solid rgba(167, 139, 250, 0.55); }
+.calc-title { font-family: 'Frank Ruhl Libre', serif; font-weight: 700; font-size: 18px; margin-bottom: 8px; color: #DDD6FE; }
+.calc-row { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; font-size: 14px; }
+.calc-row b { color: #FDE68A; font-size: 16px; }
+.calc-row input[type="range"] { width: 100%; accent-color: #FBBF24; direction: rtl; height: 28px; }
+.calc-proj { font-size: 13px; color: var(--text-mute); margin-top: 4px; }
+.calc-lines { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.calc-line { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; padding: 6px 10px; border-radius: var(--r-sm); background: rgba(0, 0, 0, 0.2); }
+.cl-occupancy { border-inline-start: 4px solid #F59E0B; }
+.cl-intake { border-inline-start: 4px solid #3B82F6; }
+.cl-referral { border-inline-start: 4px solid #A78BFA; }
+.calc-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; font-weight: 700; }
+.calc-total strong { font-family: 'Frank Ruhl Libre', serif; font-size: 30px; color: var(--gold); text-shadow: 0 0 14px var(--gold-glow); }
+.calc-tip { margin-top: 8px; font-size: 14px; font-weight: 600; color: #A7F3D0; }
+.calc-tip:empty, .calc-note:empty { display: none; }
+.calc-note { margin-top: 4px; font-size: 12px; color: var(--text-mute); }

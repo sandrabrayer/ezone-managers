@@ -70,7 +70,9 @@ house; Sandra and Ron see all. Each house has sub-tabs — בונוסים, מט�
 
 Dashboard (14 Oct 2026):
 - Each house opens on «ראשי», which shows:
-  - a bonus dial (`BonusView.bonusGaugeView`);
+  - a bonus dial (`BonusView.bonusGaugeView`) with a «מה אם?» calculator
+    (`BonusView.bonusCalcView`);
+  - expected admissions this week and over the next 14 days;
   - today in the house (on shift, therapy sessions, reminders);
   - visits and admissions this week and month;
   - the latest unusual events.
