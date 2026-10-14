@@ -3,6 +3,31 @@
 
 ## Unreleased
 
+### Added — expected admissions + «מה אם?» bonus calculator on the dashboard (October 14, 2026)
+
+**What** (Sandra, 14 Oct: expected admissions this week, and a bonus calculator that plays all
+the bonuses together, in the same box as the dial):
+- **Bonus calculator** inside the dial card, with three sliders:
+  - patients per day from now to the end of the month (starts at today's pace);
+  - more intake meetings;
+  - more patients moving to day treatment.
+
+  It shows the treatment days the month would reach, each bonus line (occupancy step, intake
+  × 250 ₪, continued treatment × 300 ₪), the total, and a tip (for example «עם 16 מטופלים ליום
+  … מגיעים לבונוס ראשון»). Running month only.
+- **Expected admissions:** a «קליטות צפויות השבוע» tile and a list of the next 14 days. Each
+  entry shows the stage in words, and this week's entries are highlighted. The data is the
+  Dashboard `houseData.expectedAdmissions` (E-Zone-Dashboard #226). An older server shows «—».
+  The «מטופלי חוץ מהבית» tile moved off the dashboard; the outpatients list is still in
+  «מטופלים».
+
+**How:** `BonusView.bonusCalcView` uses the same step rule as the bonus boxes and the
+month-aware rule sets. `bonusPlanView` now also returns `calc` (its starting point, running month
+only). `app.js` only wires the sliders and writes `textContent`. SW v22 → v23.
+
+**Tests:** 253 → 259 (calculator: starting point, today's pace, all together, clamping;
+expected admissions: this week, next week, past and old server).
+
 ### Added — manager dashboard, colour pass, family calls removed (October 14, 2026)
 
 **What** (Sandra, 14 Oct: a dashboard per manager with a bonus dial; what is happening in the

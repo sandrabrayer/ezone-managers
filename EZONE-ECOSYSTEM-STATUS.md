@@ -370,6 +370,8 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   - visits and admissions;
   - the latest events.
 - «שיחות משפחה» was removed on Oct 14, 2026.
+- The dashboard also has a «מה אם?» bonus calculator (all bonuses together) and expected
+  admissions (Dashboard `houseData.expectedAdmissions`, open leads, next 14 days).
 - Each tab and bonus box has its own colour.
 - Next: stage 3 (manpower cost from staffing).
 

@@ -48,6 +48,7 @@
     }
   };
   var LOG_LABEL = { staffTalks: 'שיחה עם עובד/ת', events: 'אירוע חריג' };
+  var STAGE_LABELS = { new: 'ליד', visit: 'נקבע ביקור', paid: 'שילם מקדמה', entry: 'נכנס לבית', waitlist: 'רשימת המתנה' };
   var OUTCOME_LABELS = { not_relevant: 'לא רלוונטי', thinking: 'חושבים על זה', entered: 'נכנסים לטיפול', postponed: 'נדחה', cancelled: 'התבטל' };
 
   function esc(s) {
@@ -226,6 +227,8 @@
       var ka = a.date + (a.time || ''), kb = b.date + (b.time || ''); return ka < kb ? -1 : ka > kb ? 1 : 0;
     }).slice(0, 5);
     var events = ((d.logs && d.logs.events) || []).slice(0, 3);
+    var expected = (d.expectedAdmissions || []).filter(function (x) { return x && x.date && x.date >= today; });
+    var expectedWeek = expected.filter(function (x) { return weekEnd && x.date <= weekEnd; });
 
     var h = '<div class="card dash-card dash-today"><div class="card-title">היום בבית — יום ' + esc(WEEKDAYS[wd] || '') + ' ' + esc(fmtDate(today)) + '</div>';
     h += '<div class="dash-tiles">' +
@@ -251,9 +254,19 @@
     h += '<div class="card dash-card dash-month"><div class="card-title">ביקורים וקליטות</div>';
     h += '<div class="dash-tiles">' +
       tile('t-pink', weekVisits.length, 'ביקורים השבוע') +
+      tile('t-green', d.expectedAdmissions ? expectedWeek.length : '—', 'קליטות צפויות השבוע') +
       tile('t-blue', visits.length, 'ביקורים החודש') +
-      tile('t-green', adm.length, 'נקלטו החודש') +
-      tile('t-violet', outs.length, 'מטופלי חוץ מהבית') + '</div>';
+      tile('t-violet', adm.length, 'נקלטו החודש') + '</div>';
+    h += '<div class="card-subtitle">קליטות צפויות (שבועיים קרובים)</div>' + (!d.expectedAdmissions
+      ? '<div class="wk-empty">הנתון יופיע אחרי עדכון השרת</div>'
+      : expected.length
+        ? '<ul class="wk-list">' + expected.slice(0, 8).map(function (x) {
+          var thisWeek = weekEnd && x.date <= weekEnd;
+          return '<li' + (thisWeek ? ' class="wk-soon"' : '') + '><span class="wk-name">' + esc(x.name) + '</span><span class="wk-meta">' +
+            esc((WEEKDAYS[weekdayOf(x.date)] ? 'יום ' + WEEKDAYS[weekdayOf(x.date)] + ' ' : '') + fmtDate(x.date)) +
+            (STAGE_LABELS[x.stage] ? ' · ' + esc(STAGE_LABELS[x.stage]) : '') + (thisWeek ? ' · השבוע' : '') + '</span></li>';
+        }).join('') + '</ul>'
+        : '<div class="wk-empty">אין קליטות מתוכננות בשבועיים הקרובים</div>');
     h += '<div class="card-subtitle">ביקורים קרובים</div>' + (upcoming.length
       ? '<ul class="wk-list">' + upcoming.map(function (v) {
         return '<li><span class="wk-name">' + esc(v.name) + '</span><span class="wk-meta">' + esc(fmtDate(v.date)) +

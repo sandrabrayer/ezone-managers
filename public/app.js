@@ -2410,7 +2410,78 @@ function renderBonusGauge_(panel, plan) {
     ${g.hint ? `<div class="gauge-hint">${e(g.hint)}</div>` : ''}
     ${g.projPct != null ? '<div class="gauge-legend"><span class="gl-proj"></span> הקו הלבן = לאן תגיעו בקצב הנוכחי</div>' : ''}
     <div class="gauge-earned"><span>${e(g.earnedLabel)}</span><strong>${e(g.earnedText)}</strong></div>
+    ${plan.calc && BVg.bonusCalcView ? calcShellHtml_(plan.calc) : ''}
     <button type="button" class="dash-go" data-go-sub="bonus">לכל פרטי הבונוסים ←</button>`;
+  host._calcCtx = plan.calc || null;
+  if (plan.calc && BVg.bonusCalcView) updateCalc_(host);
+  if (!host.getAttribute('data-calc-wired')) {
+    host.setAttribute('data-calc-wired', '1');
+    host.addEventListener('input', (ev) => {
+      if (ev.target && ev.target.closest && ev.target.closest('[data-calc]')) updateCalc_(host);
+    });
+  }
+}
+
+/* «מה אם?» — the sliders start at today's pace; every figure comes from
+ * BonusView.bonusCalcView (same step rule as the bonus boxes). */
+function calcShellHtml_(ctx) {
+  const elapsed = Math.max(1, Number(ctx.elapsedDays) || 1);
+  const pace = Math.round((Number(ctx.daysSoFar) || 0) / elapsed);
+  const max = Number(ctx.capacity) > 0 ? Number(ctx.capacity) : 30;
+  return `
+    <div class="calc" data-calc>
+      <div class="calc-title">🎮 מחשבון בונוס — מה אם?</div>
+      <label class="calc-row">
+        <span>מטופלים ליום מעכשיו ועד סוף החודש: <b data-calc-out="perDay">${Math.min(max, pace)}</b></span>
+        <input type="range" min="0" max="${max}" step="1" value="${Math.min(max, pace)}" data-calc-in="perDay" aria-label="מטופלים ליום עד סוף החודש">
+      </label>
+      <label class="calc-row">
+        <span>עוד פגישות קליטה (המטופל ה-7 ומעלה): <b data-calc-out="extraIntake">0</b></span>
+        <input type="range" min="0" max="10" step="1" value="0" data-calc-in="extraIntake" aria-label="פגישות קליטה נוספות">
+      </label>
+      <label class="calc-row">
+        <span>עוד מטופלים שיעברו לטיפול יום: <b data-calc-out="extraReferral">0</b></span>
+        <input type="range" min="0" max="10" step="1" value="0" data-calc-in="extraReferral" aria-label="מטופלים נוספים בטיפול יום">
+      </label>
+      <div class="calc-proj" data-calc-proj></div>
+      <ul class="calc-lines" data-calc-lines></ul>
+      <div class="calc-total"><span>סה״כ בונוס צפוי</span><strong data-calc-total>—</strong></div>
+      <div class="calc-tip" data-calc-tip></div>
+      <div class="calc-note" data-calc-note></div>
+    </div>`;
+}
+
+function updateCalc_(host) {
+  const BVg = typeof window !== 'undefined' ? window.BonusView : null;
+  const ctx = host._calcCtx;
+  if (!ctx || !BVg || !BVg.bonusCalcView) return;
+  const val = (k) => {
+    const el = host.querySelector(`[data-calc-in="${k}"]`);
+    return el ? Number(el.value) : 0;
+  };
+  const v = BVg.bonusCalcView(ctx, { perDay: val('perDay'), extraIntake: val('extraIntake'), extraReferral: val('extraReferral') });
+  if (!v) return;
+  const set = (sel, text) => { const el = host.querySelector(sel); if (el) el.textContent = text; };
+  set('[data-calc-out="perDay"]', String(v.perDay));
+  set('[data-calc-out="extraIntake"]', String(val('extraIntake')));
+  set('[data-calc-out="extraReferral"]', String(val('extraReferral')));
+  set('[data-calc-proj]', v.projectedText);
+  set('[data-calc-total]', v.totalText);
+  set('[data-calc-tip]', v.tip);
+  set('[data-calc-note]', v.pendingNote);
+  const ul = host.querySelector('[data-calc-lines]');
+  if (ul) {
+    ul.textContent = '';
+    v.lines.forEach((ln) => {
+      const li = document.createElement('li');
+      li.className = `calc-line cl-${ln.k}`;
+      const a = document.createElement('span'); a.textContent = ln.label;
+      const b = document.createElement('b'); b.textContent = ln.amountText;
+      li.appendChild(a);
+      li.appendChild(b);
+      ul.appendChild(li);
+    });
+  }
 }
 
 /* Activity log row: date + name, exactly as the feed supplies them.
