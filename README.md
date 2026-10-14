@@ -68,6 +68,14 @@ house; Sandra and Ron see all. Each house has sub-tabs — בונוסים, מט�
 (patients, outpatients, visits and admissions this month), שיחות משפחה,
 שיחות עם עובדים (private), אירועים חריגים — with follow-up reminders.
 
+Dashboard (14 Oct 2026):
+- Each house opens on «ראשי», which shows:
+  - a bonus dial (`BonusView.bonusGaugeView`);
+  - today in the house (on shift, therapy sessions, reminders);
+  - visits and admissions this week and month;
+  - the latest unusual events.
+- «שיחות משפחה» was removed.
+
 Stage 2 (14 Oct 2026) adds two more house sub-tabs:
 - **צוות ומשמרות:** on shift today, the next 14 days, and the staff with tap-to-call phones.
 - **מטפלים:** workdays and the weekly visits.

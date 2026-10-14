@@ -3,6 +3,35 @@
 
 ## Unreleased
 
+### Added — manager dashboard, colour pass, family calls removed (October 14, 2026)
+
+**What** (Sandra, 14 Oct: a dashboard per manager with a bonus dial; what is happening in the
+house today and this week; remove family calls; much more colour):
+- **New first house tab «ראשי» (dashboard):**
+  - **Bonus dial:** a gauge toward the next occupancy bonus still in play, plus a «לאן תגיעו
+    בקצב הנוכחי» projection line, a plain-words headline, what is needed until the end of the
+    month, and the total already earned. A link opens «בונוסים».
+  - **היום בבית:** patients in the house, on shift today, therapy sessions today and open
+    reminders, with the lists.
+  - **ביקורים וקליטות:** visits this week and this month, admissions, outpatients from the house,
+    upcoming visits and the latest admissions.
+  - **אירועים חריגים אחרונים.**
+- **«שיחות משפחה» removed:** the tab, the form and the reminders for it are gone, and
+  `/api/work` refuses that log. Rows already in the Dashboard sheet are kept.
+- **Colour:**
+  - each bonus box is filled in its own colour (amber, blue, violet, green);
+  - each sub-tab has its own colour, and its section's cards are tinted to match;
+  - the KPI tiles have four colours, and entries and exits are green and coral;
+  - the base background is slightly lighter.
+
+**How:** the dial's wording and maths live in `BonusView.bonusGaugeView`, built from
+`bonusPlanView`, which now also returns `days` and `projected`. `app.js` only draws the SVG.
+The house part is `WorkView.dashboardHtml`, and every value is escaped. SW v21 → v22.
+
+**Tests:** 245 → 253 (gauge: running, on-track, settled and clamped; dashboard: today, week
+and month, not connected; family calls gone; log tests moved to staff talks and events).
+Also checked in Chromium at 390 px.
+
 ### Changed — login asks for a username as well as the code (October 14, 2026)
 
 **What:** the login screen has «שם משתמש» above «הקוד האישי שלך». The username and the code must

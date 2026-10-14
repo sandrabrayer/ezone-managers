@@ -2329,6 +2329,7 @@ function renderOccupancyEverywhere_() {
  * per bonus: what it pays, the condition in plain words, where the house
  * stands NOW in real figures, and a status chip. Every string is escaped. */
 function renderBonusPlan_(panel, view) {
+  renderBonusGauge_(panel, view);
   const ul = panel.querySelector('[data-breakdown]');
   if (!ul || !view) return;
   ul.innerHTML = '';
@@ -2359,6 +2360,57 @@ function renderBonusPlan_(panel, view) {
   if (total) total.textContent = fmtCurrency(view.total);
   const note = panel.querySelector('[data-bonus-fallback-note]');
   if (note) note.textContent = view.totalNote || '';
+}
+
+/* The dashboard dial (14 Oct 2026). Numbers only in the SVG; every string
+ * comes from BonusView.bonusGaugeView and is escaped. */
+function gaugeSvg_(pct, projPct, tone) {
+  const R = 80, CX = 100, CY = 100, LEN = Math.PI * R;
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  const pt = (q, r) => {
+    const a = Math.PI * (1 - q / 100);
+    return [(CX + r * Math.cos(a)).toFixed(1), (CY - r * Math.sin(a)).toFixed(1)];
+  };
+  const [nx, ny] = pt(p, 66);
+  let proj = '';
+  if (projPct != null && Number.isFinite(Number(projPct))) {
+    const q = Math.max(0, Math.min(100, Number(projPct)));
+    const [x1, y1] = pt(q, 70), [x2, y2] = pt(q, 92);
+    proj = `<line class="g-proj" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+  }
+  const t = ['good', 'ok', 'warn', 'bad'].includes(tone) ? tone : 'ok';
+  return `<svg class="gauge g-${t}" viewBox="0 0 200 112" role="img" aria-hidden="true">
+    <defs><linearGradient id="gGrad" x1="0" x2="1"><stop offset="0" stop-color="#F87171"/><stop offset="0.5" stop-color="#FCD34D"/><stop offset="1" stop-color="#34D399"/></linearGradient></defs>
+    <path class="g-track" d="M20,100 A80,80 0 0 1 180,100"/>
+    <path class="g-zone" d="M20,100 A80,80 0 0 1 180,100" stroke="url(#gGrad)"/>
+    <path class="g-fill" d="M20,100 A80,80 0 0 1 180,100" stroke-dasharray="${(LEN * p / 100).toFixed(1)} ${LEN.toFixed(1)}"/>
+    ${proj}
+    <line class="g-needle" x1="${CX}" y1="${CY}" x2="${nx}" y2="${ny}"/>
+    <circle class="g-hub" cx="${CX}" cy="${CY}" r="7"/>
+  </svg>`;
+}
+
+function renderBonusGauge_(panel, plan) {
+  const host = panel.querySelector('[data-dash-bonus]');
+  const BVg = typeof window !== 'undefined' ? window.BonusView : null;
+  if (!host || !plan || !BVg || !BVg.bonusGaugeView) return;
+  const g = BVg.bonusGaugeView(plan);
+  const e = escapeHtml_;
+  host.className = `card dash-card dash-bonus tone-${['good', 'ok', 'warn', 'bad'].includes(g.tone) ? g.tone : 'ok'}`;
+  host.innerHTML = `
+    <div class="card-title">הבונוס שלי — ${e(plan.monthLabel || '')}</div>
+    <div class="gauge-wrap">
+      ${gaugeSvg_(g.pct, g.projPct, g.tone)}
+      <div class="gauge-center">
+        <div class="gauge-value">${e(g.valueText)}</div>
+        <div class="gauge-of">${e(g.ofText)}</div>
+      </div>
+    </div>
+    <div class="gauge-head">${e(g.headline)}</div>
+    ${g.hint ? `<div class="gauge-hint">${e(g.hint)}</div>` : ''}
+    ${g.projPct != null ? '<div class="gauge-legend"><span class="gl-proj"></span> הקו הלבן = לאן תגיעו בקצב הנוכחי</div>' : ''}
+    <div class="gauge-earned"><span>${e(g.earnedLabel)}</span><strong>${e(g.earnedText)}</strong></div>
+    <button type="button" class="dash-go" data-go-sub="bonus">לכל פרטי הבונוסים ←</button>`;
 }
 
 /* Activity log row: date + name, exactly as the feed supplies them.

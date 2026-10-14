@@ -502,7 +502,55 @@
       total: total,
       totalKnown: totalKnown,
       totalLabel: settled ? 'סה״כ לתשלום — ' + label : 'סה״כ שכבר הושג — ' + label,
-      totalNote: totalKnown ? '' : 'לא כולל בונוס המשך טיפול — הנתונים לא נטענו'
+      totalNote: totalKnown ? '' : 'לא כולל בונוס המשך טיפול — הנתונים לא נטענו',
+      settled: settled,
+      monthLabel: label,
+      days: days,
+      projected: projected
+    };
+  }
+
+  /* ── dashboard gauge (14 Oct 2026) ──────────────────────── */
+  /**
+   * The dial on the manager's dashboard, from a bonusPlanView result.
+   * It points at the NEXT occupancy step still in play: the first bonus
+   * until it is earned, then the higher step if it can still be reached.
+   * out: { pct, projPct (null when settled), tone, stepTitle, valueText,
+   *        ofText, headline, hint, chip, earnedText, earnedLabel }
+   */
+  var GAUGE_TONE = { earned: 'good', 'on-track': 'ok', behind: 'warn', unreachable: 'bad', missed: 'bad' };
+  function bonusGaugeView(plan) {
+    var p = plan || { items: [] };
+    var steps = (p.items || []).filter(function (it) { return it.id === 'first' || it.id === 'mid' || it.id === 'full'; });
+    var target = null;
+    for (var i = 0; i < steps.length; i++) { if (steps[i].state !== 'earned') { target = steps[i]; break; } }
+    var allDone = !target && steps.length > 0;
+    if (!target) target = steps[steps.length - 1] || null;
+    var days = Math.max(0, Number(p.days) || 0);
+    var need = target ? Math.max(1, Number(target.need) || 1) : 1;
+    var pct = Math.max(0, Math.min(100, Math.round((days / need) * 100)));
+    var projPct = p.settled ? null : Math.max(0, Math.min(100, Math.round(((Number(p.projected) || 0) / need) * 100)));
+    var state = allDone ? 'earned' : target ? target.state : 'none';
+    var headline;
+    if (!target) headline = 'אין יעד בונוס תפוסה ל' + (p.monthLabel || 'חודש זה');
+    else if (allDone) headline = p.settled ? 'כל בונוסי התפוסה הושגו ב' + p.monthLabel : 'כל בונוסי התפוסה כבר הושגו החודש!';
+    else if (p.settled) headline = target.title + ' לא הושג ב' + p.monthLabel;
+    else if (state === 'on-track') headline = 'בקצב הנכון ל' + target.title;
+    else if (state === 'behind') headline = 'צריך להאיץ כדי להגיע ל' + target.title;
+    else if (state === 'unreachable') headline = target.title + ' כבר לא אפשרי החודש';
+    else headline = target.title;
+    return {
+      pct: allDone ? 100 : pct,
+      projPct: allDone ? null : projPct,
+      tone: GAUGE_TONE[state] || 'ok',
+      stepTitle: target ? target.title : '',
+      valueText: fmtInt(days),
+      ofText: target ? 'מתוך ' + fmtInt(need) + ' ימי טיפול' : '',
+      headline: headline,
+      hint: allDone ? '' : (target && target.extra) || '',
+      chip: target ? (allDone ? STEP_CHIPS.earned : target.chip) : '',
+      earnedText: fmtCurrency(p.total || 0),
+      earnedLabel: p.totalLabel || ''
     };
   }
 
@@ -605,6 +653,7 @@
     currentMonthLine: currentMonthLine,
     houseHeroView: houseHeroView,
     bonusPlanView: bonusPlanView,
+    bonusGaugeView: bonusGaugeView,
     STEP_CHIPS: STEP_CHIPS
   };
 }));
