@@ -63,13 +63,60 @@
   function plural(n, one, many) { return n === 1 ? one : n + ' ' + many; }
 
   /* ── pure view builders ─────────────────────────────────── */
+  /* ── expected discharge date (15 Oct 2026) ─────────────────
+   * «שחרור משוער: dd/m/yy» under each patient, with a native date picker to
+   * set or change it. Stored by the Dashboard (`managersWork` dischargeSet,
+   * append-only, audited); shown only when the backend says it supports it
+   * (`expectedDischargeSupported`), so an older backend shows nothing new.
+   * Display-only — no bonus figure reads it. */
+  var ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+  function isRealIso(s) {
+    if (!ISO_RE.test(String(s || ''))) return false;
+    var d = new Date(s + 'T00:00:00Z');
+    return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  }
+  /* '' when `value` may be saved as the expected discharge, else the reason. */
+  function dischargeCheck(value, entryDate) {
+    var v = String(value || '').trim();
+    if (!v) return 'בחרו תאריך';
+    if (!isRealIso(v)) return 'תאריך לא תקין';
+    if (isRealIso(entryDate) && v < entryDate) return 'תאריך השחרור לא יכול להיות לפני תאריך הכניסה';
+    return '';
+  }
+  var DISCHARGE_ERRORS = {
+    conflict: 'התאריך עודכן בינתיים — מוצג עכשיו התאריך העדכני. בדקו ונסו שוב.',
+    before_admission: 'תאריך השחרור לא יכול להיות לפני תאריך הכניסה',
+    bad_date: 'תאריך לא תקין',
+    too_far: 'התאריך רחוק מדי (יותר משנתיים קדימה)',
+    not_found: 'המטופל/ת כבר לא רשום/ה בבית — רעננו את הדף',
+    forbidden: 'אין הרשאה לעדכן את הבית הזה'
+  };
+  function dischargeHtml(p, i) {
+    var cur = p.expectedDischarge && isRealIso(p.expectedDischarge.date) ? p.expectedDischarge.date : '';
+    var who = esc(p.name);
+    var h = '<div class="wk-dis" data-dis-row="' + i + '">';
+    h += cur
+      ? '<span class="wk-dis-text">שחרור משוער: <b>' + esc(fmtDate(cur)) + '</b></span>' +
+        '<button type="button" class="wk-dis-btn" data-dis-edit="' + i + '" aria-label="שינוי תאריך שחרור משוער — ' + who + '">שינוי</button>'
+      : '<button type="button" class="wk-dis-btn wk-dis-empty" data-dis-edit="' + i + '" aria-label="הגדרת תאריך שחרור — ' + who + '">הגדרת תאריך שחרור</button>';
+    h += '<form class="wk-dis-form" data-dis-form="' + i + '" novalidate hidden>' +
+      '<label class="wk-dis-label"><span>שחרור משוער</span>' +
+      '<input name="expectedDate" type="date" required' +
+      (isRealIso(p.entryDate) ? ' min="' + esc(p.entryDate) + '"' : '') + (cur ? ' value="' + esc(cur) + '"' : '') + '></label>' +
+      '<button type="submit" class="wk-dis-btn wk-dis-save">שמירה</button>' +
+      '<button type="button" class="wk-dis-btn wk-dis-cancel" data-dis-cancel="' + i + '">ביטול</button>' +
+      '<span class="wk-msg" data-dis-msg role="status"></span></form>';
+    return h + '</div>';
+  }
+
   function patientsHtml(d) {
     var pats = d.patients || [], outs = d.outpatients || [], visits = d.visits || [], adm = d.admissions || [];
+    var dis = d.expectedDischargeSupported === true;
     var h = '';
     h += '<div class="card work-card wk-patients"><div class="card-title">מטופלים בבית (' + pats.length + ')</div>';
-    h += pats.length ? '<ul class="wk-list">' + pats.map(function (p) {
+    h += pats.length ? '<ul class="wk-list' + (dis ? ' wk-pat-list' : '') + '">' + pats.map(function (p, i) {
       return '<li><span class="wk-name">' + esc(p.name) + '</span><span class="wk-meta">מ-' + esc(fmtDate(p.entryDate)) +
-        ' · יום ' + esc(p.days) + (p.status === 'trial' ? ' · ניסיון' : '') + '</span></li>';
+        ' · יום ' + esc(p.days) + (p.status === 'trial' ? ' · ניסיון' : '') + '</span>' + (dis ? dischargeHtml(p, i) : '') + '</li>';
     }).join('') + '</ul>' : '<div class="wk-empty">אין מטופלים רשומים בבית</div>';
     h += '</div>';
     h += '<div class="card work-card wk-out"><div class="card-title">מטופלי חוץ שיצאו מהבית (' + outs.length + ')</div>';
@@ -423,6 +470,7 @@
   }
 
   var WorkView = { LOGS: LOGS, esc: esc, fmtDate: fmtDate, patientsHtml: patientsHtml, formHtml: formHtml,
+    dischargeHtml: dischargeHtml, dischargeCheck: dischargeCheck, DISCHARGE_ERRORS: DISCHARGE_ERRORS,
     teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml, costHtml: costHtml,
     logListHtml: logListHtml, logPanelHtml: logPanelHtml, followUpsHtml: followUpsHtml, entryFromForm: entryFromForm };
 
@@ -536,6 +584,21 @@
         if (nav && nav.scrollIntoView) nav.scrollIntoView({ block: 'start', behavior: 'smooth' });
         return;
       }
+      var disEdit = t.closest && t.closest('[data-dis-edit]');
+      var disCancel = t.closest && t.closest('[data-dis-cancel]');
+      if (disEdit || disCancel) {
+        var row = (disEdit || disCancel).closest('[data-dis-row]');
+        var f = row && row.querySelector('[data-dis-form]');
+        if (!f) return;
+        f.hidden = !!disCancel;
+        row.querySelectorAll('[data-dis-edit]').forEach(function (b) { b.hidden = !disCancel; });
+        var inp = f.querySelector('input[type="date"]');
+        if (disEdit && inp) {
+          inp.focus();
+          try { if (inp.showPicker) inp.showPicker(); } catch (e) { /* not allowed here — the field is still usable */ }
+        }
+        return;
+      }
       var done = t.closest && t.closest('[data-wk-done]');
       var del = t.closest && t.closest('[data-wk-del]');
       if (!done && !del) return;
@@ -552,6 +615,8 @@
       if (f) f.setAttribute('data-wk-dirty', '1');
     });
     panel.addEventListener('submit', async function (ev) {
+      var dform = ev.target.closest && ev.target.closest('[data-dis-form]');
+      if (dform) { ev.preventDefault(); await saveDischarge(panel, key, dform); return; }
       var form = ev.target.closest && ev.target.closest('[data-wk-form]');
       if (!form) return;
       ev.preventDefault();
@@ -572,6 +637,40 @@
         btn.disabled = false;
       }
     });
+  }
+
+  /* Save one patient's expected discharge date (the row's index in the
+   * last-loaded houseData). previousDate = the value this screen showed, so
+   * the backend refuses (conflict) instead of silently overwriting a newer one. */
+  async function saveDischarge(panel, key, form) {
+    var msg = form.querySelector('[data-dis-msg]');
+    var c = cache[key];
+    var p = c && c.data && (c.data.patients || [])[Number(form.getAttribute('data-dis-form'))];
+    if (!p) { msg.textContent = DISCHARGE_ERRORS.not_found; return; }
+    var value = String(form.elements.expectedDate.value || '').trim();
+    var bad = dischargeCheck(value, p.entryDate);
+    if (bad) { msg.textContent = bad; return; }
+    var prev = p.expectedDischarge && p.expectedDischarge.date ? String(p.expectedDischarge.date) : '';
+    var btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true; msg.textContent = 'שומר…';
+    try {
+      await post({ op: 'dischargeSet', house: key, patientName: p.name, entryDate: p.entryDate, expectedDate: value, previousDate: prev });
+      await refresh(panel, key, true);
+    } catch (e) {
+      var code = e && e.data && e.data.error;
+      var text = DISCHARGE_ERRORS[code] || ('השמירה נכשלה: ' + (e && e.message ? e.message : ''));
+      if (code === 'conflict') await refresh(panel, key, true);
+      var again = panel.querySelector('[data-dis-form="' + form.getAttribute('data-dis-form') + '"]') || form;
+      var m2 = again.querySelector('[data-dis-msg]');
+      if (again !== form) {
+        again.hidden = false;
+        var r2 = again.closest('[data-dis-row]');
+        if (r2) r2.querySelectorAll('[data-dis-edit]').forEach(function (b) { b.hidden = true; });
+      }
+      if (m2) m2.textContent = text;
+      var b2 = again.querySelector('button[type="submit"]');
+      if (b2) b2.disabled = false;
+    }
   }
 
   /* Called by app.js after a house tab is drawn. */

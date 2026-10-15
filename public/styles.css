@@ -1878,3 +1878,41 @@ body.is-locked { overflow: hidden; }
 .cost-over { color: #FCA5A5; }
 .cost-tiles .dash-tile b { font-size: 17px; }
 .cost-note { margin: 10px 0 0; color: var(--text-mute); }
+
+/* Expected discharge date on «מטופלים בבית» (15 Oct 2026): RTL, 16px text,
+   44px tap targets, wraps under the patient line at 360px. */
+.wk-pat-list li { flex-wrap: wrap; }
+.wk-dis { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 4px; font-size: 16px; }
+.wk-dis-text { color: var(--text); }
+.wk-dis-text b { font-weight: 700; }
+.wk-dis-btn {
+  font: inherit;
+  font-size: 16px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  cursor: pointer;
+}
+.wk-dis-btn.wk-dis-empty { color: #BFDBFE; border-style: dashed; }
+.wk-dis-btn.wk-dis-save { background: var(--sec, rgba(255, 255, 255, 0.16)); font-weight: 700; }
+.wk-dis-btn:disabled { opacity: 0.6; }
+.wk-dis-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
+.wk-dis-form[hidden], .wk-dis-btn[hidden] { display: none; }
+.wk-dis-label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 16px; color: var(--text-mute); }
+.wk-dis-form input[type="date"] {
+  font: inherit;
+  font-size: 16px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  color-scheme: dark;
+  max-width: 100%;
+}
+.wk-dis-form .wk-msg { flex: 1 1 100%; font-size: 14px; }

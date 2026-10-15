@@ -263,9 +263,13 @@ app.get('/api/sheets', requireUser, async (req, res) => {
 });
 
 // ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
-const WORK_OPS = new Set(['houseData', 'houseCost', 'logAdd', 'logUpdate']);
+const WORK_OPS = new Set(['houseData', 'houseCost', 'logAdd', 'logUpdate', 'dischargeSet']);
 const WORK_LOGS = new Set(['staffTalks', 'events']);   // family calls removed from the app (14 Oct 2026)
 const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+// Writes get their own, tighter bucket on top of the shared one.
+const allowWrites = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 });
+const WRITE_OPS = new Set(['logAdd', 'logUpdate', 'dischargeSet']);
 
 app.post('/api/work', requireUser, async (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -285,6 +289,22 @@ app.post('/api/work', requireUser, async (req, res) => {
   }
   const body = { action: 'managersWork', secret: WORK_SECRET, op, house, role: u.role, actor: u.name, actorId: u.id };
   if ((op === 'houseData' || op === 'houseCost') && YM_RE.test(String(b.month || ''))) body.month = String(b.month);
+  if (WRITE_OPS.has(op) && !allowWrites(clientIp(req))) {
+    return res.status(429).json({ error: 'יותר מדי עדכונים. נסו שוב מאוחר יותר.' });
+  }
+  if (op === 'dischargeSet') {
+    // Shape check only; the Dashboard re-validates (real dates, ≥ admission,
+    // patient in THIS house today) and keeps the append-only audit trail.
+    const name = typeof b.patientName === 'string' ? b.patientName.trim() : '';
+    const prev = b.previousDate == null ? '' : String(b.previousDate);
+    if (!name || name.length > 80) return res.status(400).json({ error: 'bad_request' });
+    if (!ISO_DATE_RE.test(String(b.entryDate || '')) || !ISO_DATE_RE.test(String(b.expectedDate || ''))) {
+      return res.status(400).json({ error: 'bad_date' });
+    }
+    if (prev !== '' && !ISO_DATE_RE.test(prev)) return res.status(400).json({ error: 'bad_date' });
+    if (String(b.expectedDate) < String(b.entryDate)) return res.status(400).json({ error: 'before_admission' });
+    Object.assign(body, { patientName: name, entryDate: String(b.entryDate), expectedDate: String(b.expectedDate), previousDate: prev });
+  }
   if (op === 'logAdd' || op === 'logUpdate') {
     if (!WORK_LOGS.has(String(b.log || ''))) return res.status(400).json({ error: 'unknown_log' });
     body.log = String(b.log);
@@ -327,4 +347,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, _rateLimiters: { allowSheets, allowLogin } };
+module.exports = { app, _rateLimiters: { allowSheets, allowLogin, allowWrites } };

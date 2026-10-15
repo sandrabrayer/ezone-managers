@@ -68,4 +68,19 @@ test('real Managers HTTP routes → real Dashboard Code.gs, synthetic users and 
   const own = await auth.request(server,'/api/sheets?action=managersOverview&role=admin&actorId=forged&house=efroni',{headers:{Cookie:mine}});
   assert.deepEqual(JSON.parse(own.text).houses.map(h => h.key),['ramot']);
   assert.equal(sent.at(-1).actorId,'person-oran');
+  // Expected discharge date (15 Oct 2026): append-only header, house-pinned,
+  // only a patient in the caller's house today.
+  assert.deepEqual(Array.from(g.run('MW_DISCHARGE_COLUMNS')),
+    ['id','house','patientName','entryDate','expectedDate','previousDate','editedAt','editedBy','editedById']);
+  g.run(`readPatientsForBonus_ = function () { return [{houseId:'ramot',name:'Synthetic patient',entry:new Date(2026,8,1),exit:null,status:'active'},
+    {houseId:'arfoni',name:'Other house',entry:new Date(2026,8,1),exit:null,status:'active'}]; };`);
+  const dis = {op:'dischargeSet',patientName:'Synthetic patient',entryDate:'2026-09-01',expectedDate:'2026-11-20',previousDate:''};
+  assert.equal((await work(elsewhere, dis)).data.error, 'not_found', 'another house manager cannot set it');
+  assert.equal((await work(mine, {...dis, house:'efroni', patientName:'Other house'})).data.error, 'not_found', 'house pinned to the manager');
+  assert.equal((await work(mine, dis)).data.ok, true);
+  assert.equal((await work(admin, {...dis, house:'ramot', expectedDate:'2026-12-01'})).data.error, 'conflict', 'stale previousDate');
+  const withDate = (await work(mine,{op:'houseData'})).data;
+  assert.equal(withDate.expectedDischargeSupported, true);
+  assert.equal(withDate.patients[0].expectedDischarge.date, '2026-11-20');
+  assert.equal(g.sandbox.__sheets.ManagersExpectedDischarge.grid.length, 2);
 });

@@ -44,6 +44,10 @@ their own code.
   the server calls the Dashboard Apps Script action `managersWork` by POST,
   adding `MANAGERS_WORK_SECRET` and the house / role / name / actor ID it decided. The
   browser never sees the secret or the Apps Script URL.
+- **Writes** (`logAdd`, `logUpdate`, `dischargeSet`) have an extra per-IP
+  bucket, 60 / 15 min. `dischargeSet` (expected discharge date, 15 Oct 2026)
+  is shape-checked by the server and re-validated by the Dashboard. See
+  `docs/expected-discharge.md`.
 - Kept from before: the per-IP rate limit on proxied calls, `X-Robots-Tag:
   noindex, nofollow`, `robots.txt`, CSP `script-src 'self'`, no secret in any
   response or error body.
