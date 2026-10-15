@@ -356,6 +356,19 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: discharge alerts «שחרור קרוב» (October 15, 2026)
+
+- Driven only by the manager's own expected discharge date; no Dashboard auto-fill (CEO
+  decision).
+- **«ראשי»**: amber alerts for dates from today to +14 days (`ALERT_LEAD_DAYS`), red
+  «דורש עדכון» for passed dates, one line «N מטופלים ללא תאריך שחרור משוער», a one-tap
+  «שינוי תאריך», and a badge on the sub-tab.
+- **Admin**: an all-houses card with a house filter on the overview.
+- **How**: frontend only (`public/discharge-alerts.js`), from the existing `houseData`. No new
+  endpoint or secret. "Today" in Asia/Jerusalem; text-only DOM; no names in logs.
+- **Delivery**: in-app only (no email / WhatsApp / push). SW v28. Details:
+  `docs/discharge-alerts.md`.
+
 ## Managers: temporary exit and return keeps the stay (October 15, 2026)
 
 - **CEO rule**: a return within 7 days (`READMIT_WINDOW_DAYS`, Dashboard) is one stay.

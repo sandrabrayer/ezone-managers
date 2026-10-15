@@ -2561,6 +2561,12 @@ function boot() {
     applyRole_(u);
     const hash = (location.hash || '').replace('#', '');
     if ((!u || u.role === 'admin') && ['overview', ...HOUSE_KEYS].includes(hash)) activateTab(hash);
+    // Admin: discharge alerts of every house on the overview (work.js).
+    if (u && u.role === 'admin' && window.Work && window.Work.mountAdmin) {
+      const labels = {};
+      HOUSE_KEYS.forEach(k => { labels[k] = HOUSE_LABELS[k].name; });
+      window.Work.mountAdmin(document.getElementById('dischargeAlertsAll'), HOUSE_KEYS, labels);
+    }
     startData();
   });
 }
