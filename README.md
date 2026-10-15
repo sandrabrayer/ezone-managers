@@ -88,6 +88,10 @@ Expected discharge date (15 Oct 2026): each patient on «מטופלים בבית
 Op `dischargeSet` → Dashboard, append-only and audited, house-scoped. Details:
 `docs/expected-discharge.md`.
 
+Temporary exit and return (15 Oct 2026): a return within 7 days keeps the stay (first
+admission date, «יום N» not reset, no double-counted day) — Dashboard raw data, from Oct
+2026. Details: `docs/temporary-exit-return.md`.
+
 Stage 2 (14 Oct 2026) adds two more house sub-tabs:
 - **צוות ומשמרות:** on shift today, the next 14 days, and the staff with tap-to-call phones.
 - **מטפלים:** workdays and the weekly visits.
