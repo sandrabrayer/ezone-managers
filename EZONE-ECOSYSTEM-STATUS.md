@@ -356,6 +356,17 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: temporary exit and return keeps the stay (October 15, 2026)
+
+- **CEO rule**: a return within 7 days (`READMIT_WINDOW_DAYS`, Dashboard) is one stay.
+- **Counting**: once per patient per day; gap days are not counted (bed-held is not recorded).
+- **«יום N»**: the admission date and «יום N» run from the first admission.
+- **Where**: Dashboard raw data (E-Zone-Dashboard PR #231); `lib/bonus-eligibility.js` is
+  unchanged.
+- **Settled months**: from Oct 2026 only; settled months are byte-identical. The read-only
+  audit `auditTemporaryExitsNow()` uses initials only.
+- Details: `docs/temporary-exit-return.md`.
+
 ## Managers: expected discharge date on «מטופלים בבית» (October 15, 2026)
 
 - Each patient row shows «שחרור משוער: dd/m/yy», or «הגדרת תאריך שחרור» when no

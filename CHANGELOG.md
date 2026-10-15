@@ -3,6 +3,27 @@
 
 ## Unreleased
 
+### Changed — a temporary exit and return no longer breaks the stay (October 15, 2026; backend)
+
+- **What**: CEO rule. A patient re-admitted to the same house within 7 days of
+  leaving (`READMIT_WINDOW_DAYS`, Dashboard) keeps one stay:
+  - each patient counts once per day (no double counting);
+  - «מטופלים בבית» keeps the first admission date and «יום N» runs from it;
+  - the return is not a new admission.
+- **Gap days**: not counted, because bed-held is not recorded (documented
+  assumption).
+- **Where**: the Dashboard Apps Script raw data (E-Zone-Dashboard PR #231).
+  `lib/bonus-eligibility.js` is **unchanged** and still consumes the raw
+  figures.
+- **Settled months**: from October 2026 only. September 2026 and earlier are
+  byte-identical, so no settled bonus changes. A read-only audit
+  (`auditTemporaryExitsNow`, initials only) reports past-month cases without
+  applying them.
+- **Why**: CEO decision, 15 Oct 2026.
+- **Tests**: Managers 287 → 287 (docs only; the rule's tests live in the
+  Dashboard suite, 2822 → 2832). No asset change, so the SW cache stays at v27.
+  Details: `docs/temporary-exit-return.md`.
+
 ### Added — expected discharge date on «מטופלים בבית» (October 15, 2026)
 
 - **What**: under each patient («שם · מ-<כניסה> · יום N»), a «שחרור משוער: dd/m/yy»
