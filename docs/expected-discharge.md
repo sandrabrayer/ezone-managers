@@ -53,3 +53,8 @@ renders exactly as before.
   and the golden bonus snapshots are unchanged.
 - A date can be set or changed. It cannot be cleared (a conservative reading of
   "set or change").
+
+## Alerts
+
+The dates drive the «שחרור קרוב» / «דורש עדכון» alerts on «ראשי» (15 Oct 2026):
+see `docs/discharge-alerts.md`.

@@ -74,6 +74,9 @@
         <button type="button" class="link-btn" id="bonusMonthBackOverview" hidden>חזרה לחודש נוכחי</button>
       </div>
 
+      <!-- Admin only: discharge alerts of every house, with a house filter. -->
+      <div id="dischargeAlertsAll" class="dis-alerts-all" hidden></div>
+
       <div class="kpis" id="networkKpis">
         <div class="kpi kpi-green">
           <div class="kpi-label" id="kpiHousesAboveLabel">בתים עם בונוס מובטח (חודש נוכחי)</div>
@@ -164,6 +167,8 @@
       <!-- The manager's dashboard (14 Oct 2026): the bonus dial (app.js, from
            BonusView.bonusGaugeView) + today / this week in the house (work.js). -->
       <section data-sub-panel="home">
+        <!-- Discharge alerts (Task E): from the manager's own expected dates. -->
+        <div data-dash-alerts></div>
         <div class="card dash-card dash-bonus" data-dash-bonus>
           <div class="card-title">הבונוס שלי</div>
           <div class="wk-empty">טוען…</div>
@@ -259,6 +264,7 @@
   <script src="/bonus-view.js"></script>
   <script src="/occupancy-export.js"></script>
   <script src="/auth.js"></script>
+  <script src="/discharge-alerts.js"></script>
   <script src="/work.js"></script>
   <script src="/app.js"></script>
   <!-- External, not inline: the CSP is script-src 'self' with no

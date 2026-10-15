@@ -525,13 +525,26 @@
     var fu = panel.querySelector('[data-followups]');
     if (fu) fu.innerHTML = followUpsHtml(d, u);
     var p = host(panel, 'patients');
-    if (p) p.innerHTML = patientsHtml(d);
+    if (p) {
+      // A redraw (refresh, a second load) must not close a date picker the
+      // person has open: remember it and reopen it with what they picked.
+      var open = p.querySelector('[data-dis-form]:not([hidden])');
+      var keep = open ? { i: open.getAttribute('data-dis-form'), v: open.elements.expectedDate.value } : null;
+      p.innerHTML = patientsHtml(d);
+      if (keep) reopenDischargeForm(p, keep.i, keep.v);
+    }
     var dh = panel.querySelector('[data-dash-house]');
     if (dh) dh.innerHTML = dashboardHtml(d);
+    renderHouseAlerts(panel, key, d);
     var tm = host(panel, 'team');
     if (tm) tm.innerHTML = teamHtml(d);
     var th = host(panel, 'therapists');
     if (th) th.innerHTML = therapistsHtml(d);
+    if (pendingEdit[key] != null) {
+      var pi = pendingEdit[key]; delete pendingEdit[key];
+      if (pi === 'list') showSub(panel, 'patients'); else openDischargeEdit(panel, pi);
+    }
+    renderAdminAlerts();
     Object.keys(LOGS).forEach(function (k) {
       var h = host(panel, k);
       if (!h) return;
@@ -558,7 +571,110 @@
       subs.forEach(function (s) { var h = host(panel, s); if (h) h.innerHTML = '<div class="card work-card"><div class="wk-empty error">' + esc(msg) + '</div></div>'; });
       var dh = panel.querySelector('[data-dash-house]');
       if (dh) dh.innerHTML = '<div class="card dash-card"><div class="wk-empty error">' + esc(msg) + '</div></div>';
+      var al = panel.querySelector('[data-dash-alerts]');
+      if (al) al.textContent = '';
+      if (root.DischargeAlerts && root.document) root.DischargeAlerts.setBadge(root.document, panel.querySelector('[data-sub="home"]'), 0);
     }
+  }
+
+  /* ── discharge alerts (Task E, 15 Oct 2026) ─────────────────
+   * «שחרור קרוב» on the house's «ראשי» + a badge on its sub-tab, and (admin
+   * only) an all-houses card with a house filter on the overview. Computed
+   * from the cached houseData — no extra request for a house; text-only DOM
+   * (public/discharge-alerts.js). */
+  var pendingEdit = {};   // houseKey → patient index to open once its list is drawn
+  function renderHouseAlerts(panel, key, d) {
+    var DA = root.DischargeAlerts;
+    var hostEl = panel.querySelector('[data-dash-alerts]');
+    if (!DA || !hostEl || !root.document) return;
+    var model = DA.houseAlerts(d, key, DA.israelToday());
+    hostEl.textContent = '';
+    if (model.supported) hostEl.appendChild(DA.renderCard(root.document, model, { listHouse: key }));
+    DA.setBadge(root.document, panel.querySelector('[data-sub="home"]'), model.supported ? model.count : 0);
+  }
+  function reopenDischargeForm(p, i, value) {
+    var f = p.querySelector('[data-dis-form="' + Number(i) + '"]');
+    if (!f) return;
+    f.hidden = false;
+    var row = f.closest('[data-dis-row]');
+    if (row) row.querySelectorAll('[data-dis-edit]').forEach(function (b) { b.hidden = true; });
+    if (value) f.elements.expectedDate.value = value;
+  }
+  /* Show «מטופלים» and open patient i's date picker. */
+  function openDischargeEdit(panel, i) {
+    showSub(panel, 'patients');
+    var b = panel.querySelector('[data-dis-edit="' + Number(i) + '"]');
+    if (!b) return;
+    b.click();
+    var row = b.closest && b.closest('li');
+    if (row && row.scrollIntoView) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+  function onAlertClick(ev, panelFor) {
+    var t = ev.target;
+    var edit = t.closest && t.closest('[data-alert-edit]');
+    var list = t.closest && t.closest('[data-alert-list]');
+    if (!edit && !list) return false;
+    var parts = (edit ? edit.getAttribute('data-alert-edit') : list.getAttribute('data-alert-list') + '|').split('|');
+    var house = parts[0];
+    var panel = panelFor(house);
+    if (!panel) return true;
+    if (edit) {
+      if (panel.querySelector('[data-dis-edit="' + Number(parts[1]) + '"]')) openDischargeEdit(panel, parts[1]);
+      else pendingEdit[house] = Number(parts[1]);
+    } else {
+      showSub(panel, 'patients');
+    }
+    return true;
+  }
+
+  var admin = { el: null, keys: [], labels: {}, filter: '' };
+  function renderAdminAlerts() {
+    var DA = root.DischargeAlerts;
+    if (!DA || !admin.el || !root.document) return;
+    var today = DA.israelToday();
+    var models = admin.keys.filter(function (k) { return cache[k]; }).map(function (k) { return DA.houseAlerts(cache[k].data, k, today); });
+    var opts = [{ value: '', label: 'כל הבתים' }].concat(admin.keys.map(function (k) { return { value: k, label: admin.labels[k] || k }; }));
+    admin.el.textContent = '';
+    admin.el.appendChild(DA.renderCard(root.document, DA.mergeAlerts(models, admin.filter),
+      { title: 'שחרורים קרובים — כל הבתים', labels: admin.labels, filter: { value: admin.filter, options: opts } }));
+    admin.el.hidden = false;
+  }
+  /* Admin overview: load every house's houseData (cached 60 s, shared with the
+   * house tabs) and show the merged alerts. The server refuses this for a
+   * manager anyway — houseData is pinned to their own house. */
+  function mountAdmin(el, keys, labels) {
+    var u = me();
+    if (!el || !u || u.role !== 'admin') return;
+    admin.el = el; admin.keys = (keys || []).slice(); admin.labels = labels || {};
+    if (el.getAttribute('data-wired') !== '1') {
+      el.setAttribute('data-wired', '1');
+      el.addEventListener('change', function (ev) {
+        if (!ev.target.matches || !ev.target.matches('[data-alert-filter]')) return;
+        admin.filter = admin.keys.indexOf(ev.target.value) >= 0 ? ev.target.value : '';
+        renderAdminAlerts();
+      });
+      el.addEventListener('click', function (ev) {
+        var t = ev.target;
+        var edit = t.closest && t.closest('[data-alert-edit]');
+        var list = t.closest && t.closest('[data-alert-list]');
+        if (!edit && !list) return;
+        var parts = (edit ? edit.getAttribute('data-alert-edit') : list.getAttribute('data-alert-list') + '|').split('|');
+        var house = parts[0];
+        if (admin.keys.indexOf(house) < 0) return;
+        // The house tab may not be drawn yet: queue the action; renderAll runs it.
+        pendingEdit[house] = edit ? Number(parts[1]) : 'list';
+        var tab = root.document.querySelector('.tab[data-tab="' + house + '"]');
+        if (tab) tab.click();
+        var panel = root.document.getElementById('panel-' + house);
+        if (panel && host(panel, 'patients') && panel.querySelector(edit ? '[data-dis-edit="' + Number(parts[1]) + '"]' : '[data-dis-row], .wk-patients')) {
+          delete pendingEdit[house];
+          if (edit) openDischargeEdit(panel, parts[1]); else showSub(panel, 'patients');
+        }
+      });
+    }
+    renderAdminAlerts();
+    Promise.all(admin.keys.map(function (k) { return load(k, false).catch(function () { return null; }); }))
+      .then(renderAdminAlerts);
   }
 
   function showSub(panel, sub) {
@@ -575,6 +691,7 @@
     panel.setAttribute('data-wk-wired', '1');
     panel.addEventListener('click', async function (ev) {
       var t = ev.target;
+      if (onAlertClick(ev, function (house) { return house === key ? panel : null; })) return;
       var subBtn = t.closest && t.closest('[data-sub]');
       if (subBtn) { showSub(panel, subBtn.getAttribute('data-sub')); return; }
       var go = t.closest && t.closest('[data-go-sub]');
@@ -682,6 +799,6 @@
   }
 
   root.WorkView = WorkView;
-  root.Work = { onHouseRendered: onHouseRendered, showSub: showSub, _cache: cache };
+  root.Work = { onHouseRendered: onHouseRendered, showSub: showSub, mountAdmin: mountAdmin, _cache: cache };
   if (typeof module === 'object' && module.exports) module.exports = WorkView;
 }(typeof self !== 'undefined' ? self : this));

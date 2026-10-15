@@ -75,7 +75,7 @@ test('mobile: 16px text, 44px tap targets, wraps at 360px; SW cache bumped', () 
   assert.match(block('.wk-dis-form input[type="date"]'), /max-width: 100%/);
   assert.match(block('.wk-dis'), /flex-wrap: wrap/);
   const sw = fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8');
-  assert.match(sw, /ezone-managers-v27'/);
+  assert.match(sw, /ezone-managers-v(2[7-9]|[3-9]\d)'/, 'bumped from v26 (Task A) and monotonic after');
 });
 
 test('display-only: no bonus module or bonus render path reads the expected discharge date', () => {

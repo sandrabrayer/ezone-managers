@@ -1916,3 +1916,38 @@ body.is-locked { overflow: hidden; }
   max-width: 100%;
 }
 .wk-dis-form .wk-msg { flex: 1 1 100%; font-size: 14px; }
+
+/* Discharge alerts «שחרור קרוב» (Task E, 15 Oct 2026): RTL, 16px text, 44px
+   tap targets, wraps at 360px. Overdue = red «דורש עדכון». */
+.dis-alerts { font-size: 16px; }
+.dis-alerts-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.dis-alerts-filter { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; color: var(--text-mute); }
+.dis-alerts-filter select {
+  font: inherit; font-size: 16px; min-height: 44px; padding: 6px 10px; max-width: 100%;
+  border-radius: var(--r-sm); border: 1px solid var(--line-strong); background: rgba(0, 0, 0, 0.22); color: var(--text);
+}
+.dis-alert-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.dis-alert {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  padding: 10px 12px; border-radius: var(--r-md);
+  border: 1px solid rgba(251, 191, 36, 0.55); background: rgba(251, 191, 36, 0.12);
+}
+.dis-alert.is-overdue { border-color: rgba(248, 113, 113, 0.8); background: rgba(239, 68, 68, 0.18); }
+.dis-alert-main { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.dis-alert-name { font-weight: 700; color: var(--text); font-size: 16px; }
+.dis-alert-house { font-size: 14px; color: var(--text-mute); }
+.dis-alert-tag { font-size: 14px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(251, 191, 36, 0.25); color: #FDE68A; }
+.dis-alert.is-overdue .dis-alert-tag { background: rgba(239, 68, 68, 0.35); color: #FECACA; }
+.dis-alert-meta { flex: 1 1 auto; font-size: 16px; color: var(--text); }
+.dis-alert-btn, .dis-nodate {
+  font: inherit; font-size: 16px; min-height: 44px; min-width: 44px; padding: 8px 14px;
+  border-radius: var(--r-md); border: 1px solid var(--line-strong); background: rgba(255, 255, 255, 0.08);
+  color: var(--text); cursor: pointer;
+}
+.dis-nodate { margin-top: 10px; width: 100%; text-align: start; background: none; border-style: dashed; color: var(--text-mute); }
+.dis-alerts-all { margin-bottom: 14px; }
+.subtab-badge {
+  display: inline-block; min-width: 20px; margin-inline-start: 6px; padding: 0 6px;
+  border-radius: 999px; background: #EF4444; color: #fff; font-size: 13px; font-weight: 700; line-height: 20px; text-align: center;
+}
+.subtab-badge[hidden] { display: none; }

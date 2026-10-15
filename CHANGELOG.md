@@ -3,6 +3,45 @@
 
 ## Unreleased
 
+### Added — discharge alerts «שחרור קרוב» on «ראשי» (October 15, 2026; Task E)
+
+- **What**: for each patient in the house whose expected discharge date (set by hand by the
+  manager) falls from today to +14 days (`ALERT_LEAD_DAYS = 14`, inclusive), an alert shows
+  name, date and «היום» / «מחר» / «בעוד N ימים», with a one-tap «שינוי תאריך».
+  - **Overdue**: a passed date (patient still in the house) gets a red «דורש עדכון» with
+    «התאריך עבר לפני N ימים».
+  - **No date**: patients without a date get ONE quiet line, «N מטופלים ללא תאריך שחרור
+    משוער», which opens the list.
+  - **Badge**: the «ראשי» sub-tab shows a badge with the alert count.
+  - **Admin**: an all-houses card on the overview with a house filter.
+- **Why**: CEO decision. Alerts come only from the manager's own date; no Dashboard
+  auto-fill; the Task D source-field investigation is not built.
+- **How**:
+  - computed in the browser from the existing `houseData` (new pure module
+    `public/discharge-alerts.js`); **no new endpoint, op, secret or env var**;
+  - "today" is the Israel calendar day (Asia/Jerusalem);
+  - text-only DOM (no `innerHTML` with data); nothing logged;
+  - a manager's `houseData` is pinned server-side to their house, and the all-houses card
+    mounts for admins only;
+  - in-app only (no email / WhatsApp / push).
+- **Also fixed**: a redraw of «מטופלים» no longer closes an open date picker.
+- **Bonus**: display-only; the golden bonus snapshots are unchanged. SW cache v27 → v28 (ships
+  the new module).
+- **Docs**: `docs/discharge-alerts.md`, a note in `docs/expected-discharge.md`, README, the
+  status doc.
+- **Tests**: 287 → 301 (+14, `test/discharge-alerts.test.js`). Coverage:
+  - boundary days 14 / 15 / 0 / 1 / −1 / −3;
+  - Israel midnight in summer and winter;
+  - own-house isolation and the admin filter;
+  - the no-date summary and the overdue state;
+  - discharged patients excluded;
+  - text-only rendering via a DOM whose `innerHTML` throws;
+  - the badge, UI sizes and SW;
+  - a bonus-untouched guard and the keep-open guard.
+
+  Also checked end-to-end in Chromium at 360px: as a manager and as an admin, through the
+  real server with a mocked Apps Script.
+
 ### Changed — a temporary exit and return no longer breaks the stay (October 15, 2026; backend)
 
 - **What**: CEO rule. A patient re-admitted to the same house within 7 days of

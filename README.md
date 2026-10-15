@@ -88,6 +88,11 @@ Expected discharge date (15 Oct 2026): each patient on «מטופלים בבית
 Op `dischargeSet` → Dashboard, append-only and audited, house-scoped. Details:
 `docs/expected-discharge.md`.
 
+Discharge alerts (15 Oct 2026): «ראשי» shows «שחרור קרוב» for expected dates in the next 14 days
+and a red «דורש עדכון» for passed dates, plus a badge; admins get an all-houses card with a house
+filter on the overview. From the manager's own dates only, in-app only. Details:
+`docs/discharge-alerts.md`.
+
 Temporary exit and return (15 Oct 2026): a return within 7 days keeps the stay (first
 admission date, «יום N» not reset, no double-counted day) — Dashboard raw data, from Oct
 2026. Details: `docs/temporary-exit-return.md`.
