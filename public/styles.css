@@ -1918,6 +1918,9 @@ body.is-locked { overflow: hidden; }
 .wk-dis-form .wk-msg { flex: 1 1 100%; font-size: 16px; }
 /* Save in flight (expected discharge): spinner + «שומר...» inside «שמירה». */
 .wk-dis-save { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+/* «אין צפי לשחרור» / «ניקוי תאריך» (15 Oct 2026): same 44px targets and spinner as «שמירה». */
+.wk-dis-mode { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.wk-dis-text.wk-dis-none { color: var(--text-mute); font-weight: 700; }
 .wk-dis-form[aria-busy="true"] { cursor: progress; }
 .wk-spin {
   display: inline-block; width: 16px; height: 16px; flex: 0 0 16px;

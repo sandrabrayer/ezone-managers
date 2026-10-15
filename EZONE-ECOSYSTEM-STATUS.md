@@ -356,6 +356,19 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: expected discharge clear + «אין צפי לשחרור» (October 15, 2026)
+
+- The date form on «מטופלים בבית» adds «ניקוי תאריך» and «אין צפי לשחרור». A «אין צפי» row
+  shows that text with a «שינוי» button.
+- Same spinner, error reasons and optimistic concurrency as «שמירה». The token is `''`, a date,
+  or `none`.
+- `/api/work` `dischargeSet` `mode` = `set` | `clear` | `none`. Both new modes APPEND a row in the
+  Dashboard (E-Zone-Dashboard #238; `ManagersExpectedDischarge` gained the `state` column). Never
+  deleted.
+- «אין צפי» is left out of the alerts and out of the no-date count; the shared fixture gained
+  `states`. No new endpoint, secret or variable. SW v30, tests 347.
+  Details: `docs/expected-discharge.md`.
+
 ## Managers: discharge alerts «שחרור קרוב» (October 15, 2026)
 
 - Driven only by the manager's own expected discharge date; no Dashboard auto-fill (CEO

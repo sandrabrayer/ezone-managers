@@ -71,7 +71,7 @@ test('real Managers HTTP routes → real Dashboard Code.gs, synthetic users and 
   // Expected discharge date (15 Oct 2026): append-only header, house-pinned,
   // only a patient in the caller's house today.
   assert.deepEqual(Array.from(g.run('MW_DISCHARGE_COLUMNS')),
-    ['id','house','patientName','entryDate','expectedDate','previousDate','editedAt','editedBy','editedById']);
+    ['id','house','patientName','entryDate','expectedDate','previousDate','editedAt','editedBy','editedById','state']);
   g.run(`readPatientsForBonus_ = function () { return [{houseId:'ramot',name:'Synthetic patient',entry:new Date(2026,8,1),exit:null,status:'active'},
     {houseId:'arfoni',name:'Other house',entry:new Date(2026,8,1),exit:null,status:'active'}]; };`);
   const dis = {op:'dischargeSet',patientName:'Synthetic patient',entryDate:'2026-09-01',expectedDate:'2026-11-20',previousDate:''};
@@ -83,4 +83,13 @@ test('real Managers HTTP routes → real Dashboard Code.gs, synthetic users and 
   assert.equal(withDate.expectedDischargeSupported, true);
   assert.equal(withDate.patients[0].expectedDischarge.date, '2026-11-20');
   assert.equal(g.sandbox.__sheets.ManagersExpectedDischarge.grid.length, 2);
+  // Clear + «אין צפי לשחרור» (15 Oct 2026): appended rows, same gates.
+  assert.deepEqual(withDate.expectedDischargeModes, ['set','clear','none']);
+  assert.equal((await work(elsewhere, {...dis, mode:'none', expectedDate:'', previousDate:'2026-11-20'})).data.error, 'not_found');
+  assert.equal((await work(mine, {...dis, mode:'none', expectedDate:'', previousDate:'2026-11-20'})).data.ok, true);
+  assert.deepEqual((await work(mine,{op:'houseData'})).data.patients[0].expectedDischarge.none, true);
+  assert.equal((await work(admin, {...dis, house:'ramot', mode:'clear', expectedDate:'', previousDate:'2026-11-20'})).data.error, 'conflict');
+  assert.equal((await work(admin, {...dis, house:'ramot', mode:'clear', expectedDate:'', previousDate:'none'})).data.ok, true);
+  assert.equal((await work(mine,{op:'houseData'})).data.patients[0].expectedDischarge, null);
+  assert.equal(g.sandbox.__sheets.ManagersExpectedDischarge.grid.length, 4, 'every step appended, nothing deleted');
 });
