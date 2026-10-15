@@ -172,7 +172,8 @@ test('badge on «ראשי»: the alert count, hidden at 0', () => {
 
 test('UI: containers, script order, 16px / 44px, SW cache bumped and ships the module', () => {
   const html = pub('index.html');
-  assert.match(html, /<section data-sub-panel="home">\s*<!--[^>]*-->\s*<div data-dash-alerts><\/div>/);
+  // The committee card (15 Oct 2026) sits above it, still first in «ראשי» before the bonus dial.
+  assert.match(html, /<section data-sub-panel="home">\s*(<!--[^>]*-->\s*<div data-dash-committees><\/div>\s*)?<!--[^>]*-->\s*<div data-dash-alerts><\/div>/);
   assert.match(html, /<div id="dischargeAlertsAll" class="dis-alerts-all" hidden><\/div>/);
   const i = (s) => html.indexOf(`<script src="${s}">`);
   assert.ok(i('/discharge-alerts.js') > 0 && i('/discharge-alerts.js') < i('/work.js'));

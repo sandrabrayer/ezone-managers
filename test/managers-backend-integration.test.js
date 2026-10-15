@@ -92,4 +92,18 @@ test('real Managers HTTP routes → real Dashboard Code.gs, synthetic users and 
   assert.equal((await work(admin, {...dis, house:'ramot', mode:'clear', expectedDate:'', previousDate:'none'})).data.ok, true);
   assert.equal((await work(mine,{op:'houseData'})).data.patients[0].expectedDischarge, null);
   assert.equal(g.sandbox.__sheets.ManagersExpectedDischarge.grid.length, 4, 'every step appended, nothing deleted');
+  // Committee «ועדה» (15 Oct 2026): same gates, append-only, past only as a correction.
+  g.run(`committeeToday_ = function () { return '2026-10-14'; };`);
+  const cm = {op:'committeeSet',patientName:'Synthetic patient',entryDate:'2026-09-01',committeeDate:'2026-10-20',label:'השמה',previousDate:'',previousLabel:''};
+  assert.equal((await work(elsewhere, cm)).data.error, 'not_found', 'another house manager cannot set it');
+  assert.equal((await work(mine, {...cm, committeeDate:'2026-10-13'})).data.error, 'past_date');
+  assert.equal((await work(mine, cm)).data.ok, true);
+  assert.equal((await work(admin, {...cm, house:'ramot', committeeDate:'2026-10-21'})).data.error, 'conflict');
+  const fix = (await work(mine, {...cm, committeeDate:'2026-10-13', previousDate:'2026-10-20', previousLabel:'השמה', correction:true})).data;
+  assert.deepEqual([fix.ok, fix.warning], [true, 'past_date']);
+  const withCm = (await work(mine,{op:'houseData'})).data;
+  assert.deepEqual([withCm.committeeSupported, withCm.patients[0].committee.date, withCm.patients[0].committee.label], [true, '2026-10-13', 'השמה']);
+  assert.equal((await work(mine, {...cm, mode:'clear', committeeDate:'', label:'', previousDate:'2026-10-13', previousLabel:'השמה'})).data.ok, true);
+  assert.equal((await work(mine,{op:'houseData'})).data.patients[0].committee, null);
+  assert.equal(g.sandbox.__sheets.ManagersCommittee.grid.length, 4, 'header + 3 appended rows');
 });

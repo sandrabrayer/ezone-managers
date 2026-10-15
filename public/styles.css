@@ -1970,3 +1970,36 @@ body.is-locked { overflow: hidden; }
   border-radius: 999px; background: #EF4444; color: #fff; font-size: 13px; font-weight: 700; line-height: 20px; text-align: center;
 }
 .subtab-badge[hidden] { display: none; }
+
+/* ── committee «ועדה» (15 Oct 2026): second line per patient + alerts ── */
+.wk-cm { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 4px; font-size: 16px; }
+.wk-cm-text { color: var(--text); }
+.wk-cm-text b { font-weight: 700; }
+.wk-cm-clear { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.wk-cm-form input[type="text"] {
+  font: inherit; font-size: 16px; min-height: 44px; padding: 6px 10px; max-width: 100%;
+  border-radius: var(--r-md); border: 1px solid var(--line-strong); background: rgba(255, 255, 255, 0.08); color: var(--text);
+}
+.wk-cm[aria-busy="true"] { cursor: progress; }
+.cm-alerts { font-size: 16px; }
+.cm-alerts-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.cm-alerts-filter { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; color: var(--text-mute); }
+.cm-alerts-filter select { min-height: 44px; font-size: 16px; }
+.cm-alert-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cm-alert {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.7); background: rgba(251, 191, 36, 0.14);
+}
+.cm-alert.is-today { border-color: rgba(248, 113, 113, 0.85); background: rgba(239, 68, 68, 0.2); }
+.cm-alert-main { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.cm-alert-name { font-weight: 700; color: var(--text); font-size: 16px; }
+.cm-alert-house { font-size: 14px; color: var(--text-mute); }
+.cm-alert-tag { font-size: 14px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(251, 191, 36, 0.25); color: #FDE68A; }
+.cm-alert.is-today .cm-alert-tag { background: rgba(239, 68, 68, 0.35); color: #FECACA; }
+.cm-alert-meta { flex: 1 1 auto; font-size: 16px; color: var(--text); overflow-wrap: anywhere; }
+.cm-alert-btn {
+  font: inherit; font-size: 16px; min-height: 44px; min-width: 44px; padding: 8px 14px;
+  border-radius: var(--r-md); border: 1px solid var(--line-strong); background: rgba(255, 255, 255, 0.08);
+  color: var(--text); cursor: pointer;
+}
+.subtab-badge.cm-badge { background: #D97706; }

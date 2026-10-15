@@ -91,6 +91,11 @@ Op `dischargeSet` → Dashboard, append-only and audited, house-scoped. Saving s
 Both append an audit row, and «אין צפי» is left out of the alerts and the no-date count.
 Details: `docs/expected-discharge.md`.
 
+Committee date «ועדה» (15 Oct 2026): a second line per patient on «מטופלים בבית»,
+«ועדה: dd/m/yy · <label>», with set / change / clear. The Dashboard stores it append-only. Alerts
+«ועדה היום» / «ועדה השבוע» (7 days) appear on «ראשי» with a badge, plus an admin all-houses card.
+Details: `docs/committee.md`.
+
 Discharge alerts (15 Oct 2026): «ראשי» shows «שחרור קרוב» for expected dates in the next 14 days
 and a red «דורש עדכון» for passed dates, plus a badge; admins get an all-houses card with a house
 filter on the overview. From the manager's own dates only, in-app only. Details:

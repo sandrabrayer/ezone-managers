@@ -356,6 +356,18 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: committee date per patient «ועדה» (October 15, 2026)
+
+- «מטופלים בבית» row: second line «ועדה: dd/m/yy · <label>» (label ≤ 60), with set / «שינוי» /
+  «ניקוי».
+- Today or later; a past date only as a confirmed correction of an existing date.
+- `/api/work` `committeeSet` → Dashboard `ManagersCommittee` (append-only; E-Zone-Dashboard
+  #239).
+- Alerts on «ראשי»: «ועדה היום» and «ועדה השבוע» (`COMMITTEE_LEAD_DAYS = 7`), Israel time, a
+  badge, and an admin all-houses card with a house filter. Shared fixture
+  `committee-alert-cases.json`.
+- No new endpoint, secret or variable. SW v31, tests 371. Details: `docs/committee.md`.
+
 ## Managers: expected discharge clear + «אין צפי לשחרור» (October 15, 2026)
 
 - The date form on «מטופלים בבית» adds «ניקוי תאריך» and «אין צפי לשחרור». A «אין צפי» row

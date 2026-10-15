@@ -3,6 +3,29 @@
 
 ## Unreleased
 
+### Added — committee date per patient «ועדה» + alerts (October 15, 2026)
+
+- **What**: house managers record a committee date (one current date per stay) with an optional
+  label (≤ 60) on «מטופלים בבית». Each row gets a second line, «ועדה: dd/m/yy · <label>», with
+  «הגדרת תאריך ועדה» / «שינוי» / «ניקוי». Same spinner, error reasons and optimistic
+  concurrency (date + label) as the expected-discharge save.
+- **Past dates**: today or later. A past date is allowed only as a correction of an existing
+  date, after a warning (a second «שמירה» sends `correction: true`).
+- **Proxy** (`server.js`): new op `committeeSet`. It is shape-checked, house-pinned for a
+  manager, uses the write rate-limit bucket and a 30 s timeout.
+- **Backend**: E-Zone-Dashboard #239, the append-only sheet `ManagersCommittee` (merged first).
+- **Alerts** (`public/committee-alerts.js`, `COMMITTEE_LEAD_DAYS = 7`):
+  - «ועדה היום» (red, top) and «ועדה השבוע» (+1…+7), sorted by date, with days remaining and a
+    one-tap «שינוי»;
+  - an amber badge on «ראשי»;
+  - admin: an all-houses card with a house filter;
+  - Israel time; past dates never alerted; text-only DOM;
+  - shared fixture `test/fixtures/committee-alert-cases.json` (sha256 pinned here and in the
+    Dashboard).
+- **Assumption**: "committee" = any committee the manager records; its kind goes in the label.
+- Display-only; bonus untouched. SW v30 → v31. **Tests 347 → 371**. The opt-in integration
+  test covers `committeeSet` against the real Code.gs. Details: `docs/committee.md`.
+
 ### Added — expected discharge can be cleared or marked «אין צפי לשחרור» (October 15, 2026)
 
 - **Why**: a date could be set or changed, but not cleared. The CEO set a test date on a patient
