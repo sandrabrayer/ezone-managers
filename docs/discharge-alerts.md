@@ -44,3 +44,12 @@ picker.
 - **UI**: RTL, 16px text, 44px tap targets, wraps at 360px.
 - **Fix bundled with it**: a redraw of «מטופלים» (refresh / second load) keeps
   an open date picker open.
+
+## Shared with the Dashboard (15 Oct 2026, Task F)
+
+The Dashboard shows the same alerts, read-only, on «דשבורד» → «שחרורים צפויים»
+(E-Zone-Dashboard `lib/discharge-alerts.js`, a copy of this module's core).
+Both repos run the identical fixture `test/fixtures/discharge-alert-cases.json`
+(sha256 pinned in `test/discharge-alerts-shared.test.js` here and in the
+Dashboard's `test/dashboard-expected-discharges.test.js`). Change the rule in
+both repos together, with the fixture.
