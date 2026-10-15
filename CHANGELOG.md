@@ -3,6 +3,23 @@
 
 ## Unreleased
 
+### Changed — richer colours on the Managers work tabs (October 15, 2026)
+
+- **What**: the work sub-tabs (patients, team, therapists, staff talks,
+  events) use the same hues, just stronger. Card tint 26%/8% → 38%/15%,
+  border 50% → 70%. Inactive sub-tabs: background 14% → 24%, text 45% → 65%,
+  border 55% → 75%. Log entries 0.03 → 0.07. Form inputs get a 55% section-colour
+  border. KPIs 22% → 34%. Muted/dim text is 0.88/0.85, card subtitles go from a
+  50% to a 35% colour mix, and work-card notes are `#DDD6FE`.
+- **Why**: the tabs looked faded. The token change is scoped to the five work
+  panels, so the Dashboard tab, the gauge and every bonus-view output are
+  unchanged. Every text colour is at least 4.5:1 (WCAG AA) on the lightest
+  stop of every tinted card. Edits are CSS only, with no logic or layout
+  change. SW cache v25 → v26.
+- **Tests**: new `test/work-colours.test.js` parses `styles.css`. It pins the
+  minimums (mute ≥ 0.85, card tint ≥ 36%, …), checks that the `:root` tokens
+  are unchanged and recomputes the AA ratios. 269 → 274 tests (+5).
+
 ### Security — coordinated Managers protocol 2 (October 14, 2026; pending deployment)
 
 - Authenticate all upstream reads with a JSON-body secret and session-derived
