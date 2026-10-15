@@ -11,7 +11,9 @@
  *     → a «שחרור קרוב» alert: name, date, «היום» / «מחר» / «בעוד N ימים»;
  *   - expected date already passed (still in the house)
  *     → a red «דורש עדכון» alert: «התאריך עבר לפני N ימים»;
- *   - no date → counted in ONE quiet summary line, never one alert each.
+ *   - no date → counted in ONE quiet summary line, never one alert each;
+ *   - «אין צפי לשחרור» (expectedDischarge.none, 15 Oct 2026) → no alert and
+ *     NOT counted as no-date (dischargeState — shared with the Dashboard).
  * "Today" is the calendar day in Asia/Jerusalem, whatever the device clock's
  * timezone. A discharged patient is no longer in houseData.patients, so their
  * alert disappears on the next load.
@@ -61,17 +63,27 @@
     return n === 1 ? 'מטופל/ת אחד/ת ללא תאריך שחרור משוער' : n + ' מטופלים ללא תאריך שחרור משוער';
   }
 
-  /* The alerts of ONE house's payload: { house, supported, alerts, noDate, count }.
+  /* The state of one patient's expectedDischarge value (shared rule, the
+   * fixture's `states`): 'none' — «אין צפי לשחרור», never an alert or a
+   * no-date; 'date' — a real date; 'noDate' — nothing (null, cleared, bad). */
+  function dischargeState(ed) {
+    if (ed && typeof ed === 'object' && ed.none === true) return 'none';
+    return ed && typeof ed === 'object' && isRealIso(ed.date) ? 'date' : 'noDate';
+  }
+
+  /* The alerts of ONE house's payload: { house, supported, alerts, noDate, noExpected, count }.
    * alerts are sorted by date (overdue first, being earliest), then by name. */
   function houseAlerts(data, house, today) {
     var d = data || {};
-    var out = { house: String(house || d.house || ''), supported: d.expectedDischargeSupported === true, alerts: [], noDate: 0, count: 0 };
+    var out = { house: String(house || d.house || ''), supported: d.expectedDischargeSupported === true, alerts: [], noDate: 0, noExpected: 0, count: 0 };
     if (!out.supported) return out;
     var t = isRealIso(today) ? today : israelToday();
     (Array.isArray(d.patients) ? d.patients : []).forEach(function (p, i) {
       if (!p || typeof p !== 'object') return;
-      var date = p.expectedDischarge && isRealIso(p.expectedDischarge.date) ? p.expectedDischarge.date : '';
-      if (!date) { out.noDate++; return; }
+      var st = dischargeState(p.expectedDischarge);
+      if (st === 'none') { out.noExpected++; return; }
+      if (st === 'noDate') { out.noDate++; return; }
+      var date = p.expectedDischarge.date;
       var days = dayDiff(t, date);
       if (days > ALERT_LEAD_DAYS) return;
       out.alerts.push({
@@ -192,7 +204,7 @@
 
   var DischargeAlerts = {
     ALERT_LEAD_DAYS: ALERT_LEAD_DAYS, TIME_ZONE: TIME_ZONE,
-    israelToday: israelToday, dayDiff: dayDiff, whenText: whenText, noDateText: noDateText,
+    israelToday: israelToday, dayDiff: dayDiff, whenText: whenText, noDateText: noDateText, dischargeState: dischargeState,
     houseAlerts: houseAlerts, mergeAlerts: mergeAlerts, renderCard: renderCard, setBadge: setBadge
   };
   root.DischargeAlerts = DischargeAlerts;

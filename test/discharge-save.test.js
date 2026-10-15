@@ -323,7 +323,7 @@ test('wiring: «ביטול» is ignored while saving; a redraw during a save kee
   assert.doesNotMatch(block, /innerHTML|insertAdjacentHTML|console\./, 'text-only, nothing logged');
 });
 
-test('UI: spinner respects prefers-reduced-motion; 16px text; 44px targets; SW v29', () => {
+test('UI: spinner respects prefers-reduced-motion; 16px text; 44px targets; SW v30', () => {
   const css = pub('styles.css');
   assert.match(css, /\.wk-spin \{[^}]*animation: wk-spin/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\/\*[^*]*\*\/\s*\.wk-spin \{ animation: none;/);
@@ -332,7 +332,7 @@ test('UI: spinner respects prefers-reduced-motion; 16px text; 44px targets; SW v
   const btn = (css.match(/\.wk-dis-btn \{([^}]*)\}/) || [])[1] || '';
   assert.match(btn, /min-height: 44px/);
   assert.match(btn, /font-size: 16px/);
-  assert.match(pub('sw.js'), /const CACHE = 'ezone-managers-v29';/);
+  assert.match(pub('sw.js'), /const CACHE = 'ezone-managers-v30';/);
 });
 
 test('bonus untouched: no bonus module reads the save flow; golden snapshots are a separate suite', () => {

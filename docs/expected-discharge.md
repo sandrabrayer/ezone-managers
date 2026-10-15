@@ -51,8 +51,31 @@ renders exactly as before.
     value is reloaded.
 - **Display-only**: no bonus math or bonus wording reads it. This is tested,
   and the golden bonus snapshots are unchanged.
-- A date can be set or changed. It cannot be cleared (a conservative reading of
-  "set or change").
+- A date can be set, changed, cleared or marked «אין צפי לשחרור» (since 15 Oct 2026, below).
+
+## Clear and «אין צפי לשחרור» (15 Oct 2026)
+
+| State | The row shows | Buttons in the open form |
+|---|---|---|
+| Date set | `שחרור משוער: dd/m/yy` + «שינוי» | «שמירה», «ביטול», «אין צפי לשחרור», «ניקוי תאריך» |
+| «אין צפי» | `אין צפי לשחרור` + «שינוי» | «שמירה» (a date), «ביטול», «ניקוי תאריך» |
+| Nothing set | «הגדרת תאריך שחרור» | «שמירה», «ביטול», «אין צפי לשחרור» |
+
+- `POST /api/work` `{ op: 'dischargeSet', …, mode: 'clear' | 'none', expectedDate: '' }`.
+  `set` sends no `mode` (the old contract).
+- The proxy refuses an unknown mode (`bad_request`), and a date sent with `clear` / `none`
+  (`bad_date`).
+- `previousDate` is the token the screen showed: `''`, the date, or `none`. A stale token →
+  «התאריך עודכן בינתיים».
+- The Dashboard APPENDS a row with an empty date and `state` = `cleared` / `none`. Nothing is
+  deleted; the last row wins.
+- Feeds return `{ date: '', none: true, editedAt, editedBy }` for «אין צפי».
+- The buttons appear only when `houseData.expectedDischargeModes` lists `clear` / `none`, so an
+  older backend keeps the set/change form.
+- Same spinner (on the tapped button), disabled form, one request per tap and Hebrew reasons.
+  Success shows «התאריך נוקה ✓» / «נשמר: אין צפי לשחרור ✓».
+- Conservative: «ניקוי תאריך» also clears «אין צפי». There is no confirm dialog, because the
+  action is reversible and audited.
 
 ## Saving — spinner and error reasons (15 Oct 2026)
 

@@ -11,7 +11,8 @@ auto-filled from the Dashboard.
 | Expected date today … +14 days (`ALERT_LEAD_DAYS = 14`, inclusive) | amber «שחרור קרוב»: name, `שחרור משוער: dd/m/yy` and «היום» / «מחר» / «בעוד N ימים» |
 | Date passed, patient still in the house | red «דורש עדכון»: «התאריך עבר אתמול» / «התאריך עבר לפני N ימים» |
 | Date more than 14 days away | nothing |
-| No date set | ONE quiet line, «N מטופלים ללא תאריך שחרור משוער»; a tap opens «מטופלים» |
+| No date set (or cleared) | ONE quiet line, «N מטופלים ללא תאריך שחרור משוער»; a tap opens «מטופלים» |
+| Marked «אין צפי לשחרור» | nothing: no alert, and not counted in the no-date line (15 Oct 2026) |
 
 - Alerts are sorted by date, so overdue ones come first.
 - «שינוי תאריך» opens that patient's date picker on «מטופלים» in one tap.
@@ -49,7 +50,8 @@ picker.
 
 The Dashboard shows the same alerts, read-only, on «דשבורד» → «שחרורים צפויים»
 (E-Zone-Dashboard `lib/discharge-alerts.js`, a copy of this module's core).
-Both repos run the identical fixture `test/fixtures/discharge-alert-cases.json`
+Both repos run the identical fixture `test/fixtures/discharge-alert-cases.json` (its `states`
+section, 15 Oct 2026, pins «אין צפי» → no alert, not no-date)
 (sha256 pinned in `test/discharge-alerts-shared.test.js` here and in the
 Dashboard's `test/dashboard-expected-discharges.test.js`). Change the rule in
 both repos together, with the fixture.

@@ -126,11 +126,41 @@
     }
     return WORK_ERRORS.unknown;
   }
-  function dischargeHtml(p, i) {
-    var cur = p.expectedDischarge && isRealIso(p.expectedDischarge.date) ? p.expectedDischarge.date : '';
+  /* «ניקוי תאריך» / «אין צפי לשחרור» (15 Oct 2026): offered only when the
+   * backend lists the modes (`expectedDischargeModes`), so an older backend
+   * keeps the set/change-only form. Both append an audit row there. */
+  var DISCHARGE_DONE = { set: 'נשמר ✓', clear: 'התאריך נוקה ✓', none: 'נשמר: אין צפי לשחרור ✓' };
+  function dischargeModes(d) {
+    var m = d && Array.isArray(d.expectedDischargeModes) ? d.expectedDischargeModes : [];
+    return { clear: m.indexOf('clear') >= 0, none: m.indexOf('none') >= 0 };
+  }
+  /* What the row shows now: 'none' («אין צפי»), 'date', or '' (nothing set). */
+  function dischargeStateOf(p) {
+    var ed = p && p.expectedDischarge;
+    if (ed && ed.none === true) return 'none';
+    return ed && isRealIso(ed.date) ? 'date' : '';
+  }
+  /* The value this screen showed — the backend's optimistic-concurrency token. */
+  function dischargeToken(p) {
+    var st = dischargeStateOf(p);
+    return st === 'none' ? 'none' : st === 'date' ? String(p.expectedDischarge.date) : '';
+  }
+  function modeBtnHtml(mode, i, label, who) {
+    return '<button type="button" class="wk-dis-btn wk-dis-mode" data-dis-mode="' + mode + '" data-dis-mode-row="' + i + '" aria-label="' +
+      esc(label) + ' — ' + who + '"><span class="wk-spin" data-dis-mode-spin aria-hidden="true" hidden></span>' +
+      '<span data-dis-mode-label>' + esc(label) + '</span></button>';
+  }
+  function dischargeHtml(p, i, modes) {
+    var md = modes || {};
+    var st = dischargeStateOf(p);
+    var none = st === 'none' && md.none;
+    var cur = st === 'date' ? p.expectedDischarge.date : '';
     var who = esc(p.name);
-    var h = '<div class="wk-dis" data-dis-row="' + i + '">';
-    h += cur
+    var h = '<div class="wk-dis" data-dis-row="' + i + '"' + (none ? ' data-dis-none="1"' : '') + '>';
+    h += none
+      ? '<span class="wk-dis-text wk-dis-none">אין צפי לשחרור</span>' +
+        '<button type="button" class="wk-dis-btn" data-dis-edit="' + i + '" aria-label="שינוי — אין צפי לשחרור — ' + who + '">שינוי</button>'
+      : cur
       ? '<span class="wk-dis-text">שחרור משוער: <b>' + esc(fmtDate(cur)) + '</b></span>' +
         '<button type="button" class="wk-dis-btn" data-dis-edit="' + i + '" aria-label="שינוי תאריך שחרור משוער — ' + who + '">שינוי</button>'
       : '<button type="button" class="wk-dis-btn wk-dis-empty" data-dis-edit="' + i + '" aria-label="הגדרת תאריך שחרור — ' + who + '">הגדרת תאריך שחרור</button>';
@@ -141,6 +171,8 @@
       '<button type="submit" class="wk-dis-btn wk-dis-save"><span class="wk-spin" data-dis-spin aria-hidden="true" hidden></span>' +
       '<span data-dis-save-label>שמירה</span></button>' +
       '<button type="button" class="wk-dis-btn wk-dis-cancel" data-dis-cancel="' + i + '">ביטול</button>' +
+      (md.none && !none ? modeBtnHtml('none', i, 'אין צפי לשחרור', who) : '') +
+      (md.clear && (cur || none) ? modeBtnHtml('clear', i, 'ניקוי תאריך', who) : '') +
       '<span class="wk-msg" data-dis-msg role="status" aria-live="polite"></span></form>' +
       '<span class="wk-dis-flash" data-dis-flash role="status" aria-live="polite"></span>';
     return h + '</div>';
@@ -149,11 +181,12 @@
   function patientsHtml(d) {
     var pats = d.patients || [], outs = d.outpatients || [], visits = d.visits || [], adm = d.admissions || [];
     var dis = d.expectedDischargeSupported === true;
+    var modes = dischargeModes(d);
     var h = '';
     h += '<div class="card work-card wk-patients"><div class="card-title">מטופלים בבית (' + pats.length + ')</div>';
     h += pats.length ? '<ul class="wk-list' + (dis ? ' wk-pat-list' : '') + '">' + pats.map(function (p, i) {
       return '<li><span class="wk-name">' + esc(p.name) + '</span><span class="wk-meta">מ-' + esc(fmtDate(p.entryDate)) +
-        ' · יום ' + esc(p.days) + (p.status === 'trial' ? ' · ניסיון' : '') + '</span>' + (dis ? dischargeHtml(p, i) : '') + '</li>';
+        ' · יום ' + esc(p.days) + (p.status === 'trial' ? ' · ניסיון' : '') + '</span>' + (dis ? dischargeHtml(p, i, modes) : '') + '</li>';
     }).join('') + '</ul>' : '<div class="wk-empty">אין מטופלים רשומים בבית</div>';
     h += '</div>';
     h += '<div class="card work-card wk-out"><div class="card-title">מטופלי חוץ שיצאו מהבית (' + outs.length + ')</div>';
@@ -508,6 +541,7 @@
 
   var WorkView = { LOGS: LOGS, esc: esc, fmtDate: fmtDate, patientsHtml: patientsHtml, formHtml: formHtml,
     dischargeHtml: dischargeHtml, dischargeCheck: dischargeCheck, DISCHARGE_ERRORS: DISCHARGE_ERRORS,
+    dischargeModes: dischargeModes, dischargeStateOf: dischargeStateOf, dischargeToken: dischargeToken, DISCHARGE_DONE: DISCHARGE_DONE,
     WORK_ERRORS: WORK_ERRORS, dischargeErrorText: dischargeErrorText, setDischargeBusy: setDischargeBusy,
     teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml, costHtml: costHtml,
     logListHtml: logListHtml, logPanelHtml: logPanelHtml, followUpsHtml: followUpsHtml, entryFromForm: entryFromForm };
@@ -572,7 +606,7 @@
       p.innerHTML = patientsHtml(d);
       if (keep) reopenDischargeForm(p, keep.i, keep.v);
       // A save still in flight keeps its form busy across the redraw.
-      if (keep && savingDischarge[key + '|' + keep.i]) setDischargeBusy(p.querySelector('[data-dis-form="' + Number(keep.i) + '"]'), true);
+      if (keep && savingDischarge[key + '|' + keep.i]) setDischargeBusy(p.querySelector('[data-dis-form="' + Number(keep.i) + '"]'), true, savingDischarge[key + '|' + keep.i]);
     }
     var dh = panel.querySelector('[data-dash-house]');
     if (dh) dh.innerHTML = dashboardHtml(d);
@@ -742,6 +776,12 @@
         if (nav && nav.scrollIntoView) nav.scrollIntoView({ block: 'start', behavior: 'smooth' });
         return;
       }
+      var disMode = t.closest && t.closest('[data-dis-mode]');
+      if (disMode) {
+        var mf = disMode.closest('[data-dis-form]');
+        if (mf) await saveDischarge(panel, key, mf, undefined, disMode.getAttribute('data-dis-mode'));
+        return;
+      }
       var disEdit = t.closest && t.closest('[data-dis-edit]');
       var disCancel = t.closest && t.closest('[data-dis-cancel]');
       if (disEdit || disCancel) {
@@ -802,15 +842,24 @@
    * hidden, attributes; never innerHTML). While saving: the date, «שמירה» and
    * «ביטול» are disabled, the button shows a spinner and «שומר...». Off: the
    * form is restored as it was (the picked date is never touched). */
-  function setDischargeBusy(form, busy) {
+  function setDischargeBusy(form, busy, mode) {
     if (!form) return;
+    var m = mode === 'clear' || mode === 'none' ? mode : 'set';
     if (busy) { form.setAttribute('data-dis-busy', '1'); form.setAttribute('aria-busy', 'true'); }
     else { form.removeAttribute('data-dis-busy'); form.removeAttribute('aria-busy'); }
     Array.prototype.forEach.call(form.querySelectorAll('input, button'), function (el) { el.disabled = !!busy; });
+    // The spinner and «שומר...» sit on the button that was tapped.
     var spin = form.querySelector('[data-dis-spin]');
-    if (spin) spin.hidden = !busy;
+    if (spin) spin.hidden = !(busy && m === 'set');
     var label = form.querySelector('[data-dis-save-label]');
-    if (label) label.textContent = busy ? 'שומר...' : 'שמירה';
+    if (label) label.textContent = busy && m === 'set' ? 'שומר...' : 'שמירה';
+    Array.prototype.forEach.call(form.querySelectorAll('[data-dis-mode]'), function (b) {
+      var on = busy && b.getAttribute('data-dis-mode') === m;
+      var sp = b.querySelector('[data-dis-mode-spin]');
+      if (sp) sp.hidden = !on;
+      var lb = b.querySelector('[data-dis-mode-label]');
+      if (lb) lb.textContent = on ? 'שומר...' : (b.getAttribute('data-dis-mode') === 'none' ? 'אין צפי לשחרור' : 'ניקוי תאריך');
+    });
     if (busy) { var msg = form.querySelector('[data-dis-msg]'); if (msg) msg.textContent = ''; }
   }
 
@@ -821,9 +870,12 @@
   /* Save one patient's expected discharge date (the row's index in the
    * last-loaded houseData). previousDate = the value this screen showed, so
    * the backend refuses (conflict) instead of silently overwriting a newer one.
+   * mode: 'set' (default, the picked date), 'clear' («ניקוי תאריך») or 'none'
+   * («אין צפי לשחרור») — same spinner, error reasons and concurrency check.
    * deps (tests only): { post, refresh, cache }. */
-  async function saveDischarge(panel, key, form, deps) {
+  async function saveDischarge(panel, key, form, deps, mode) {
     var d = deps || { post: post, refresh: refresh, cache: cache };
+    var m = mode === 'clear' || mode === 'none' ? mode : 'set';
     var i = form.getAttribute('data-dis-form');
     var slot = key + '|' + i;
     if (savingDischarge[slot] || form.getAttribute('data-dis-busy') === '1') return;   // double tap
@@ -832,13 +884,17 @@
     var p = c && c.data && (c.data.patients || [])[Number(i)];
     if (!p) { msg.textContent = DISCHARGE_ERRORS.not_found; return; }
     var value = String(form.elements.expectedDate.value || '').trim();
-    var bad = dischargeCheck(value, p.entryDate);
-    if (bad) { msg.textContent = bad; return; }
-    var prev = p.expectedDischarge && p.expectedDischarge.date ? String(p.expectedDischarge.date) : '';
-    savingDischarge[slot] = true;
-    setDischargeBusy(form, true);
+    if (m === 'set') {
+      var bad = dischargeCheck(value, p.entryDate);
+      if (bad) { msg.textContent = bad; return; }
+    }
+    var prev = dischargeToken(p);
+    savingDischarge[slot] = m;
+    setDischargeBusy(form, true, m);
+    var body = { op: 'dischargeSet', house: key, patientName: p.name, entryDate: p.entryDate, expectedDate: m === 'set' ? value : '', previousDate: prev };
+    if (m !== 'set') body.mode = m;
     try {
-      await d.post({ op: 'dischargeSet', house: key, patientName: p.name, entryDate: p.entryDate, expectedDate: value, previousDate: prev });
+      await d.post(body);
     } catch (e) {
       delete savingDischarge[slot];
       var text = dischargeErrorText(e);
@@ -865,7 +921,7 @@
     await d.refresh(panel, key, true);
     var row = panel.querySelector('[data-dis-row="' + i + '"]');
     var flash = row && row.querySelector('[data-dis-flash]');
-    if (flash) flash.textContent = 'נשמר ✓';
+    if (flash) flash.textContent = DISCHARGE_DONE[m];
   }
 
   /* Called by app.js after a house tab is drawn. */

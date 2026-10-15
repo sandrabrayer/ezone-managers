@@ -14,7 +14,7 @@ const DA = require('../public/discharge-alerts.js');
 const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'discharge-alert-cases.json');
 const FIXTURE = JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf8'));
 /* The SAME hash is pinned in E-Zone-Dashboard test/dashboard-expected-discharges.test.js. */
-const SHARED_FIXTURE_SHA256 = 'ccac89c92f7b4f0c31909ecbb2b5f517c3fe41bf4d27579752a494aafce19522';
+const SHARED_FIXTURE_SHA256 = '8f0325ab4d56f32b9e64a8e744fc6b4430618e6b2dafce0d657c251c18e1b5f5';
 
 test('shared fixture: byte-identical to the one E-Zone-Dashboard pins', () => {
   const h = crypto.createHash('sha256').update(fs.readFileSync(FIXTURE_PATH)).digest('hex');

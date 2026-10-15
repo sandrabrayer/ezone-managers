@@ -270,6 +270,7 @@ const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // Writes get their own, tighter bucket on top of the shared one.
 const allowWrites = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 });
 const WRITE_OPS = new Set(['logAdd', 'logUpdate', 'dischargeSet']);
+const DISCHARGE_MODES = new Set(['set', 'clear', 'none']);
 // A write may wait up to 5 s for the Dashboard's script lock on top of its
 // reads, so it gets a longer budget than a read (docs/expected-discharge.md).
 const WORK_READ_TIMEOUT_MS = 15000;
@@ -321,15 +322,20 @@ app.post('/api/work', requireUser, async (req, res) => {
   if (op === 'dischargeSet') {
     // Shape check only; the Dashboard re-validates (real dates, ≥ admission,
     // patient in THIS house today) and keeps the append-only audit trail.
+    // mode (15 Oct 2026, docs/expected-discharge.md): 'set' (default) a date,
+    // 'clear' the date, 'none' = «אין צפי לשחרור» — the last two carry no date.
+    const mode = b.mode == null || b.mode === '' ? 'set' : String(b.mode);
+    if (!DISCHARGE_MODES.has(mode)) return res.status(400).json({ error: 'bad_request' });
     const name = typeof b.patientName === 'string' ? b.patientName.trim() : '';
     const prev = b.previousDate == null ? '' : String(b.previousDate);
+    const expected = b.expectedDate == null ? '' : String(b.expectedDate);
     if (!name || name.length > 80) return res.status(400).json({ error: 'bad_request' });
-    if (!ISO_DATE_RE.test(String(b.entryDate || '')) || !ISO_DATE_RE.test(String(b.expectedDate || ''))) {
-      return res.status(400).json({ error: 'bad_date' });
-    }
-    if (prev !== '' && !ISO_DATE_RE.test(prev)) return res.status(400).json({ error: 'bad_date' });
-    if (String(b.expectedDate) < String(b.entryDate)) return res.status(400).json({ error: 'before_admission' });
-    Object.assign(body, { patientName: name, entryDate: String(b.entryDate), expectedDate: String(b.expectedDate), previousDate: prev });
+    if (!ISO_DATE_RE.test(String(b.entryDate || ''))) return res.status(400).json({ error: 'bad_date' });
+    if (mode === 'set' ? !ISO_DATE_RE.test(expected) : expected !== '') return res.status(400).json({ error: 'bad_date' });
+    if (prev !== '' && prev !== 'none' && !ISO_DATE_RE.test(prev)) return res.status(400).json({ error: 'bad_date' });
+    if (mode === 'set' && expected < String(b.entryDate)) return res.status(400).json({ error: 'before_admission' });
+    Object.assign(body, { patientName: name, entryDate: String(b.entryDate), expectedDate: expected, previousDate: prev });
+    if (mode !== 'set') body.mode = mode;
   }
   if (op === 'logAdd' || op === 'logUpdate') {
     if (!WORK_LOGS.has(String(b.log || ''))) return res.status(400).json({ error: 'unknown_log' });

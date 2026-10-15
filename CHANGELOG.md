@@ -3,6 +3,33 @@
 
 ## Unreleased
 
+### Added — expected discharge can be cleared or marked «אין צפי לשחרור» (October 15, 2026)
+
+- **Why**: a date could be set or changed, but not cleared. The CEO set a test date on a patient
+  who has no expected discharge.
+- **UI** (`public/work.js`, `styles.css`): the open date form on «מטופלים בבית» adds two buttons:
+  - «אין צפי לשחרור»: the row then shows «אין צפי לשחרור» and a «שינוי» button;
+  - «ניקוי תאריך»: shown when a date or «אין צפי» is set; the patient goes back to «ללא תאריך».
+
+  Editing stays available for every patient. Each button has the same spinner, «שומר...»,
+  disabled form, one request per tap, specific Hebrew error reasons and optimistic-concurrency
+  check as «שמירה».
+- **Proxy** (`server.js`): `dischargeSet` takes `mode` = `set` | `clear` | `none`:
+  - `clear` / `none` must carry an empty date;
+  - `previousDate` may be `none`;
+  - an unknown mode → 400;
+  - house pinning, session and rate limits are unchanged.
+- **Backend** (E-Zone-Dashboard PR #238, merged first): both modes APPEND a row. History is never
+  deleted. The new buttons appear only when `houseData.expectedDischargeModes` lists them.
+- **Alerts** (`public/discharge-alerts.js`): «אין צפי» is neither an alert nor counted in
+  «N מטופלים ללא תאריך שחרור משוער». The shared fixture gained `states`, and its new sha256 is
+  pinned in both repos.
+- **Conservative readings**: «ניקוי תאריך» also clears «אין צפי». «אין צפי» patients get no
+  separate line on «ראשי». No confirm dialog: the action is reversible and audited.
+- Display-only; bonus golden snapshots unchanged. SW v29 → v30 (live v29).
+- **Tests 330 → 347** (`test/discharge-clear.test.js`). The opt-in integration test now also
+  covers clear / none against the real Code.gs.
+
 ### Fixed — expected-discharge save failure «upstream_error» + a save spinner (October 15, 2026)
 
 - **Symptom**: saving «שחרור משוער» failed in production with «השמירה נכשלה: upstream_error»;
