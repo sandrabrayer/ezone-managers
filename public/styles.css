@@ -1915,7 +1915,23 @@ body.is-locked { overflow: hidden; }
   color-scheme: dark;
   max-width: 100%;
 }
-.wk-dis-form .wk-msg { flex: 1 1 100%; font-size: 14px; }
+.wk-dis-form .wk-msg { flex: 1 1 100%; font-size: 16px; }
+/* Save in flight (expected discharge): spinner + «שומר...» inside «שמירה». */
+.wk-dis-save { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.wk-dis-form[aria-busy="true"] { cursor: progress; }
+.wk-spin {
+  display: inline-block; width: 16px; height: 16px; flex: 0 0 16px;
+  border: 2px solid currentColor; border-inline-end-color: transparent; border-radius: 50%;
+  animation: wk-spin 0.8s linear infinite;
+}
+.wk-spin[hidden] { display: none; }
+@keyframes wk-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  /* No rotation: a still ring + «שומר...» say the same thing. */
+  .wk-spin { animation: none; border-inline-end-color: currentColor; opacity: 0.6; }
+}
+.wk-dis-flash { flex: 1 1 100%; font-size: 16px; color: #86EFAC; }
+.wk-dis-flash:empty { display: none; }
 
 /* Discharge alerts «שחרור קרוב» (Task E, 15 Oct 2026): RTL, 16px text, 44px
    tap targets, wraps at 360px. Overdue = red «דורש עדכון». */

@@ -182,7 +182,7 @@ test('UI: containers, script order, 16px / 44px, SW cache bumped and ships the m
   assert.match(block('.dis-alerts-filter select'), /font-size: 16px; min-height: 44px/);
   assert.match(block('.dis-alert'), /flex-wrap: wrap/);
   const sw = pub('sw.js');
-  assert.match(sw, /ezone-managers-v28'/);
+  assert.match(sw, /ezone-managers-v(2[89]|[3-9]\d)'/, 'v28 (Task E) and monotonic after');
   assert.match(sw, /'\/discharge-alerts\.js'/);
 });
 
