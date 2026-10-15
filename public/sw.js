@@ -1,4 +1,4 @@
-const CACHE = 'ezone-managers-v26';
+const CACHE = 'ezone-managers-v27';
 const SHELL = [
   '/',
   '/index.html',

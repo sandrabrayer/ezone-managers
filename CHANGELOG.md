@@ -3,6 +3,43 @@
 
 ## Unreleased
 
+### Added — expected discharge date on «מטופלים בבית» (October 15, 2026)
+
+- **What**: under each patient («שם · מ-<כניסה> · יום N»), a «שחרור משוער: dd/m/yy»
+  line with a «שינוי» button. When no date is set there is a «הגדרת תאריך
+  שחרור» button. Both open a native date picker (min = admission date) with
+  «שמירה» / «ביטול».
+- **Layout**: RTL, 16px text, 44px tap targets; it wraps at 360px.
+- **Data**: new `/api/work` op `dischargeSet` → Dashboard `managersWork`
+  `dischargeSet` (E-Zone-Dashboard PR #230, merged first). The value comes back
+  in `houseData`.
+- **Storage**: the append-only, audited Dashboard sheet `ManagersExpectedDischarge`:
+  - every edit is a new row with who, when and the previous value;
+  - the client sends `previousDate`, so a stale edit gets `conflict`, never a
+    silent overwrite.
+- **Older backend**: the picker shows only when the backend sends
+  `expectedDischargeSupported`.
+- **Why**: Sandra, 15 Oct 2026 — managers plan discharges per patient.
+- **Security**:
+  - session required;
+  - a manager is pinned to their own house, an admin names one;
+  - server-side shape validation (real dates, expected ≥ admission, name 1–80
+    characters), then the Dashboard re-validates;
+  - a new write rate limit, 60 / 15 min per IP, for `logAdd`, `logUpdate` and
+    `dischargeSet`;
+  - the same fail-closed `MANAGERS_WORK_SECRET`; no new env var, Railway
+    variable or Script Property.
+- **Display-only**: no bonus module reads it (guard test); the golden bonus
+  snapshots are unchanged. SW cache v26 → v27.
+- **Conservative readings**:
+  - "2 MB body limit" → the existing, stricter 16 kb JSON limit is kept (and
+    tested);
+  - "Script Properties secret" → the existing `MANAGERS_WORK_SECRET`;
+  - "set or change" → a date cannot be cleared.
+- **Tests**: 273 → 287 passing (+14, `test/expected-discharge.test.js`). The
+  opt-in Dashboard integration test now also covers `dischargeSet` and pins the
+  sheet header (append-only guard).
+
 ### Changed — richer colours on the Managers work tabs (October 15, 2026)
 
 - **What**: the work sub-tabs (patients, team, therapists, staff talks,

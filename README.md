@@ -36,7 +36,8 @@ see [the deployment order](docs/managers-hardening-rollout.md) before merging ei
 
 What is still enforced:
 
-- **Per-IP rate limit** on `/api/sheets` and `/api/work`, 300 / 15 min, and on
+- **Per-IP rate limit** on `/api/sheets` and `/api/work`, 300 / 15 min (writes
+  additionally 60 / 15 min), and on
   `/api/login`, 10 / 15 min — so no client can drain the shared dashboard
   Apps Script's quota and take Dashboard, Managers and Therapists down with it.
 - **`X-Robots-Tag: noindex, nofollow`** on every response and `robots.txt`
@@ -81,6 +82,11 @@ Dashboard (14 Oct 2026):
   - visits and admissions this week and month;
   - the latest unusual events.
 - «שיחות משפחה» was removed.
+
+Expected discharge date (15 Oct 2026): each patient on «מטופלים בבית» shows
+«שחרור משוער: dd/m/yy» (or «הגדרת תאריך שחרור») with a native date picker.
+Op `dischargeSet` → Dashboard, append-only and audited, house-scoped. Details:
+`docs/expected-discharge.md`.
 
 Stage 2 (14 Oct 2026) adds two more house sub-tabs:
 - **צוות ומשמרות:** on shift today, the next 14 days, and the staff with tap-to-call phones.

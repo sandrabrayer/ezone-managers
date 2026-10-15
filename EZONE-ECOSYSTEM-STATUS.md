@@ -356,6 +356,22 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: expected discharge date on «מטופלים בבית» (October 15, 2026)
+
+- Each patient row shows «שחרור משוער: dd/m/yy», or «הגדרת תאריך שחרור» when no
+  date is set, with a native date picker (min = admission date). RTL, 16px, 44px
+  targets, 360px-safe.
+- Path: `/api/work` op `dischargeSet` → Dashboard `managersWork` `dischargeSet`
+  (E-Zone-Dashboard PR #230). The value comes back in `houseData`
+  (`patients[].expectedDischarge`, `expectedDischargeSupported`).
+- Storage: the append-only Dashboard sheet `ManagersExpectedDischarge`, keyed by
+  house + patient + admission date. Every edit is a new row (who, when, previous
+  value); a stale edit gets `conflict`, never a silent overwrite.
+- Access: session required; a manager edits only their own house, an admin any
+  house; the existing fail-closed `MANAGERS_WORK_SECRET`. The 16 kb JSON body
+  limit stays, and writes get an extra 60 / 15 min bucket.
+- Display-only (no bonus figure reads it). SW v27. Details: `docs/expected-discharge.md`.
+
 ## Managers: work tool stage 1 — personal-code login + house work tabs (October 13, 2026)
 
 - The app is NO LONGER open: personal code per person (`MANAGER_ACCESS`
