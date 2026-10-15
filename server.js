@@ -270,6 +270,32 @@ const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // Writes get their own, tighter bucket on top of the shared one.
 const allowWrites = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 });
 const WRITE_OPS = new Set(['logAdd', 'logUpdate', 'dischargeSet']);
+// A write may wait up to 5 s for the Dashboard's script lock on top of its
+// reads, so it gets a longer budget than a read (docs/expected-discharge.md).
+const WORK_READ_TIMEOUT_MS = 15000;
+const WORK_WRITE_TIMEOUT_MS = 30000;
+
+/* Why a /api/work call got no usable answer from Apps Script → a safe code
+ * the browser maps to Hebrew. Technical detail goes to the server log only:
+ * the op, the class, the HTTP status, the time — never a body, a name, the
+ * endpoint or the secret. */
+const UPSTREAM_CODE_RE = /^[a-z][a-z_]{0,39}$/;
+function workFailure(err) {
+  const name = err && err.name;
+  if (name === 'TimeoutError' || name === 'AbortError') return { status: 504, error: 'upstream_timeout' };
+  return { status: 502, error: 'upstream_unreachable' };
+}
+function nonJsonFailure(text) {
+  // Google answers an HTML page (not our JSON) when the script itself cannot
+  // run — above all when the deploying account's authorization is missing.
+  if (/authori[sz]ation is required|authorization required|permission|insufficient|consent/i.test(String(text || ''))) {
+    return { status: 502, error: 'upstream_auth' };
+  }
+  return { status: 502, error: 'upstream_bad_response' };
+}
+function logWork(op, what, status, ms) {
+  console.error(`[work] op=${op} ${what} status=${status} ms=${ms}`);
+}
 
 app.post('/api/work', requireUser, async (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -315,21 +341,34 @@ app.post('/api/work', requireUser, async (req, res) => {
     const p = b.patch && typeof b.patch === 'object' ? b.patch : {};
     body.patch = JSON.stringify({ followUpDone: p.followUpDone === true, deleted: p.deleted === true });
   }
+  const started = Date.now();
   try {
     const upstream = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       redirect: 'follow',
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(WRITE_OPS.has(op) ? WORK_WRITE_TIMEOUT_MS : WORK_READ_TIMEOUT_MS),
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(body)
     });
     const text = await upstream.text();
     let data;
-    try { data = JSON.parse(text); } catch { return res.status(502).json({ error: 'upstream_error' }); }
+    try { data = JSON.parse(text); } catch {
+      const f = nonJsonFailure(text);
+      logWork(op, `failure=${f.error} upstreamStatus=${upstream.status} bytes=${text.length}`, f.status, Date.now() - started);
+      return res.status(f.status).json({ ok: false, error: f.error });
+    }
+    if (data && data.ok === false) {
+      const code = typeof data.error === 'string' && UPSTREAM_CODE_RE.test(data.error) ? data.error : 'unknown';
+      logWork(op, `upstreamError=${code}`, code === 'unauthorized' ? 503 : 200, Date.now() - started);
+      // An Apps Script exception message is technical (server log class
+      // above); the browser only gets the code.
+      if (code === 'exception' || code === 'unknown') return res.status(200).json({ ok: false, error: code === 'unknown' ? 'upstream_bad_response' : 'exception' });
+    }
     res.status(data && data.ok === false && data.error === 'unauthorized' ? 503 : 200).json(data);
   } catch (err) {
-    console.error('Work proxy request failed');
-    res.status(502).json({ error: 'upstream_error' });
+    const f = workFailure(err);
+    logWork(op, `failure=${f.error}`, f.status, Date.now() - started);
+    res.status(f.status).json({ ok: false, error: f.error });
   }
 });
 

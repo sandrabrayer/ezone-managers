@@ -85,8 +85,9 @@ Dashboard (14 Oct 2026):
 
 Expected discharge date (15 Oct 2026): each patient on «מטופלים בבית» shows
 «שחרור משוער: dd/m/yy» (or «הגדרת תאריך שחרור») with a native date picker.
-Op `dischargeSet` → Dashboard, append-only and audited, house-scoped. Details:
-`docs/expected-discharge.md`.
+Op `dischargeSet` → Dashboard, append-only and audited, house-scoped. Saving shows a spinner and
+«שומר...», ignores double taps, and reports a specific Hebrew reason on failure (no raw
+`upstream_error`). Details: `docs/expected-discharge.md`.
 
 Discharge alerts (15 Oct 2026): «ראשי» shows «שחרור קרוב» for expected dates in the next 14 days
 and a red «דורש עדכון» for passed dates, plus a badge; admins get an all-houses card with a house

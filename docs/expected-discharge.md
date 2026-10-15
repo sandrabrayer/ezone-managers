@@ -54,6 +54,48 @@ renders exactly as before.
 - A date can be set or changed. It cannot be cleared (a conservative reading of
   "set or change").
 
+## Saving — spinner and error reasons (15 Oct 2026)
+
+While a save is in flight:
+- «שמירה» shows a spinner and «שומר...»;
+- the date, «שמירה» and «ביטול» are disabled (`aria-busy`);
+- a second tap, or Enter, is ignored: one request per save, even across a list redraw.
+
+| Outcome | Shows |
+|---|---|
+| Saved | the picker closes and the row shows «נשמר ✓» |
+| Refused or failed | the form comes back open, the picked date kept, with a specific reason |
+
+The spinner stops rotating under `prefers-reduced-motion`. Text is 16px, targets are 44px, the
+row wraps at 360px, and only text is written to the DOM.
+
+Reasons (`WorkView.dischargeErrorText`; never a raw code):
+
+| Code (from `/api/work`) | Shown |
+|---|---|
+| `conflict` | «התאריך עודכן בינתיים — …» (the current value is reloaded) |
+| `unknown_op` | «השרת לא עודכן — השמירה עוד לא זמינה. פנו לסנדרה.» |
+| `unauthorized` / `upstream_unavailable` | «אין הרשאה לשמור בשרת הנתונים. פנו לסנדרה.» |
+| `upstream_auth` | «אין הרשאה לכתוב בשרת הנתונים (נדרש אישור הרשאות). פנו לסנדרה.» |
+| `lock_busy` | «השרת עסוק כרגע — נסו שוב בעוד רגע.» |
+| `upstream_timeout` | «השרת לא הגיב בזמן — רעננו ובדקו אם התאריך נשמר.» |
+| `upstream_unreachable` | «אין חיבור לשרת הנתונים — נסו שוב בעוד רגע.» |
+| `upstream_bad_response` / `exception` | «תקלה בשרת הנתונים — נסו שוב. אם זה חוזר, פנו לסנדרה.» |
+| HTTP 429 / 401, offline | too many updates / sign in again / no internet |
+
+The proxy (`server.js` `/api/work`):
+- **Timeout**: writes (`logAdd`, `logUpdate`, `dischargeSet`) get 30 s, reads keep 15 s.
+- **Failure codes**: a timeout → 504 `upstream_timeout`. A network failure → 502
+  `upstream_unreachable`. A non-JSON reply → 502, as `upstream_auth` when it is Google's
+  authorization / permission page, otherwise `upstream_bad_response`.
+- **Exceptions**: an Apps Script `exception` reaches the browser without its message.
+- **Server log**: one line, `[work] op=<op> failure=<class> | upstreamError=<code> status=<n>
+  ms=<n>`. Never a body, a patient name, the endpoint or the secret.
+
+Backend side (E-Zone-Dashboard #236):
+- the writes take the script lock with `tryLock(5000)` → `lock_busy`;
+- the editor-run `authorizeSheetsWriteNow()` grants every scope and proves a real sheet write.
+
 ## Alerts
 
 The dates drive the «שחרור קרוב» / «דורש עדכון» alerts on «ראשי» (15 Oct 2026):

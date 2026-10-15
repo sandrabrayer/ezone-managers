@@ -3,6 +3,49 @@
 
 ## Unreleased
 
+### Fixed — expected-discharge save failure «upstream_error» + a save spinner (October 15, 2026)
+
+- **Symptom**: saving «שחרור משוער» failed in production with «השמירה נכשלה: upstream_error»;
+  reads worked.
+- **Root cause (code)**:
+  - `upstream_error` means the proxy got no JSON from Apps Script (non-JSON, or a failed / timed
+    out fetch); every Apps Script exception is already JSON;
+  - the Dashboard write took the script lock with `waitLock(10000)` (throws) after a full
+    Patients read, so it could outlast this proxy's 15 s timeout.
+  - Fixed in E-Zone-Dashboard #236: `tryLock(5000)` → `lock_busy`, plus the editor-run
+    `authorizeSheetsWriteNow()` for a partial OAuth grant (writes fail while reads pass).
+  - Ruled out:
+    - a stale deployment (the picker only renders when the backend that has `dischargeSet` says
+      so; a stale one answers `unknown_op`);
+    - a secret mismatch (it answers `unauthorized` / 503 and breaks reads).
+- **Proxy**: `/api/work` never answers a bare `upstream_error`:
+  - `upstream_timeout` (504), `upstream_unreachable`, `upstream_auth` (Google's HTML
+    authorization page), `upstream_bad_response`;
+  - an Apps Script `exception` without its message;
+  - writes get 30 s, reads keep 15 s;
+  - one technical server-log line per failure (op, class, status, ms; no body, name, endpoint
+    or secret).
+- **UI** (`public/work.js`, `styles.css`):
+  - the reason is specific Hebrew (`dischargeErrorText`), never a raw code;
+  - saving shows a spinner + «שומר...» with the date / «שמירה» / «ביטול» disabled;
+  - a double tap or Enter sends one request (guarded across a redraw);
+  - an error restores the form with the date kept;
+  - success closes the picker and shows «נשמר ✓»;
+  - `prefers-reduced-motion` stops the rotation; 16px text, 44px targets, 360px-safe, text-only
+    DOM.
+- **Security**: no new endpoint, env var or secret; authorization unchanged (session, house
+  pinned server-side).
+- **Bonus**: untouched; the golden snapshots are unchanged.
+- **SW**: cache v28 → v29.
+- **Tests**: 306 → 330 (+24, `test/discharge-save.test.js`):
+  - every failure class and its log line;
+  - the exception message never forwarded;
+  - pass-through codes and unchanged authorization;
+  - the Hebrew reason table;
+  - on a text-only DOM: success spinner → confirmation, error restore with the date kept,
+    conflict, double tap → one request, invalid date;
+  - wiring, the CSS sizes and reduced motion, and the bonus guard.
+
 ### Tests — discharge-alert rule pinned to the Dashboard copy (October 15, 2026; Task F)
 
 - **What**: `test/fixtures/discharge-alert-cases.json` + `test/discharge-alerts-shared.test.js`

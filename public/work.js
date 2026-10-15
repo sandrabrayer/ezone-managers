@@ -91,6 +91,41 @@
     not_found: 'המטופל/ת כבר לא רשום/ה בבית — רעננו את הדף',
     forbidden: 'אין הרשאה לעדכן את הבית הזה'
   };
+  /* Why a save (or a load) failed, in plain Hebrew — never a raw code. The
+   * technical class is in the server log only (server.js logWork). */
+  var WORK_ERRORS = {
+    unknown_op: 'השרת לא עודכן — השמירה עוד לא זמינה. פנו לסנדרה.',
+    unauthorized: 'אין הרשאה לשמור בשרת הנתונים. פנו לסנדרה.',
+    upstream_unavailable: 'אין הרשאה לשמור בשרת הנתונים. פנו לסנדרה.',
+    upstream_auth: 'אין הרשאה לכתוב בשרת הנתונים (נדרש אישור הרשאות). פנו לסנדרה.',
+    lock_busy: 'השרת עסוק כרגע — נסו שוב בעוד רגע.',
+    upstream_timeout: 'השרת לא הגיב בזמן — רעננו ובדקו אם התאריך נשמר.',
+    upstream_unreachable: 'אין חיבור לשרת הנתונים — נסו שוב בעוד רגע.',
+    upstream_bad_response: 'תקלה בשרת הנתונים — נסו שוב. אם זה חוזר, פנו לסנדרה.',
+    upstream_error: 'תקלה בשרת הנתונים — נסו שוב. אם זה חוזר, פנו לסנדרה.',
+    exception: 'תקלה בשרת הנתונים — נסו שוב. אם זה חוזר, פנו לסנדרה.',
+    missing_fields: 'חסרים פרטים — רעננו את הדף ונסו שוב.',
+    bad_request: 'חסרים פרטים — רעננו את הדף ונסו שוב.',
+    rate_limited: 'יותר מדי עדכונים — נסו שוב מאוחר יותר.',
+    session: 'פג תוקף ההתחברות — היכנסו שוב.',
+    offline: 'אין חיבור לאינטרנט — בדקו את החיבור ונסו שוב.',
+    unknown: 'השמירה נכשלה — נסו שוב.'
+  };
+  /* err: what post() throws ({ status, data }) or a network TypeError. */
+  function dischargeErrorText(err) {
+    var code = err && err.data && typeof err.data.error === 'string' ? err.data.error : '';
+    if (code && Object.prototype.hasOwnProperty.call(DISCHARGE_ERRORS, code)) return DISCHARGE_ERRORS[code];
+    if (code && Object.prototype.hasOwnProperty.call(WORK_ERRORS, code)) return WORK_ERRORS[code];
+    var status = err && err.status;
+    if (status === 429) return WORK_ERRORS.rate_limited;
+    if (status === 401) return WORK_ERRORS.session;
+    if (status === 403) return DISCHARGE_ERRORS.forbidden;
+    if (!err || !err.data) {
+      if (err && err.name === 'TypeError') return WORK_ERRORS.offline;
+      if (status >= 500) return WORK_ERRORS.upstream_bad_response;
+    }
+    return WORK_ERRORS.unknown;
+  }
   function dischargeHtml(p, i) {
     var cur = p.expectedDischarge && isRealIso(p.expectedDischarge.date) ? p.expectedDischarge.date : '';
     var who = esc(p.name);
@@ -103,9 +138,11 @@
       '<label class="wk-dis-label"><span>שחרור משוער</span>' +
       '<input name="expectedDate" type="date" required' +
       (isRealIso(p.entryDate) ? ' min="' + esc(p.entryDate) + '"' : '') + (cur ? ' value="' + esc(cur) + '"' : '') + '></label>' +
-      '<button type="submit" class="wk-dis-btn wk-dis-save">שמירה</button>' +
+      '<button type="submit" class="wk-dis-btn wk-dis-save"><span class="wk-spin" data-dis-spin aria-hidden="true" hidden></span>' +
+      '<span data-dis-save-label>שמירה</span></button>' +
       '<button type="button" class="wk-dis-btn wk-dis-cancel" data-dis-cancel="' + i + '">ביטול</button>' +
-      '<span class="wk-msg" data-dis-msg role="status"></span></form>';
+      '<span class="wk-msg" data-dis-msg role="status" aria-live="polite"></span></form>' +
+      '<span class="wk-dis-flash" data-dis-flash role="status" aria-live="polite"></span>';
     return h + '</div>';
   }
 
@@ -471,6 +508,7 @@
 
   var WorkView = { LOGS: LOGS, esc: esc, fmtDate: fmtDate, patientsHtml: patientsHtml, formHtml: formHtml,
     dischargeHtml: dischargeHtml, dischargeCheck: dischargeCheck, DISCHARGE_ERRORS: DISCHARGE_ERRORS,
+    WORK_ERRORS: WORK_ERRORS, dischargeErrorText: dischargeErrorText, setDischargeBusy: setDischargeBusy,
     teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml, costHtml: costHtml,
     logListHtml: logListHtml, logPanelHtml: logPanelHtml, followUpsHtml: followUpsHtml, entryFromForm: entryFromForm };
 
@@ -486,6 +524,7 @@
     if (!r.ok || !data || data.ok === false) {
       var err = new Error((data && (data.message || data.error)) || ('HTTP ' + r.status));
       err.data = data;
+      err.status = r.status;
       throw err;
     }
     return data;
@@ -532,6 +571,8 @@
       var keep = open ? { i: open.getAttribute('data-dis-form'), v: open.elements.expectedDate.value } : null;
       p.innerHTML = patientsHtml(d);
       if (keep) reopenDischargeForm(p, keep.i, keep.v);
+      // A save still in flight keeps its form busy across the redraw.
+      if (keep && savingDischarge[key + '|' + keep.i]) setDischargeBusy(p.querySelector('[data-dis-form="' + Number(keep.i) + '"]'), true);
     }
     var dh = panel.querySelector('[data-dash-house]');
     if (dh) dh.innerHTML = dashboardHtml(d);
@@ -707,6 +748,7 @@
         var row = (disEdit || disCancel).closest('[data-dis-row]');
         var f = row && row.querySelector('[data-dis-form]');
         if (!f) return;
+        if (f.getAttribute('data-dis-busy') === '1') return;   // saving: «ביטול» waits for the answer
         f.hidden = !!disCancel;
         row.querySelectorAll('[data-dis-edit]').forEach(function (b) { b.hidden = !disCancel; });
         var inp = f.querySelector('input[type="date"]');
@@ -756,38 +798,74 @@
     });
   }
 
+  /* Busy state of one discharge form — text-only DOM (textContent, disabled,
+   * hidden, attributes; never innerHTML). While saving: the date, «שמירה» and
+   * «ביטול» are disabled, the button shows a spinner and «שומר...». Off: the
+   * form is restored as it was (the picked date is never touched). */
+  function setDischargeBusy(form, busy) {
+    if (!form) return;
+    if (busy) { form.setAttribute('data-dis-busy', '1'); form.setAttribute('aria-busy', 'true'); }
+    else { form.removeAttribute('data-dis-busy'); form.removeAttribute('aria-busy'); }
+    Array.prototype.forEach.call(form.querySelectorAll('input, button'), function (el) { el.disabled = !!busy; });
+    var spin = form.querySelector('[data-dis-spin]');
+    if (spin) spin.hidden = !busy;
+    var label = form.querySelector('[data-dis-save-label]');
+    if (label) label.textContent = busy ? 'שומר...' : 'שמירה';
+    if (busy) { var msg = form.querySelector('[data-dis-msg]'); if (msg) msg.textContent = ''; }
+  }
+
+  /* Saves in flight, by house|row — survives a redraw of the list (refresh),
+   * so a second tap or Enter can never send a second request. */
+  var savingDischarge = {};
+
   /* Save one patient's expected discharge date (the row's index in the
    * last-loaded houseData). previousDate = the value this screen showed, so
-   * the backend refuses (conflict) instead of silently overwriting a newer one. */
-  async function saveDischarge(panel, key, form) {
+   * the backend refuses (conflict) instead of silently overwriting a newer one.
+   * deps (tests only): { post, refresh, cache }. */
+  async function saveDischarge(panel, key, form, deps) {
+    var d = deps || { post: post, refresh: refresh, cache: cache };
+    var i = form.getAttribute('data-dis-form');
+    var slot = key + '|' + i;
+    if (savingDischarge[slot] || form.getAttribute('data-dis-busy') === '1') return;   // double tap
     var msg = form.querySelector('[data-dis-msg]');
-    var c = cache[key];
-    var p = c && c.data && (c.data.patients || [])[Number(form.getAttribute('data-dis-form'))];
+    var c = d.cache[key];
+    var p = c && c.data && (c.data.patients || [])[Number(i)];
     if (!p) { msg.textContent = DISCHARGE_ERRORS.not_found; return; }
     var value = String(form.elements.expectedDate.value || '').trim();
     var bad = dischargeCheck(value, p.entryDate);
     if (bad) { msg.textContent = bad; return; }
     var prev = p.expectedDischarge && p.expectedDischarge.date ? String(p.expectedDischarge.date) : '';
-    var btn = form.querySelector('button[type="submit"]');
-    btn.disabled = true; msg.textContent = 'שומר…';
+    savingDischarge[slot] = true;
+    setDischargeBusy(form, true);
     try {
-      await post({ op: 'dischargeSet', house: key, patientName: p.name, entryDate: p.entryDate, expectedDate: value, previousDate: prev });
-      await refresh(panel, key, true);
+      await d.post({ op: 'dischargeSet', house: key, patientName: p.name, entryDate: p.entryDate, expectedDate: value, previousDate: prev });
     } catch (e) {
+      delete savingDischarge[slot];
+      var text = dischargeErrorText(e);
       var code = e && e.data && e.data.error;
-      var text = DISCHARGE_ERRORS[code] || ('השמירה נכשלה: ' + (e && e.message ? e.message : ''));
-      if (code === 'conflict') await refresh(panel, key, true);
-      var again = panel.querySelector('[data-dis-form="' + form.getAttribute('data-dis-form') + '"]') || form;
+      if (code === 'conflict') await d.refresh(panel, key, true);
+      // A redraw may have replaced the form: restore whichever is current,
+      // open, with the picked date kept and the reason shown.
+      var again = panel.querySelector('[data-dis-form="' + i + '"]') || form;
+      setDischargeBusy(form, false);
+      if (again !== form) setDischargeBusy(again, false);
+      again.hidden = false;
+      var r2 = again.closest && again.closest('[data-dis-row]');
+      if (r2) r2.querySelectorAll('[data-dis-edit]').forEach(function (b) { b.hidden = true; });
+      if (again.elements && again.elements.expectedDate) again.elements.expectedDate.value = value;
       var m2 = again.querySelector('[data-dis-msg]');
-      if (again !== form) {
-        again.hidden = false;
-        var r2 = again.closest('[data-dis-row]');
-        if (r2) r2.querySelectorAll('[data-dis-edit]').forEach(function (b) { b.hidden = true; });
-      }
       if (m2) m2.textContent = text;
-      var b2 = again.querySelector('button[type="submit"]');
-      if (b2) b2.disabled = false;
+      return;
     }
+    // Saved: close the picker BEFORE the redraw (a redraw keeps an open one),
+    // then confirm on the redrawn row.
+    delete savingDischarge[slot];
+    setDischargeBusy(form, false);
+    form.hidden = true;
+    await d.refresh(panel, key, true);
+    var row = panel.querySelector('[data-dis-row="' + i + '"]');
+    var flash = row && row.querySelector('[data-dis-flash]');
+    if (flash) flash.textContent = 'נשמר ✓';
   }
 
   /* Called by app.js after a house tab is drawn. */
@@ -798,6 +876,7 @@
     loadCost(panel, key);
   }
 
+  WorkView.saveDischarge = saveDischarge;   // tests drive it with injected post / refresh / cache
   root.WorkView = WorkView;
   root.Work = { onHouseRendered: onHouseRendered, showSub: showSub, mountAdmin: mountAdmin, _cache: cache };
   if (typeof module === 'object' && module.exports) module.exports = WorkView;

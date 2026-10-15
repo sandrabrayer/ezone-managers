@@ -380,6 +380,29 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   audit `auditTemporaryExitsNow()` uses initials only.
 - Details: `docs/temporary-exit-return.md`.
 
+## Managers: expected-discharge SAVE fix + save spinner (October 15, 2026)
+
+- Symptom: «השמירה נכשלה: upstream_error» on save; reads fine. `upstream_error` = the proxy got
+  no JSON: a non-JSON reply, or a fetch failure / timeout (15 s).
+- Code bug, fixed in E-Zone-Dashboard #236: the managers writes waited `waitLock(10000)` after the
+  Patients read. That could outlast the proxy timeout; they now use `tryLock(5000)` → `lock_busy`.
+  The same PR adds the editor-run `authorizeSheetsWriteNow()` (full-scope consent + a real
+  temp-sheet write); run it once.
+- `/api/work` now answers specific codes instead of `upstream_error`:
+  - `upstream_timeout` (504);
+  - `upstream_unreachable`;
+  - `upstream_auth` (an HTML authorization page);
+  - `upstream_bad_response`;
+  - `exception` (with no message).
+
+  Writes get 30 s, reads keep 15 s. The server log gets one `[work] op=… failure|upstreamError=…
+  status=… ms=…` line: no body, name, endpoint or secret.
+- The browser shows a specific Hebrew reason (`WorkView.dischargeErrorText`), never a raw code.
+- Save spinner: spinner + «שומר...», with the date, «שמירה» and «ביטול» disabled. A double tap
+  sends one request. Errors restore the form with the date kept and the reason shown; success
+  shows «נשמר ✓». Respects `prefers-reduced-motion`; 16px / 44px; text-only DOM.
+- SW v28 → v29. Tests 306 → 330. Details: `docs/expected-discharge.md` «Saving».
+
 ## Managers: expected discharge date on «מטופלים בבית» (October 15, 2026)
 
 - Each patient row shows «שחרור משוער: dd/m/yy», or «הגדרת תאריך שחרור» when no
