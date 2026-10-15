@@ -11,8 +11,8 @@ const DATA = {
   visits: [{ date: '2026-10-11', time: '', name: 'ביקור ב', meetingWith: 'אורן', outcome: 'thinking' }, { date: '2026-10-08', time: '10:30', name: 'ביקור א', meetingWith: 'אורן', outcome: 'entered' }],
   admissions: [{ name: 'יוסי', date: '2026-10-05' }],
   logs: {
-    familyCalls: [{ id: 'f1', patientName: 'דנה', contactName: 'רות', callDate: '2026-10-12', summary: 'old', followUpDate: '2026-10-13', followUpDone: false, author: 'אורן' }],
-    staffTalks: [{ id: 's1', employeeName: 'נועה', talkDate: '2026-10-12', talkTime: '18:05', summary: 'שיחת משוב', followUpDate: '2026-10-13', followUpDone: false, author: 'אורן' }],
+    familyCalls: [{ id: 'f1', patientName: 'דנה', contactName: 'רות', callDate: '2026-10-12', summary: 'old', followUpDate: '2026-10-13', followUpDone: false, author: 'אורן', canEdit: true }],
+    staffTalks: [{ id: 's1', employeeName: 'נועה', talkDate: '2026-10-12', talkTime: '18:05', summary: 'שיחת משוב', followUpDate: '2026-10-13', followUpDone: false, author: 'אורן', canEdit: true }],
     events: [{ id: 'e1', eventDate: '2026-10-10', eventTime: '', patientName: '', whatHappened: 'הצפה במטבח', actionTaken: 'הוזמן אינסטלטור', followUpDate: '', followUpDone: false, author: 'סנדרה' }]
   },
   followUps: [{ log: 'staffTalks', id: 's1', date: '2026-10-13' }, { log: 'familyCalls', id: 'f1', date: '2026-10-13' }]
@@ -54,7 +54,7 @@ test('log list: newest data as given; follow-up states; edit buttons only for th
   const notMine = W.logListHtml('events', DATA.logs.events, ORAN);
   assert.doesNotMatch(notMine, /data-wk-del|data-wk-done/, 'Oran cannot delete Sandra\'s entry');
   assert.match(notMine, /הצפה במטבח[\s\S]*מה נעשה: הוזמן אינסטלטור/);
-  assert.match(W.logListHtml('events', DATA.logs.events, { name: 'סנדרה', role: 'admin' }), /data-wk-del/);
+  assert.match(W.logListHtml('events', DATA.logs.events.map(r => ({ ...r, canEdit: true })), { name: 'סנדרה', role: 'admin' }), /data-wk-del/);
   assert.match(W.logListHtml('events', [], ORAN), /עדיין אין רישומים/);
 });
 
@@ -76,6 +76,11 @@ test('entryFromForm: only defined fields, trimmed and capped; missing required f
   assert.equal(r.entry.patientName, 'דנה');
   assert.equal(r.entry.actionTaken.length, 1500);
   assert.equal('extra' in r.entry, false);
+});
+
+test('a matching display name never grants edit buttons without the server permission', () => {
+  const rows = DATA.logs.staffTalks.map(r => ({ ...r, canEdit: false }));
+  assert.doesNotMatch(W.logListHtml('staffTalks', rows, ORAN), /data-wk-del|data-wk-done/);
 });
 
 /* ---- Stage 2: team + therapists (coordinators data via the Dashboard) ---- */

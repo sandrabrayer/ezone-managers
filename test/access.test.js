@@ -89,7 +89,7 @@ test('personal-code access', async (t) => {
     assert.equal(bad.headers['set-cookie'], undefined);
     const ok = await req(server, '/api/login', { method: 'POST', body: { username: 'אורן', code: auth.ORAN_CODE } });
     assert.equal(ok.status, 200);
-    assert.deepEqual(JSON.parse(ok.text).user, { name: 'אורן', role: 'manager', house: 'ramot' });
+    assert.deepEqual(JSON.parse(ok.text).user, { id: 'person-oran', name: 'אורן', role: 'manager', house: 'ramot' });
     const c = ok.headers['set-cookie'][0];
     assert.match(c, /^mgr_session=[^;]+; Path=\/; HttpOnly; SameSite=Strict; Max-Age=2592000/);
     assert.doesNotMatch(c, new RegExp(auth.ORAN_CODE), 'the code itself is never in the cookie');
@@ -150,14 +150,14 @@ test('personal-code access', async (t) => {
     mockUpstream(() => '{"ok":true}');
     const cookie = await auth.login(server, auth.ORAN_CODE);
     const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: {
-      op: 'logAdd', log: 'staffTalks', house: 'raanana', role: 'admin', actor: 'סנדרה', secret: 'x',
+      op: 'logAdd', log: 'staffTalks', house: 'raanana', role: 'admin', actor: 'סנדרה', actorId: 'person-sandra', secret: 'x',
       entry: { employeeName: 'רינה', talkDate: '2026-10-12', summary: 'שיחה' } } });
     assert.equal(r.status, 200);
     const sent = calls[0];
     assert.equal(sent.method, 'POST');
     assert.equal(sent.url, 'https://apps-script.test/exec', 'POST to the script itself — nothing in the URL');
-    assert.deepEqual([sent.body.action, sent.body.house, sent.body.role, sent.body.actor, sent.body.secret],
-      ['managersWork', 'ramot', 'manager', 'אורן', process.env.MANAGERS_WORK_SECRET]);
+    assert.deepEqual([sent.body.action, sent.body.house, sent.body.role, sent.body.actor, sent.body.actorId, sent.body.secret],
+      ['managersWork', 'ramot', 'manager', 'אורן', 'person-oran', process.env.MANAGERS_WORK_SECRET]);
     assert.deepEqual(JSON.parse(sent.body.entry), { employeeName: 'רינה', talkDate: '2026-10-12', summary: 'שיחה' });
   });
 
@@ -228,11 +228,11 @@ test('personal-code access', async (t) => {
 });
 
 test('lib/access: a removed or changed code logs that person out; expired sessions fail', () => {
-  const a = accessLib.parseAccess(JSON.stringify([{ code: '11112222', name: 'אורן', house: 'ramot' }]));
+  const a = accessLib.parseAccess(JSON.stringify([{ id: 'person-oran', code: '11112222', name: 'אורן', house: 'ramot' }]));
   const k = accessLib.sessionKey('k'.repeat(32));
   const tok = accessLib.signSession(a.users[0], k, 1000);
   assert.equal(accessLib.readSession(tok, k, a.users, 2000).name, 'אורן');
-  const changed = accessLib.parseAccess(JSON.stringify([{ code: '11113333', name: 'אורן', house: 'ramot' }]));
+  const changed = accessLib.parseAccess(JSON.stringify([{ id: 'person-oran', code: '11113333', name: 'אורן', house: 'ramot' }]));
   assert.equal(accessLib.readSession(tok, k, changed.users, 2000), null, 'new code → old session dead');
   assert.equal(accessLib.readSession(tok, k, a.users, 1000 + 31 * 86400000), null, 'expired after 30 days');
 });
@@ -241,18 +241,18 @@ test('lib/access: MANAGER_ACCESS validation (fail closed on anything odd)', () =
   const bad = (v) => accessLib.parseAccess(typeof v === 'string' ? v : JSON.stringify(v)).ok;
   assert.equal(bad(''), false);
   assert.equal(bad([]), false);
-  assert.equal(bad([{ code: '123', name: 'x', house: 'ramot' }]), false, 'code too short');
-  assert.equal(bad([{ code: '12345678', name: 'x', house: 'nowhere' }]), false, 'unknown house');
-  assert.equal(bad([{ code: '12345678', name: '', house: 'ramot' }]), false, 'no name');
-  assert.equal(bad([{ code: '12345678', name: 'a', house: 'ramot' }, { code: '12345678', name: 'b', role: 'admin' }]), false, 'duplicate code');
-  assert.equal(bad([{ code: '12345678', name: '<b>', role: 'admin' }]), false, 'markup in a name');
-  assert.equal(bad([{ code: '12345678', name: 'ok', role: 'admin' }]), true);
+  assert.equal(bad([{ id: 'person-oran', code: '123', name: 'x', house: 'ramot' }]), false, 'code too short');
+  assert.equal(bad([{ id: 'person-oran', code: '12345678', name: 'x', house: 'nowhere' }]), false, 'unknown house');
+  assert.equal(bad([{ id: 'person-oran', code: '12345678', name: '', house: 'ramot' }]), false, 'no name');
+  assert.equal(bad([{ id: 'person-oran', code: '12345678', name: 'a', house: 'ramot' }, { id: 'person-oran', code: '12345678', name: 'b', role: 'admin' }]), false, 'duplicate code');
+  assert.equal(bad([{ id: 'person-oran', code: '12345678', name: '<b>', role: 'admin' }]), false, 'markup in a name');
+  assert.equal(bad([{ id: 'person-oran', code: '12345678', name: 'ok', role: 'admin' }]), true);
 });
 
 test('lib/access: usernames — the name always works; an optional Latin `user` too; case and spaces ignored; unique', () => {
   const a = accessLib.parseAccess(JSON.stringify([
-    { code: '11112222', name: 'אורן', house: 'ramot' },
-    { code: '33334444', name: 'סנדרה', user: 'Sandra', role: 'admin' }
+    { id: 'person-oran', code: '11112222', name: 'אורן', house: 'ramot' },
+    { id: 'person-sandra', code: '33334444', name: 'סנדרה', user: 'Sandra', role: 'admin' }
   ]));
   assert.equal(a.ok, true);
   const f = (u, c) => (accessLib.findUser(a.users, u, c) || {}).name || null;
@@ -263,7 +263,7 @@ test('lib/access: usernames — the name always works; an optional Latin `user` 
   assert.equal(f('אורן', '33334444'), null);
   assert.equal(f('', '11112222'), null);
   assert.equal(f('אורן', ''), null);
-  const bad = (v) => accessLib.parseAccess(JSON.stringify(v)).ok;
+  const bad = (v) => accessLib.parseAccess(JSON.stringify(v.map((row, i) => ({ id: `person-${i}`, ...row })))).ok;
   assert.equal(bad([{ code: '12345678', name: 'a', user: 'x!', role: 'admin' }]), false, 'bad Latin user name');
   assert.equal(bad([{ code: '12345678', name: 'רון', role: 'admin' }, { code: '87654321', name: 'רון', house: 'ramot' }]), false, 'two people with one name');
   assert.equal(bad([{ code: '12345678', name: 'a', user: 'ron', role: 'admin' }, { code: '87654321', name: 'Ron', house: 'ramot' }]), false, 'user clashes with another name');

@@ -23,6 +23,7 @@ const express = require('express');
 const path = require('path');
 
 const access = require('./lib/access');
+const { createReadiness } = require('./lib/readiness');
 
 const PORT = Number(process.env.PORT) || 3000;
 const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL || '';
@@ -137,7 +138,7 @@ function requireUser(req, res, next) {
   req.user = u;
   next();
 }
-const publicUser = (u) => ({ name: u.name, role: u.role, house: u.house || null });
+const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, house: u.house || null });
 
 // ---- static: public assets only (they hold no data; data needs a login) ----
 app.use(express.static(path.join(__dirname, 'public')));
@@ -149,7 +150,13 @@ app.get('/lib/bonus-eligibility.js', (_req, res) => {
   res.sendFile(path.join(__dirname, 'lib', 'bonus-eligibility.js'));
 });
 
-app.get('/healthz', (_req, res) => res.json({ ok: true, ts: Date.now() }));
+// Railway activates a deployment only after this authenticated, data-free probe.
+const readiness = createReadiness({ url: APPS_SCRIPT_URL, secret: WORK_SECRET, configured: ACCESS.ok });
+app.get('/healthz', async (_req, res) => {
+  const ok = await readiness();
+  res.set('Cache-Control', 'no-store');
+  res.status(ok ? 200 : 503).json({ ok, ts: Date.now() });
+});
 
 // ---- deploy verification ----
 // Public on purpose: lets anyone confirm which commit Railway is serving.
@@ -223,20 +230,23 @@ app.get('/api/sheets', requireUser, async (req, res) => {
     return res.status(403).json({ error: 'forbidden' });
   }
   try {
-    const qs = new URLSearchParams();
+    const body = {};
     for (const [k, v] of Object.entries(req.query)) {
-      if (ALLOWED_QUERY_KEYS.has(k) && typeof v === 'string') qs.set(k, v);
+      if (ALLOWED_QUERY_KEYS.has(k) && typeof v === 'string') body[k] = v;
     }
-    const s = qs.toString();
-    const target = `${APPS_SCRIPT_URL}${s ? `?${s}` : ''}`;
-
-    const upstream = await fetch(target, {
-      method: 'GET',
-      redirect: 'follow',
-      headers: { Accept: 'application/json' }
+    // Auth and scope come exclusively from the verified session, never the query.
+    Object.assign(body, { secret: WORK_SECRET, role: u.role, actor: u.name, actorId: u.id });
+    if (u.role !== 'admin') body.house = u.house;
+    const upstream = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST', redirect: 'follow', signal: AbortSignal.timeout(15000),
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body)
     });
 
     const text = await upstream.text();
+    let data;
+    try { data = JSON.parse(text); } catch { return res.status(502).json({ error: 'upstream_error' }); }
+    if (data && data.error === 'unauthorized') return res.status(503).json({ error: 'upstream_unavailable' });
     res.status(upstream.status);
     res.set('Cache-Control', 'no-store');
     if (u.role === 'admin') {
@@ -244,13 +254,10 @@ app.get('/api/sheets', requireUser, async (req, res) => {
       return res.type(ct).send(text);
     }
     // A manager never receives another house's figures.
-    let data;
-    try { data = JSON.parse(text); } catch { return res.status(502).json({ error: 'upstream_error' }); }
     res.json(scopeForManager(action, data, u.house));
   } catch (err) {
-    // Log the detail, return none: a URL-parse failure would otherwise echo
-    // APPS_SCRIPT_URL straight to the browser.
-    console.error('Proxy error:', err && err.message);
+    // Do not log upstream details: they may contain the endpoint or credentials.
+    console.error('Proxy request failed');
     res.status(502).json({ error: 'upstream_error' });
   }
 });
@@ -276,7 +283,7 @@ app.post('/api/work', requireUser, async (req, res) => {
   if (!access.canSeeHouse(u, house) || !access.HOUSE_KEYS.includes(house)) {
     return res.status(403).json({ error: 'forbidden' });
   }
-  const body = { action: 'managersWork', secret: WORK_SECRET, op, house, role: u.role, actor: u.name };
+  const body = { action: 'managersWork', secret: WORK_SECRET, op, house, role: u.role, actor: u.name, actorId: u.id };
   if ((op === 'houseData' || op === 'houseCost') && YM_RE.test(String(b.month || ''))) body.month = String(b.month);
   if (op === 'logAdd' || op === 'logUpdate') {
     if (!WORK_LOGS.has(String(b.log || ''))) return res.status(400).json({ error: 'unknown_log' });
@@ -292,6 +299,7 @@ app.post('/api/work', requireUser, async (req, res) => {
     const upstream = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       redirect: 'follow',
+      signal: AbortSignal.timeout(15000),
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(body)
     });
@@ -300,7 +308,7 @@ app.post('/api/work', requireUser, async (req, res) => {
     try { data = JSON.parse(text); } catch { return res.status(502).json({ error: 'upstream_error' }); }
     res.status(data && data.ok === false && data.error === 'unauthorized' ? 503 : 200).json(data);
   } catch (err) {
-    console.error('Work proxy error:', err && err.message);
+    console.error('Work proxy request failed');
     res.status(502).json({ error: 'upstream_error' });
   }
 });
