@@ -1678,7 +1678,7 @@ body.is-locked { overflow: hidden; }
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.07);
 }
 .wk-entry-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
 .wk-text { font-size: 14px; line-height: 1.5; white-space: pre-wrap; margin-top: 2px; }
@@ -1756,7 +1756,7 @@ body.is-locked { overflow: hidden; }
 .kpis .kpi:nth-child(4) { background: linear-gradient(160deg, rgba(245, 158, 11, 0.32), rgba(245, 158, 11, 0.10)), var(--card); border-color: rgba(252, 211, 77, 0.45); }
 
 /* Sub-tabs — each tab its own colour */
-.subtab { --tab: var(--c-pink); border-color: color-mix(in srgb, var(--tab) 55%, transparent); color: color-mix(in srgb, var(--tab) 45%, #fff); background: color-mix(in srgb, var(--tab) 14%, transparent); }
+.subtab { --tab: var(--c-pink); border-color: color-mix(in srgb, var(--tab) 75%, transparent); color: color-mix(in srgb, var(--tab) 65%, #fff); background: color-mix(in srgb, var(--tab) 24%, transparent); }
 .subtab.is-active { background: var(--tab); color: #fff; border-color: transparent; box-shadow: 0 6px 18px color-mix(in srgb, var(--tab) 45%, transparent); }
 .subtab[data-sub="home"]       { --tab: var(--c-pink); }
 .subtab[data-sub="bonus"]      { --tab: var(--c-amber); }
@@ -1773,12 +1773,23 @@ body.is-locked { overflow: hidden; }
 [data-sub-panel="therapists"] { --sec: var(--c-violet); }
 [data-sub-panel="staffTalks"] { --sec: var(--c-green); }
 [data-sub-panel="events"]     { --sec: var(--c-coral); }
+/* Richer work tabs (15 Oct 2026): brighter muted text inside the five work
+   panels only, so the Dashboard (home), gauge and bonus panel are unchanged.
+   Every pairing below keeps normal text >= 4.5:1 (WCAG AA) on the 38% tint;
+   test/work-colours.test.js guards the minimums. */
+[data-sub-panel="patients"], [data-sub-panel="team"], [data-sub-panel="therapists"],
+[data-sub-panel="staffTalks"], [data-sub-panel="events"] {
+  --text-mute: rgba(253, 231, 238, 0.88);
+  --text-dim: rgba(253, 231, 238, 0.85);
+}
 [data-sub-panel] .work-card {
-  background: linear-gradient(160deg, color-mix(in srgb, var(--sec) 26%, transparent), color-mix(in srgb, var(--sec) 8%, transparent)), var(--card);
-  border-color: color-mix(in srgb, var(--sec) 50%, transparent);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--sec) 38%, transparent), color-mix(in srgb, var(--sec) 15%, transparent)), var(--card);
+  border-color: color-mix(in srgb, var(--sec) 70%, transparent);
 }
 [data-sub-panel] .work-card .card-title { color: color-mix(in srgb, var(--sec) 35%, #fff); }
-[data-sub-panel] .work-card .card-subtitle { color: color-mix(in srgb, var(--sec) 50%, #fff); }
+[data-sub-panel] .work-card .card-subtitle { color: color-mix(in srgb, var(--sec) 35%, #fff); }
+.work-card .wk-note { color: #DDD6FE; }
+[data-sub-panel] .wk-field input, [data-sub-panel] .wk-field textarea { border-color: color-mix(in srgb, var(--sec) 55%, transparent); }
 [data-sub-panel] .wk-btn { background: var(--sec); }
 .wk-patients { --sec: var(--c-teal); }
 [data-sub-panel="patients"] .wk-out    { --sec: var(--c-violet); }
@@ -1786,7 +1797,7 @@ body.is-locked { overflow: hidden; }
 [data-sub-panel="team"] .wk-today { --sec: var(--c-green); }
 [data-sub-panel="team"] .wk-staff { --sec: var(--c-amber); }
 [data-sub-panel="therapists"] .wk-ther-week { --sec: var(--c-pink); }
-.wk-kpi { background: color-mix(in srgb, var(--sec, var(--c-blue)) 22%, rgba(0,0,0,0.15)); }
+.wk-kpi { background: color-mix(in srgb, var(--sec, var(--c-blue)) 34%, rgba(0,0,0,0.15)); }
 
 /* Bonus tab: entries / exits logs */
 .logs .log-card:nth-child(1) { background: linear-gradient(160deg, rgba(16, 185, 129, 0.24), rgba(16, 185, 129, 0.06)), var(--card); border-color: rgba(52, 211, 153, 0.4); }
