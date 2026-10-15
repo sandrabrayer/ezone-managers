@@ -3,6 +3,17 @@
 
 ## Unreleased
 
+### Tests — discharge-alert rule pinned to the Dashboard copy (October 15, 2026; Task F)
+
+- **What**: `test/fixtures/discharge-alert-cases.json` + `test/discharge-alerts-shared.test.js`
+  run the shared boundary cases (14 in, 15 out, 0, 1, -1, -3, year-end and leap-day edges, bad
+  dates, Israel midnight, the no-date line) against `public/discharge-alerts.js`.
+- **Why**: the Dashboard now shows the same alerts read-only («שחרורים צפויים», E-Zone-Dashboard
+  PR #233) from a copy of this module's core (separate repos cannot share a file). The fixture is
+  byte-identical in both repos and its sha256 is pinned on both sides, so drift fails CI.
+- **No behaviour change**: no file under `public/` changed (no SW bump), no endpoint, env var or
+  secret. Tests 302 → 306.
+
 ### Added — discharge alerts «שחרור קרוב» on «ראשי» (October 15, 2026; Task E)
 
 - **What**: for each patient in the house whose expected discharge date (set by hand by the
