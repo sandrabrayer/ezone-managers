@@ -3,6 +3,34 @@
 
 ## Unreleased
 
+### Fixed — reads: classified errors, last-good cache, Hebrew «נסו שוב» (October 19, 2026)
+
+- **Why**: from ~15:00 on 19 Oct the app showed «שגיאה: upstream_error» and every card stayed on
+  «טוען…». `GET /api/sheets` answered a bare `502 upstream_error` for both a non-JSON reply and a
+  fetch failure or timeout, so the cause was invisible. The browser printed the raw code
+  (through `innerHTML`).
+- **Server** (`server.js`): `/api/sheets` reuses the `/api/work` classification:
+  - `upstream_timeout` (504);
+  - `upstream_unreachable`;
+  - `upstream_auth` (an HTML authorization page);
+  - `upstream_bad_response`;
+  - `upstream_app_error` (JSON `ok:false` / non-2xx);
+  - `upstream_unavailable` (503).
+
+  The 15 s timeout is unchanged. One safe log line, `[sheets] action=… class=… status=… ms=…
+  served=cache|error`, with no body, endpoint, secret or name.
+- **Last good copy**: kept in memory per action + house + month + role + person (≤ 100 entries,
+  ≤ 72 h). A failed read with a copy → 200 with that copy, `X-Data-Source: cache` and
+  `X-Data-Cached-At`. A manager's copy is still scoped to their house.
+- **UI** (`public/app.js`, `index.html`, `styles.css`):
+  - every code maps to Hebrew, and raw codes are never shown;
+  - «מוצגים נתונים שמורים מ־<time>» notice with «נסו שוב» when the server serves its copy or a
+    refresh fails (the cards are kept);
+  - otherwise a Hebrew RTL error with «נסו שוב» on the overview and on the house tab.
+- No new endpoint, env var, secret or dependency. `APPS_SCRIPT_URL` and the Apps Script are
+  untouched. SW v31 → v32. **Tests 371 → 398**. Details: `docs/sheets-resilience.md` (also
+  holds the read-only review of E-Zone-Dashboard #251–#256).
+
 ### Added — committee date per patient «ועדה» + alerts (October 15, 2026)
 
 - **What**: house managers record a committee date (one current date per stay) with an optional

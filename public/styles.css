@@ -2003,3 +2003,25 @@ body.is-locked { overflow: hidden; }
   color: var(--text); cursor: pointer;
 }
 .subtab-badge.cm-badge { background: #D97706; }
+
+/* «מוצגים נתונים שמורים» + read errors with «נסו שוב» (19 Oct 2026,
+   docs/sheets-resilience.md). RTL, 16px text, 44px tap target. */
+.stale-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 8px 16px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  background: rgba(252, 211, 77, 0.12);
+  color: var(--text);
+  font-size: 16px;
+  direction: rtl;
+}
+.stale-notice[hidden] { display: none; }
+.retry-btn { font-size: 16px; min-height: 44px; padding: 10px 6px; }
+.read-error { direction: rtl; }
+.read-error .retry-btn { margin-top: 6px; }

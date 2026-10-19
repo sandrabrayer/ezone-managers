@@ -356,6 +356,29 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: read failures classified + last-good cache (October 19, 2026)
+
+- **Symptom (19 Oct, ~15:00)**: «שגיאה: upstream_error» and every card stuck on «טוען…».
+  `/api/sheets` gave a bare 502 for both non-JSON replies and fetch failures / timeouts.
+- **Fix (Managers only)**: `/api/sheets` now answers one of these codes:
+  - `upstream_timeout` (504);
+  - `upstream_unreachable`;
+  - `upstream_auth` (HTML auth page);
+  - `upstream_bad_response`;
+  - `upstream_app_error`;
+  - `upstream_unavailable` (503).
+
+  The 15 s timeout is unchanged. The server log gets one `[sheets] action=… class=… status=…
+  ms=… served=…` line, with no body, endpoint, secret or name.
+- **Last good copy**: per person + request, in memory, ≤ 72 h. Served with `X-Data-Source:
+  cache`; the UI then shows «מוצגים נתונים שמורים מ־<time>» + «נסו שוב». With no copy, a
+  Hebrew error + «נסו שוב». Raw codes are never shown.
+- **Dashboard #251–#256 review (read-only)**: no change to `managersOverview_` /
+  `managersHouse_`. #255 appends `Patients.personId`; the managers read writes that header once
+  on the first read after the deploy. It fails only if the sheet is exactly 13 columns wide.
+  Check the four Apps Script deploy runs (~15:00) and the executions log.
+- No new endpoint, env var or secret. SW v32, tests 398. Details: `docs/sheets-resilience.md`.
+
 ## Managers: committee date per patient «ועדה» (October 15, 2026)
 
 - «מטופלים בבית» row: second line «ועדה: dd/m/yy · <label>» (label ≤ 60), with set / «שינוי» /

@@ -385,13 +385,13 @@ test('D: badge — count or hidden, its own element beside the discharge badge',
 
 /* ── E. wiring + bonus ─────────────────────────────────────── */
 
-test('E: wiring — script loaded before work.js, cards on ראשי (top) and the admin overview, SW v31 caches it', () => {
+test('E: wiring — script loaded before work.js, cards on ראשי (top) and the admin overview, SW ≥ v31 caches it', () => {
   const html = pub('index.html');
   assert.ok(html.indexOf('/committee-alerts.js') > 0 && html.indexOf('/committee-alerts.js') < html.indexOf('/work.js'));
   assert.ok(html.indexOf('data-dash-committees') < html.indexOf('data-dash-alerts'), 'above the discharge alerts');
   assert.match(html, /id="committeeAlertsAll" class="dis-alerts-all" hidden/);
   const sw = pub('sw.js');
-  assert.match(sw, /const CACHE = 'ezone-managers-v31';/);
+  assert.ok(Number(/const CACHE = 'ezone-managers-v(\d+)';/.exec(sw)[1]) >= 31, 'SW cache only moves forward');
   assert.match(sw, /'\/committee-alerts\.js'/);
   const w = pub('work.js');
   const block = w.slice(w.indexOf('function setCommitteeBusy'), w.indexOf('/* Called by app.js after a house tab is drawn. */'));

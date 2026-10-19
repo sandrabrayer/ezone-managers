@@ -197,6 +197,29 @@ app.get('/api/me', requireUser, (req, res) => {
   res.json({ ok: true, user: publicUser(req.user) });
 });
 
+// ---- upstream failure classification (shared by /api/sheets and /api/work) ----
+/* Why an Apps Script call (/api/work and /api/sheets) got no usable answer → a safe code
+ * the browser maps to Hebrew. Technical detail goes to the server log only:
+ * the op, the class, the HTTP status, the time — never a body, a name, the
+ * endpoint or the secret. */
+const UPSTREAM_CODE_RE = /^[a-z][a-z_]{0,39}$/;
+function workFailure(err) {
+  const name = err && err.name;
+  if (name === 'TimeoutError' || name === 'AbortError') return { status: 504, error: 'upstream_timeout' };
+  return { status: 502, error: 'upstream_unreachable' };
+}
+function nonJsonFailure(text) {
+  // Google answers an HTML page (not our JSON) when the script itself cannot
+  // run — above all when the deploying account's authorization is missing.
+  if (/authori[sz]ation is required|authorization required|permission|insufficient|consent/i.test(String(text || ''))) {
+    return { status: 502, error: 'upstream_auth' };
+  }
+  return { status: 502, error: 'upstream_bad_response' };
+}
+function logWork(op, what, status, ms) {
+  console.error(`[work] op=${op} ${what} status=${status} ms=${ms}`);
+}
+
 // ---- Apps Script proxy (read actions; every one needs a login) ----
 const ALLOWED_QUERY_KEYS = new Set(['action', 'house', 'month']);
 const ALLOWED_ACTIONS = new Set(['managersOverview', 'managersHouse', 'occupancySnapshots']);
@@ -219,6 +242,40 @@ function scopeForManager(action, data, house) {
   return data;
 }
 
+/* Last good read per caller (19 Oct 2026, docs/sheets-resilience.md).
+ * When Apps Script fails, a read is answered from the last good copy of the
+ * SAME request — same action, house, month, role and person — so a cached
+ * reply can never cross a house or a person. In memory only (lost on
+ * redeploy), bounded in size and age. */
+const SHEETS_TIMEOUT_MS = 15000;
+const SHEETS_CACHE_MAX = 100;
+const SHEETS_CACHE_MAX_AGE_MS = 72 * 3600 * 1000;
+const sheetsCache = new Map();
+const sheetsCacheKey = (body, u) => JSON.stringify([body.action, body.house || '', body.month || '', u.role, u.id]);
+function sheetsCachePut(key, text, data) {
+  sheetsCache.delete(key);
+  sheetsCache.set(key, { text, data, at: Date.now() });
+  while (sheetsCache.size > SHEETS_CACHE_MAX) sheetsCache.delete(sheetsCache.keys().next().value);
+}
+function sheetsCacheGet(key) {
+  const hit = sheetsCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > SHEETS_CACHE_MAX_AGE_MS) { sheetsCache.delete(key); return null; }
+  return hit;
+}
+/* One safe line per failed read: action, class, status, time — never a body,
+ * a name, the endpoint or the secret. */
+function logSheets(action, cls, status, ms, served) {
+  console.error(`[sheets] action=${action} class=${cls} status=${status} ms=${ms} served=${served}`);
+}
+/* A JSON reply that is not a usable feed payload (Apps Script said no). */
+function sheetsReplyFailure(upstreamStatus, data) {
+  if (data && data.error === 'unauthorized') return { status: 503, error: 'upstream_unavailable' };
+  const bad = !data || typeof data !== 'object' || data.ok === false || data.error != null;
+  if (upstreamStatus >= 200 && upstreamStatus < 300 && !bad) return null;
+  return { status: 502, error: 'upstream_app_error' };
+}
+
 app.get('/api/sheets', requireUser, async (req, res) => {
   if (!allowSheets(clientIp(req))) {
     return res.status(429).json({ error: 'יותר מדי בקשות. נסו שוב מאוחר יותר.' });
@@ -229,37 +286,50 @@ app.get('/api/sheets', requireUser, async (req, res) => {
   if (action === 'managersHouse' && !access.canSeeHouse(u, String(req.query.house || ''))) {
     return res.status(403).json({ error: 'forbidden' });
   }
+  const body = {};
+  for (const [k, v] of Object.entries(req.query)) {
+    if (ALLOWED_QUERY_KEYS.has(k) && typeof v === 'string') body[k] = v;
+  }
+  // Auth and scope come exclusively from the verified session, never the query.
+  Object.assign(body, { secret: WORK_SECRET, role: u.role, actor: u.name, actorId: u.id });
+  if (u.role !== 'admin') body.house = u.house;
+  const key = sheetsCacheKey(body, u);
+  res.set('Cache-Control', 'no-store');
+
+  const send = (text, data, source, cachedAt) => {
+    res.set('X-Data-Source', source);
+    if (cachedAt) res.set('X-Data-Cached-At', new Date(cachedAt).toISOString());
+    // A manager never receives another house's figures.
+    if (u.role !== 'admin') return res.status(200).json(scopeForManager(action, data, u.house));
+    return res.status(200).type('application/json').send(text);
+  };
+  /* A failed read: the last good copy of this exact request if there is one,
+   * otherwise the safe code (the browser maps it to Hebrew). */
+  const fail = (f, ms) => {
+    const hit = sheetsCacheGet(key);
+    logSheets(action, f.error, f.status, ms, hit ? 'cache' : 'error');
+    if (hit) return send(hit.text, hit.data, 'cache', hit.at);
+    return res.status(f.status).json({ error: f.error });
+  };
+
+  const started = Date.now();
+  let upstream, text;
   try {
-    const body = {};
-    for (const [k, v] of Object.entries(req.query)) {
-      if (ALLOWED_QUERY_KEYS.has(k) && typeof v === 'string') body[k] = v;
-    }
-    // Auth and scope come exclusively from the verified session, never the query.
-    Object.assign(body, { secret: WORK_SECRET, role: u.role, actor: u.name, actorId: u.id });
-    if (u.role !== 'admin') body.house = u.house;
-    const upstream = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST', redirect: 'follow', signal: AbortSignal.timeout(15000),
+    upstream = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST', redirect: 'follow', signal: AbortSignal.timeout(SHEETS_TIMEOUT_MS),
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(body)
     });
-
-    const text = await upstream.text();
-    let data;
-    try { data = JSON.parse(text); } catch { return res.status(502).json({ error: 'upstream_error' }); }
-    if (data && data.error === 'unauthorized') return res.status(503).json({ error: 'upstream_unavailable' });
-    res.status(upstream.status);
-    res.set('Cache-Control', 'no-store');
-    if (u.role === 'admin') {
-      const ct = upstream.headers.get('content-type') || 'application/json';
-      return res.type(ct).send(text);
-    }
-    // A manager never receives another house's figures.
-    res.json(scopeForManager(action, data, u.house));
+    text = await upstream.text();
   } catch (err) {
-    // Do not log upstream details: they may contain the endpoint or credentials.
-    console.error('Proxy request failed');
-    res.status(502).json({ error: 'upstream_error' });
+    return fail(workFailure(err), Date.now() - started);
   }
+  let data;
+  try { data = JSON.parse(text); } catch { return fail(nonJsonFailure(text), Date.now() - started); }
+  const f = sheetsReplyFailure(upstream.status, data);
+  if (f) return fail(f, Date.now() - started);
+  sheetsCachePut(key, text, data);
+  return send(text, data, 'live');
 });
 
 // ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
@@ -276,28 +346,6 @@ const DISCHARGE_MODES = new Set(['set', 'clear', 'none']);
 // reads, so it gets a longer budget than a read (docs/expected-discharge.md).
 const WORK_READ_TIMEOUT_MS = 15000;
 const WORK_WRITE_TIMEOUT_MS = 30000;
-
-/* Why a /api/work call got no usable answer from Apps Script → a safe code
- * the browser maps to Hebrew. Technical detail goes to the server log only:
- * the op, the class, the HTTP status, the time — never a body, a name, the
- * endpoint or the secret. */
-const UPSTREAM_CODE_RE = /^[a-z][a-z_]{0,39}$/;
-function workFailure(err) {
-  const name = err && err.name;
-  if (name === 'TimeoutError' || name === 'AbortError') return { status: 504, error: 'upstream_timeout' };
-  return { status: 502, error: 'upstream_unreachable' };
-}
-function nonJsonFailure(text) {
-  // Google answers an HTML page (not our JSON) when the script itself cannot
-  // run — above all when the deploying account's authorization is missing.
-  if (/authori[sz]ation is required|authorization required|permission|insufficient|consent/i.test(String(text || ''))) {
-    return { status: 502, error: 'upstream_auth' };
-  }
-  return { status: 502, error: 'upstream_bad_response' };
-}
-function logWork(op, what, status, ms) {
-  console.error(`[work] op=${op} ${what} status=${status} ms=${ms}`);
-}
 
 app.post('/api/work', requireUser, async (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -421,4 +469,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, _rateLimiters: { allowSheets, allowLogin, allowWrites } };
+module.exports = { app, _rateLimiters: { allowSheets, allowLogin, allowWrites }, _sheetsCache: sheetsCache };
