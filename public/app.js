@@ -322,15 +322,111 @@ function clearLegacySession() {
   try { localStorage.removeItem(LEGACY_TOKEN_KEY); } catch { /* private mode */ }
 }
 
+/* Why a read failed, in plain Hebrew — never a raw code (19 Oct 2026,
+ * docs/sheets-resilience.md). The technical class is in the server log only
+ * (server.js logSheets). */
+const SHEETS_ERRORS = {
+  upstream_timeout: 'שרת הנתונים לא הגיב בזמן.',
+  upstream_unreachable: 'אין חיבור לשרת הנתונים.',
+  upstream_auth: 'שרת הנתונים דורש אישור הרשאות. פנו לסנדרה.',
+  upstream_bad_response: 'שרת הנתונים החזיר תשובה לא תקינה.',
+  upstream_app_error: 'שרת הנתונים החזיר שגיאה.',
+  upstream_unavailable: 'שרת הנתונים אינו זמין כרגע. פנו לסנדרה.',
+  forbidden: 'אין הרשאה לצפות בבית הזה.',
+  login_required: 'פג תוקף הכניסה — היכנסו שוב.',
+  rate_limited: 'יותר מדי בקשות — נסו שוב בעוד כמה דקות.',
+  offline: 'אין חיבור לאינטרנט — בדקו את החיבור.',
+  unknown: 'לא ניתן לטעון את הנתונים כרגע.'
+};
+function sheetsErrorText_(code, status) {
+  if (code && Object.prototype.hasOwnProperty.call(SHEETS_ERRORS, code)) return SHEETS_ERRORS[code];
+  if (status === 429) return SHEETS_ERRORS.rate_limited;
+  if (status === 401) return SHEETS_ERRORS.login_required;
+  if (status === 403) return SHEETS_ERRORS.forbidden;
+  return SHEETS_ERRORS.unknown;
+}
+function readError_(code, status) {
+  const e = new Error(sheetsErrorText_(code, status));
+  e.code = code || 'unknown';
+  return e;
+}
+
 async function fetchJson(url) {
-  const r = await fetch(url, { headers: { Accept: 'application/json' } });
+  let r;
+  try {
+    r = await fetch(url, { headers: { Accept: 'application/json' } });
+  } catch {
+    throw readError_('offline');
+  }
   if (r.status === 401 && window.Auth) window.Auth.showLogin('פג תוקף הכניסה — הזינו את הקוד שוב.');
   const text = await r.text();
   let data;
-  try { data = JSON.parse(text); } catch { throw new Error(`Bad JSON from ${url} — ${text.slice(0, 160)}`); }
-  if (!r.ok) throw new Error((data && data.message) || (data && data.error) || `HTTP ${r.status}`);
-  if (data && data.ok === false) throw new Error(data.error || data.message || 'API error');
+  try { data = JSON.parse(text); } catch { throw readError_('', r.status); }
+  const code = data && typeof data.error === 'string' ? data.error : '';
+  if (!r.ok) throw readError_(code, r.status);
+  // An Apps Script `ok:false` (e.g. its exception code) is a server-side error.
+  if (data && data.ok === false) throw readError_(Object.prototype.hasOwnProperty.call(SHEETS_ERRORS, code) ? code : 'upstream_app_error', r.status);
+  const hdr = (k) => (r.headers && typeof r.headers.get === 'function' ? r.headers.get(k) : null);
+  if (hdr('X-Data-Source') === 'cache') noteStale_(url, hdr('X-Data-Cached-At'));
+  else noteFresh_(url);
   return data;
+}
+
+/* ---- «מוצגים נתונים שמורים» notice ----
+ * The server answered a read from its last good copy (X-Data-Source: cache),
+ * or the browser kept the last good overview after a failed refresh. The
+ * notice stays while any read is stale and shows the OLDEST copy's time. */
+const staleReads = new Map(); // url → Date the copy was taken
+function noteStale_(url, at) {
+  const d = at ? new Date(at) : new Date(NaN);
+  staleReads.set(url, Number.isNaN(d.getTime()) ? null : d);
+  renderStaleNotice_();
+}
+function noteFresh_(url) {
+  if (staleReads.delete(url)) renderStaleNotice_();
+}
+function staleNoticeText_() {
+  let oldest = null;
+  staleReads.forEach(d => { if (d && (!oldest || d < oldest)) oldest = d; });
+  if (!oldest) return 'מוצגים נתונים שמורים — שרת הנתונים לא זמין כרגע.';
+  const when = oldest.toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return `מוצגים נתונים שמורים מ־${when} — שרת הנתונים לא זמין כרגע.`;
+}
+function renderStaleNotice_() {
+  const host = document.getElementById('staleNotice');
+  if (!host) return;
+  host.innerHTML = '';
+  if (!staleReads.size) { host.hidden = true; return; }
+  host.hidden = false;
+  host.appendChild(el_('span', 'stale-text', staleNoticeText_()));
+  host.appendChild(retryButton_(retryReads_, 'stale'));
+}
+/* «נסו שוב»: reload the overview and the open house tab. */
+function retryReads_() {
+  loadOverview();
+  const open = HOUSE_KEYS.find(k => {
+    const p = document.getElementById(`panel-${k}`);
+    return p && p.classList && p.classList.contains('is-active');
+  });
+  if (open) loadHouseDetail(open);
+}
+function retryButton_(onClick, tag) {
+  const b = el_('button', 'link-btn retry-btn', 'נסו שוב');
+  b.setAttribute('type', 'button');
+  b.setAttribute('data-retry', tag);
+  b.addEventListener('click', e => { if (e && e.preventDefault) e.preventDefault(); onClick(); });
+  return b;
+}
+/* A Hebrew error box with «נסו שוב» — text-only DOM, never a raw code. */
+function readErrorBox_(host, prefix, err, onRetry, tag) {
+  if (!host) return;
+  host.innerHTML = '';
+  const box = el_('div', 'loading error read-error');
+  box.setAttribute('role', 'alert');
+  box.setAttribute('data-read-error', tag);
+  box.appendChild(el_('div', '', `${prefix}: ${(err && err.code && err.message) || SHEETS_ERRORS.unknown}`));
+  box.appendChild(retryButton_(onRetry, tag));
+  host.appendChild(box);
 }
 
 function setStatus(text) {
@@ -436,6 +532,7 @@ function wireTabs() {
    Overview
    ============================================================ */
 
+const OVERVIEW_KEY_ = 'overview:page';
 async function loadOverview() {
   setStatus('טוען סקירה…');
   try {
@@ -479,10 +576,18 @@ async function loadOverview() {
       });
     }
     setStatus(`עודכן ${new Date().toLocaleTimeString('he-IL')}`);
+    state.overviewOkAt = new Date();
+    noteFresh_(OVERVIEW_KEY_);
   } catch (err) {
     console.error(err);
-    document.getElementById('houseGrid').innerHTML =
-      `<div class="loading error">שגיאה בטעינת נתונים: ${err.message}</div>`;
+    if (state.overview && state.overviewOkAt) {
+      // A refresh failed but this page already has a good overview: keep it
+      // on screen and say it is a saved copy.
+      noteStale_(OVERVIEW_KEY_, state.overviewOkAt.toISOString());
+      setStatus('מוצגים נתונים שמורים');
+      return;
+    }
+    readErrorBox_(document.getElementById('houseGrid'), 'שגיאה בטעינת הנתונים', err, loadOverview, 'overview');
     setStatus('שגיאה בטעינה');
   }
 }
@@ -944,11 +1049,14 @@ async function loadHouseDetail(key) {
   try {
     const data = await fetchJson(`/api/sheets?action=managersHouse&house=${encodeURIComponent(key)}`);
     cacheHouseDetail_(key, data, state.overview?.month);
+    (state.detailsOkAt = state.detailsOkAt || {})[key] = new Date().toISOString();
+    noteFresh_(`house:${key}`);
     renderHouseDetail(key, data);
     if (state.overview) renderOverview(state.overview); // card re-reads the same cached chart
   } catch (err) {
     console.error(err);
-    showHouseError(panel, err);
+    if (state.details[key]) noteStale_(`house:${key}`, state.detailsOkAt && state.detailsOkAt[key]);
+    else showHouseError(panel, err, key);
   } finally {
     state.loadingDetails[key] = false;
   }
@@ -958,9 +1066,8 @@ function showHouseLoading(panel) {
   const banner = panel.querySelector('[data-status-banner]');
   if (banner) banner.innerHTML = '<div class="loading">טוען נתוני בית…</div>';
 }
-function showHouseError(panel, err) {
-  const banner = panel.querySelector('[data-status-banner]');
-  if (banner) banner.innerHTML = `<div class="loading error">שגיאה: ${err.message}</div>`;
+function showHouseError(panel, err, key) {
+  readErrorBox_(panel.querySelector('[data-status-banner]'), 'שגיאה בטעינת נתוני הבית', err, () => loadHouseDetail(key), 'house');
 }
 
 function renderHouseDetail(key, data) {

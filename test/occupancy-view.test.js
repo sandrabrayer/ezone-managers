@@ -295,7 +295,7 @@ test('a failed fetch → explicit error state + retry button, no computed fallba
   await call(ctx, 'ensureOccupancy_');
   const host = byId.get('occupancyCard');
   const err = one(host, 'data-occupancy-state', 'error');
-  assert.match(err._text, /שגיאה בטעינת תפוסה חודשית: upstream down/);
+  assert.match(err._text, /שגיאה בטעינת תפוסה חודשית: אין חיבור לאינטרנט — בדקו את החיבור\./);
   assert.equal(withAttr(host, 'data-occupancy-table').length, 0, 'no table on error');
   assert.equal(withAttr(host, 'data-occupancy-export').length, 0, 'nothing to export on error');
   const txt = textOf(host);

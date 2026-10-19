@@ -22,6 +22,14 @@ endpoint with authenticated JSON POST requests. The work tabs additionally use
 `POST /api/work` → `managersWork` for house data, adding notes and updating follow-ups.
 The server supplies the secret, role, house and stable actor ID from the session.
 
+**Read failures (19 Oct 2026)**: `/api/sheets` answers a classified code
+(`upstream_timeout` 504, `upstream_unreachable`, `upstream_auth`, `upstream_bad_response`,
+`upstream_app_error`, `upstream_unavailable` 503) and logs one safe
+`[sheets] action=… class=… status=… ms=… served=…` line. When a read fails and the same person
+made the same read successfully in the last 72 h, the server returns that copy with
+`X-Data-Source: cache`, and the app shows «מוצגים נתונים שמורים». With no copy, the app shows a
+Hebrew error with «נסו שוב». See `docs/sheets-resilience.md`.
+
 The endpoint URL is configured via the `APPS_SCRIPT_URL` env var. It is **required** — there is no hardcoded fallback, and the server refuses to start if it is not set.
 
 ## Access — a personal code per person (13 Oct 2026)

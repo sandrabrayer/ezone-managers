@@ -49,6 +49,10 @@
     </div>
   </header>
 
+  <!-- «מוצגים נתונים שמורים»: shown while a read is served from the last
+       good copy (docs/sheets-resilience.md). Filled by JS, text-only. -->
+  <div class="stale-notice" id="staleNotice" role="status" aria-live="polite" hidden></div>
+
   <nav class="tabs" id="tabs" role="tablist" aria-label="ניווט">
     <button class="tab is-active" data-tab="overview" role="tab" aria-selected="true">דשבורד</button>
     <button class="tab" data-tab="raanana" role="tab">רעננה אשר</button>

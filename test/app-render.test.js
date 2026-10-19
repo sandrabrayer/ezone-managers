@@ -549,7 +549,7 @@ test('history picker: a failed fetch shows an explicit error state — no stale 
   await call(ctx, 'selectHistoryMonth_', 'ramot', '2026-07');
   const view = panel.querySelector('[data-history-view]');
   assert.equal(view.hidden, false);
-  assert.match(view.innerHTML, /data-history-state="error">שגיאה בטעינת יולי 2026: upstream down</);
+  assert.match(view.innerHTML, /data-history-state="error">שגיאה בטעינת יולי 2026: אין חיבור לאינטרנט — בדקו את החיבור\.</);
   assert.doesNotMatch(view.innerHTML, /441|ds-col|data-history-days/, 'no figures rendered on error');
   assert.deepEqual(bonusSnapshot(ctx, panel), before);
   const n = calls.length;
@@ -888,12 +888,12 @@ test('bonus picker: months are cached in memory — re-selecting, a month of the
 test('bonus picker: a failed month shows an explicit error state (no stale figures), is retried on re-select, and invalid values fall back to the running month', async () => {
   const { ctx, byId, panel, calls } = await bootWithHistory({ failMonth: '2026-07' });
   await call(ctx, 'selectBonusMonth_', '2026-07');
-  assert.match(byId.get('houseGrid').innerHTML, /data-bonus-history-state="error">שגיאה בטעינת יולי 2026: upstream down/);
+  assert.match(byId.get('houseGrid').innerHTML, /data-bonus-history-state="error">שגיאה בטעינת יולי 2026: אין חיבור לאינטרנט — בדקו את החיבור\./);
   assert.equal(byId.get('houseGrid').children.length, 0);
   assert.equal(byId.get('kpiBonus').textContent, '—');
   assert.equal(byId.get('kpiBonusLabel').textContent, 'בונוס יולי 2026 — סופי (לתשלום)');
   const hero = panel.querySelector('[data-status-banner]').innerHTML;
-  assert.match(hero, /data-bonus-history-state="error">שגיאה בטעינת יולי 2026: upstream down/);
+  assert.match(hero, /data-bonus-history-state="error">שגיאה בטעינת יולי 2026: אין חיבור לאינטרנט — בדקו את החיבור\./);
   assert.equal(panel.querySelector('[data-stat="treatmentDays"]').textContent, '—');
   assert.equal(panel.querySelector('[data-stat-label="treatmentDays"]').textContent, 'ימי טיפול — יולי 2026 (סופי)');
   assert.equal(panel.querySelector('[data-month-split]').innerHTML, '');
@@ -1119,14 +1119,14 @@ test('settled Sep 2026: a failed house fetch is an explicit error state — neve
   const { ctx, calls, panel, heal } = await bootOct({ failHouse: 'efroni' });
   await call(ctx, 'selectBonusMonth_', '2026-09');
   const ef = panel('efroni');
-  assert.match(ef.querySelector('[data-log="entries"]').innerHTML, /log-empty error" data-settled-log="error">שגיאה בטעינת כניסות לספטמבר 2026: upstream down</);
-  assert.match(ef.querySelector('[data-log="exits"]').innerHTML, /data-settled-log="error">שגיאה בטעינת יציאות לספטמבר 2026: upstream down</);
+  assert.match(ef.querySelector('[data-log="entries"]').innerHTML, /log-empty error" data-settled-log="error">שגיאה בטעינת כניסות לספטמבר 2026: אין חיבור לאינטרנט — בדקו את החיבור\.</);
+  assert.match(ef.querySelector('[data-log="exits"]').innerHTML, /data-settled-log="error">שגיאה בטעינת יציאות לספטמבר 2026: אין חיבור לאינטרנט — בדקו את החיבור\.</);
   assert.equal(ef.querySelector('[data-stat="entries"]').textContent, '—');
   assert.equal(ef.querySelector('[data-stat="exits"]').textContent, '—');
   // September has no referral bonus, so a failed house payload adds no referral line and no note.
   assert.deepEqual(planIds(ef), ['first'], 'no referral line');
   assert.equal(ef.querySelector('[data-bonus-fallback-note]').textContent, '');
-  assert.match(ef.querySelector('[data-daily-spark]').innerHTML, /data-bonus-history-state="chart-error">שגיאה בטעינת התפוסה היומית לספטמבר 2026: upstream down/);
+  assert.match(ef.querySelector('[data-daily-spark]').innerHTML, /data-bonus-history-state="chart-error">שגיאה בטעינת התפוסה היומית לספטמבר 2026: אין חיבור לאינטרנט — בדקו את החיבור\./);
   assert.doesNotMatch(allTextOf(ef), /אין נתוני/);
   // The tier figures come from the month overview, which did load.
   assert.match(ef.querySelector('[data-status-banner]').innerHTML, /זכאי · מדרגה 1 · 2,000 ₪/);
@@ -1465,7 +1465,7 @@ test('1 Nov 2026 — settled October, house payload failed: the referral amount 
   await call(ctx, 'selectBonusMonth_', '2026-10');
   const ef = panel('efroni');
   const ref = ef.querySelector('[data-breakdown]').children.find((li) => /bp-referral/.test(li.className)).innerHTML;
-  assert.match(ref, /bp-status">שגיאה בטעינת הנתונים: upstream down<[\s\S]*bk-amount">—</);
+  assert.match(ref, /bp-status">שגיאה בטעינת הנתונים: אין חיבור לאינטרנט — בדקו את החיבור\.<[\s\S]*bk-amount">—</);
   assert.match(ref, /bp-chip">שגיאה</);
   assert.equal(ef.querySelector('[data-bonus-fallback-note]').textContent, 'לא כולל בונוס המשך טיפול — הנתונים לא נטענו');
   heal();
@@ -1577,4 +1577,121 @@ test('one-time referral: a patient still in a day package in November (started i
   const ref = panel('efroni').querySelector('[data-breakdown]').children.find((li) => /bp-referral/.test(li.className)).innerHTML;
   assert.match(ref, /bp-status">עדיין אין מטופלים מהבית שהתחילו טיפול יום בנובמבר 2026</);
   assert.doesNotMatch(ref, /bk-amount/, 'no amount — nothing earned');
+});
+
+/* ── read failures: Hebrew + «נסו שוב», and the «מוצגים נתונים שמורים»
+ *    notice (19 Oct 2026, docs/sheets-resilience.md) ─────────────────── */
+const RAW_CODES = /upstream_|exception|unauthorized|login_required|forbidden|HTTP \d|Bad JSON|<html/;
+const reply = (status, body, headers = {}) => ({
+  status, ok: status >= 200 && status < 300,
+  text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+  headers: { get: (k) => headers[k] || headers[k.toLowerCase()] || null }
+});
+const textOf = (el) => [el._text, ...el.children.map(textOf)].join(' ');
+
+test('read errors: every server code maps to specific Hebrew — never a raw code', async () => {
+  const cases = [
+    [504, 'upstream_timeout', /לא הגיב בזמן/], [502, 'upstream_unreachable', /אין חיבור לשרת הנתונים/],
+    [502, 'upstream_auth', /אישור הרשאות/], [502, 'upstream_bad_response', /תשובה לא תקינה/],
+    [502, 'upstream_app_error', /החזיר שגיאה/], [503, 'upstream_unavailable', /אינו זמין/],
+    [403, 'forbidden', /אין הרשאה/], [429, 'יותר מדי בקשות', /יותר מדי בקשות/],
+    [500, 'something_new', /לא ניתן לטעון/], [200, '<html>oops</html>', /לא ניתן לטעון/]
+  ];
+  for (const [status, code, he] of cases) {
+    const body = code.startsWith('<') ? code : { error: code };
+    const { ctx } = setup(async () => reply(status, body));
+    const err = await vm.runInContext('fetchJson', ctx)('/api/sheets?action=managersOverview').then(() => null, (e) => e);
+    assert.ok(err, `${code} must throw`);
+    assert.match(err.message, he, code);
+    assert.doesNotMatch(err.message, RAW_CODES, `${code}: no raw code in the message`);
+  }
+  const { ctx } = setup(async () => { throw new TypeError('Failed to fetch'); });
+  const off = await vm.runInContext('fetchJson', ctx)('/api/sheets?action=managersOverview').catch((e) => e);
+  assert.match(off.message, /אין חיבור לאינטרנט/);
+  const { ctx: c2 } = setup(async () => reply(200, { ok: false, error: 'exception' }));
+  const ex = await vm.runInContext('fetchJson', c2)('/api/sheets?action=managersOverview').catch((e) => e);
+  assert.match(ex.message, /החזיר שגיאה/);
+});
+
+test('overview fails with no copy → Hebrew RTL error box with «נסו שוב» that reloads', async () => {
+  let n = 0;
+  const { ctx, byId } = setup(async () => { n++; return reply(504, { error: 'upstream_timeout' }); });
+  vm.runInContext('state.overview = null; state.overviewOkAt = null;', ctx);
+  await vm.runInContext('loadOverview', ctx)();
+  const grid = byId.get('houseGrid');
+  const box = grid.children[0];
+  assert.equal(box.getAttribute('data-read-error'), 'overview');
+  assert.equal(box.getAttribute('role'), 'alert');
+  const txt = textOf(box);
+  assert.match(txt, /שגיאה בטעינת הנתונים: שרת הנתונים לא הגיב בזמן\./);
+  assert.doesNotMatch(txt, RAW_CODES);
+  assert.doesNotMatch(grid.innerHTML, /upstream_error|upstream_timeout/);
+  const btn = box.children.find((c) => c.getAttribute('data-retry') === 'overview');
+  assert.ok(btn, '«נסו שוב» button present');
+  assert.equal(btn._text, 'נסו שוב');
+  assert.equal(btn.getAttribute('type'), 'button');
+  const before = n;
+  btn._listeners.click[0]({ preventDefault() {} });
+  await new Promise((r) => setImmediate(r));
+  assert.ok(n > before, 'retry fetches the overview again');
+  assert.match(pub('index.html'), /<html lang="he" dir="rtl">/);
+  assert.match(pub('styles.css'), /\.read-error \{ direction: rtl; \}/);
+});
+
+test('a reply served from the server cache shows «מוצגים נתונים שמורים» with its time + «נסו שוב»; a live reply hides it', async () => {
+  let source = 'cache';
+  const fetchImpl = async () => reply(200, { ok: true, month: '2026-09', houses: [] },
+    source === 'cache' ? { 'X-Data-Source': 'cache', 'X-Data-Cached-At': '2026-10-19T11:52:00.000Z' } : { 'X-Data-Source': 'live' });
+  const { ctx, byId } = setup(fetchImpl);
+  const fetchJson = vm.runInContext('fetchJson', ctx);
+  await fetchJson('/api/sheets?action=managersOverview');
+  const notice = byId.get('staleNotice');
+  assert.equal(notice.hidden, false);
+  const txt = textOf(notice);
+  assert.match(txt, /מוצגים נתונים שמורים מ־/);
+  assert.match(txt, /14:52/, 'the copy time in Israel time');
+  assert.doesNotMatch(txt, RAW_CODES);
+  assert.ok(notice.children.find((c) => c.getAttribute('data-retry') === 'stale'), '«נסו שוב» in the notice');
+  source = 'live';
+  await fetchJson('/api/sheets?action=managersOverview');
+  assert.equal(notice.hidden, true, 'hidden again once the read is live');
+  assert.match(pub('index.html'), /id="staleNotice" role="status" aria-live="polite" hidden/);
+});
+
+test('a failed overview refresh keeps the last good page and shows the saved-data notice', async () => {
+  let fail = false;
+  const { calls, fetchImpl: ok } = stubFeed();
+  const { ctx, byId } = setup(async (url) => (fail ? reply(502, { error: 'upstream_bad_response' }) : ok(url)));
+  vm.runInContext('state.overview = null; state.prevOverview = null; state.monthOverviews = {}; state.chartsByMonth = {}; state.details = {};', ctx);
+  const loadOverview = vm.runInContext('loadOverview', ctx);
+  await loadOverview();
+  assert.equal(byId.get('houseGrid').children.length, 5);
+  fail = true;
+  await loadOverview();
+  assert.equal(byId.get('houseGrid').children.length, 5, 'cards stay — not wiped by the failed refresh');
+  assert.equal(byId.get('staleNotice').hidden, false);
+  assert.match(textOf(byId.get('staleNotice')), /מוצגים נתונים שמורים/);
+  fail = false;
+  await loadOverview();
+  assert.equal(byId.get('staleNotice').hidden, true);
+  assert.ok(calls.length > 0);
+});
+
+test('house tab fails with no copy → Hebrew error + «נסו שוב» (never «שגיאה: upstream_error»)', async () => {
+  let n = 0;
+  const { ctx, byId } = setup(async () => { n++; return reply(502, { error: 'upstream_auth' }); });
+  vm.runInContext('state.details = {}; state.loadingDetails = {};', ctx);
+  vm.runInContext("document.getElementById('houseDetailTpl')", ctx).content = { cloneNode: () => makeEl('div') }; // the house template
+  await vm.runInContext('loadHouseDetail', ctx)('raanana');
+  const banner = byId.get('panel-raanana').querySelector('[data-status-banner]');
+  const box = banner.children[0];
+  assert.equal(box.getAttribute('data-read-error'), 'house');
+  const txt = textOf(box);
+  assert.match(txt, /שגיאה בטעינת נתוני הבית: שרת הנתונים דורש אישור הרשאות/);
+  assert.doesNotMatch(txt, RAW_CODES);
+  const btn = box.children.find((c) => c.getAttribute('data-retry') === 'house');
+  const before = n;
+  btn._listeners.click[0]({ preventDefault() {} });
+  await new Promise((r) => setImmediate(r));
+  assert.ok(n > before, 'retry reloads the house');
 });
