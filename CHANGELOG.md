@@ -3,6 +3,16 @@
 
 ## Unreleased
 
+### Docs — ecosystem addendum for all eight Projects (October 20, 2026)
+
+- `docs/ecosystem-addendum-2026-10-20.md` lists the five changes of 20 Oct 2026 across Managers / Coordinators / Dashboard,
+  with every PR and merge commit. It also gives:
+  - the Script Properties to set;
+  - the «Deploy Apps Script» run order;
+  - the one-time committee import;
+  - the open Railway deploy item.
+- Docs only: no code, no SW bump. Tests unchanged (426).
+
 ### Added — half-yearly feedback «משוב» reminders (October 20, 2026)
 
 - **What**: for each employee of the house, the next feedback is due 6 months after the last recorded one, or after the
