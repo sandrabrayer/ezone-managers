@@ -256,10 +256,10 @@
         </section>
 
         <section class="card guide-sec" id="g-committees">
-          <h2>7. ועדות <span class="guide-soon">בקרוב</span></h2>
+          <h2>7. ועדות</h2>
           <ul>
             <li>את הוועדות קובעים <b>הרכזים</b> באפליקציה שלהם: תאריך, שעה, סוג, משתתפים ובית.</li>
-            <li>כאן רואים את הוועדות הקרובות של הבית, לקריאה בלבד. «ועדה היום» ו«ועדה השבוע» מופיעות ב«הבית היום».</li>
+            <li>כאן רואים את הוועדות הקרובות של הבית, לקריאה בלבד: בלשונית «ועדות» כולן, וב«הבית היום» — «ועדה היום» ו«ועדה השבוע».</li>
             <li>אחרי שהרכז/ת שומר/ת ועדה, אפשר לשלוח לך הודעת וואטסאפ עם הפרטים.</li>
             <li>טעות בוועדה? פונים לרכז/ת.</li>
           </ul>
@@ -310,6 +310,7 @@
         <button type="button" class="subtab is-active" data-sub="home" role="tab" aria-selected="true">הבית היום</button>
         <button type="button" class="subtab" data-sub="bonus" role="tab" aria-selected="false">בונוס</button>
         <button type="button" class="subtab" data-sub="patients" role="tab" aria-selected="false">מטופלים</button>
+        <button type="button" class="subtab" data-sub="committees" role="tab" aria-selected="false">ועדות</button>
         <button type="button" class="subtab" data-sub="team" role="tab" aria-selected="false">צוות ומשמרות</button>
         <button type="button" class="subtab" data-sub="therapists" role="tab" aria-selected="false">מטפלים</button>
         <button type="button" class="subtab" data-sub="staffTalks" role="tab" aria-selected="false">שיחות עם עובדים</button>
@@ -330,6 +331,8 @@
         </div>
       </section>
       <section data-sub-panel="patients" hidden></section>
+      <!-- «ועדות» (20 Oct 2026): READ-ONLY — the coordinators set them (work.js committeesHtml). -->
+      <section data-sub-panel="committees" hidden></section>
       <section data-sub-panel="team" hidden></section>
       <section data-sub-panel="therapists" hidden></section>
       <section data-sub-panel="staffTalks" hidden></section>

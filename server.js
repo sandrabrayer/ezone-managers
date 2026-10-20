@@ -333,14 +333,17 @@ app.get('/api/sheets', requireUser, async (req, res) => {
 });
 
 // ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
-const WORK_OPS = new Set(['houseData', 'houseCost', 'logAdd', 'logUpdate', 'dischargeSet', 'committeeSet']);
+const WORK_OPS = new Set(['houseData', 'houseCost', 'logAdd', 'logUpdate', 'dischargeSet']);
+// Committees are READ-ONLY here since 20 Oct 2026 (docs/committee.md): the coordinators set them in
+// their app; the managers see them in houseData.committees. The old write op is GONE (410), refused
+// before anything is forwarded — never reaches the Dashboard.
+const RETIRED_WORK_OPS = new Set(['committeeSet']);
 const WORK_LOGS = new Set(['staffTalks', 'events']);   // family calls removed from the app (14 Oct 2026)
 const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // Writes get their own, tighter bucket on top of the shared one.
 const allowWrites = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 });
-const WRITE_OPS = new Set(['logAdd', 'logUpdate', 'dischargeSet', 'committeeSet']);
-const COMMITTEE_LABEL_MAX = 60;
+const WRITE_OPS = new Set(['logAdd', 'logUpdate', 'dischargeSet']);
 const DISCHARGE_MODES = new Set(['set', 'clear', 'none']);
 // A write may wait up to 5 s for the Dashboard's script lock on top of its
 // reads, so it gets a longer budget than a read (docs/expected-discharge.md).
@@ -357,6 +360,9 @@ app.post('/api/work', requireUser, async (req, res) => {
   const b = req.body || {};
   const u = req.user;
   const op = String(b.op || '');
+  if (RETIRED_WORK_OPS.has(op)) {
+    return res.status(410).json({ error: 'committee_read_only', message: 'את הוועדות קובעים הרכזים באפליקציית הרכזים.' });
+  }
   if (!WORK_OPS.has(op)) return res.status(400).json({ error: 'unknown_op' });
   // The house is the manager's own; an admin names one.
   const house = u.role === 'admin' ? String(b.house || '') : u.house;
@@ -385,34 +391,6 @@ app.post('/api/work', requireUser, async (req, res) => {
     if (mode === 'set' && expected < String(b.entryDate)) return res.status(400).json({ error: 'before_admission' });
     Object.assign(body, { patientName: name, entryDate: String(b.entryDate), expectedDate: expected, previousDate: prev });
     if (mode !== 'set') body.mode = mode;
-  }
-  if (op === 'committeeSet') {
-    // Committee «ועדה» (15 Oct 2026, docs/committee.md). Shape check only; the
-    // Dashboard re-validates (real dates, Israel today, past only as a
-    // correction, patient in THIS house today) and keeps the append-only trail.
-    const mode = b.mode == null || b.mode === '' ? 'set' : String(b.mode);
-    if (mode !== 'set' && mode !== 'clear') return res.status(400).json({ error: 'bad_request' });
-    const name = typeof b.patientName === 'string' ? b.patientName.trim() : '';
-    if (!name || name.length > 80) return res.status(400).json({ error: 'bad_request' });
-    const date = b.committeeDate == null ? '' : String(b.committeeDate);
-    const prev = b.previousDate == null ? '' : String(b.previousDate);
-    if (!ISO_DATE_RE.test(String(b.entryDate || ''))) return res.status(400).json({ error: 'bad_date' });
-    if (mode === 'set' ? !ISO_DATE_RE.test(date) : date !== '') return res.status(400).json({ error: 'bad_date' });
-    if (prev !== '' && !ISO_DATE_RE.test(prev)) return res.status(400).json({ error: 'bad_date' });
-    if (mode === 'set' && date < String(b.entryDate)) return res.status(400).json({ error: 'before_admission' });
-    const label = b.label == null ? '' : b.label;
-    const prevLabel = b.previousLabel == null ? '' : b.previousLabel;
-    if (typeof label !== 'string' || typeof prevLabel !== 'string') return res.status(400).json({ error: 'bad_request' });
-    if (label.trim().length > COMMITTEE_LABEL_MAX || prevLabel.trim().length > COMMITTEE_LABEL_MAX) {
-      return res.status(400).json({ error: 'label_too_long' });
-    }
-    if (b.correction != null && typeof b.correction !== 'boolean') return res.status(400).json({ error: 'bad_request' });
-    Object.assign(body, {
-      patientName: name, entryDate: String(b.entryDate), committeeDate: date,
-      label: mode === 'set' ? label.trim() : '', previousDate: prev, previousLabel: prevLabel.trim()
-    });
-    if (mode === 'clear') body.mode = 'clear';
-    if (b.correction === true && mode === 'set') body.correction = true;
   }
   if (op === 'logAdd' || op === 'logUpdate') {
     if (!WORK_LOGS.has(String(b.log || ''))) return res.status(400).json({ error: 'unknown_log' });

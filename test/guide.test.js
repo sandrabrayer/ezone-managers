@@ -68,8 +68,9 @@ test('guide: SW cache bumped to v34 (monotonic from live v33)', () => {
   assert.ok(Number(/const CACHE = 'ezone-managers-v(\d+)'/.exec(read('public/sw.js'))[1]) >= 34);
 });
 
-test('guide: sections for features not shipped yet carry «בקרוב» (removed by the PR that ships each one)', () => {
-  for (const id of ['g-committees', 'g-summaries', 'g-feedback']) {
+test('guide: sections for features not shipped yet carry «בקרוב» (removed by the PR that ships each one); committees shipped 20 Oct 2026', () => {
+  assert.match(guide, /<section class="card guide-sec" id="g-committees">\s*<h2>7\. ועדות<\/h2>/);
+  for (const id of ['g-summaries', 'g-feedback']) {
     const sec = new RegExp(`<section class="card guide-sec" id="${id}">\\s*<h2>[^<]*<span class="guide-soon">בקרוב</span></h2>`);
     assert.match(guide, sec, id);
   }

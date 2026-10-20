@@ -1,4 +1,64 @@
-# Committee date per patient — «ועדה» (15 Oct 2026)
+# Committees «ועדות» — read-only in Managers (October 20, 2026)
+
+> **Reversed on 20 Oct 2026 (Sandra).** The coordinators now SET committees in their app
+> (date, time, type, participants, patient, house). Managers only VIEW them. The 15 Oct
+> per-patient editor below is history: its write op is refused and its sheet is never written again.
+
+## What the manager sees
+
+- **«הבית היום»**: the «ועדות קרובות» card is always drawn. It shows «ועדה היום» (red) and «ועדה השבוע» (today +1 … +7, amber), with
+  a badge on the sub-tab. Each row shows the patient (or the committee type), the date, the type and time, and the days left.
+  «לוועדות» opens the «ועדות» sub-tab.
+- **«ועדות»** (new house sub-tab, after «מטופלים»): every upcoming committee of the house (up to 120 days), with:
+  - the weekday, date and time;
+  - the type and patient;
+  - the participants.
+
+  A note says the coordinators set them. There is no form, button or edit.
+- **Admin**: «ועדות קרובות — כל הבתים» on the «הבית היום» landing tab, with a house filter. «לוועדות» opens that
+  house's sub-tab.
+- **Not available**: an honest line, never an empty list that looks real:
+  - «הוועדות מאפליקציית הרכזים עוד לא מחוברות» (the secrets are not set);
+  - «לא הצלחנו לקרוא את הוועדות מאפליקציית הרכזים» (the feed is down);
+  - «הוועדות יופיעו אחרי עדכון השרת» (an older Dashboard).
+
+## Data path
+
+coordinators `Committees` sheet → coordinators Apps Script `getCommitteesForManagers` (own secret
+`MANAGERS_READ_SECRET`) → Dashboard Apps Script (`COORDINATORS_SHEETS_URL`,
+`COORDINATORS_MANAGERS_SECRET`; cached 5 min) → `managersWork` `houseData.committees` for the
+caller's house only (server-decided) → `/api/work` → the browser.
+
+Shape: `committees: { available: true, today, items: [{ id, date, time, type, participants, patientName }] }`
+or `{ available: false, reason }`.
+
+## Server-side enforcement
+
+`POST /api/work` with `op: 'committeeSet'` → **410** `{ error: 'committee_read_only' }` for every role.
+It is refused before anything is forwarded, after the session check (no session → 401). The
+Dashboard refuses it too (`committee_read_only`). `committeeSet` is no longer in `WORK_OPS` /
+`WRITE_OPS`.
+
+## Rule (shared with the Dashboard card)
+
+Unchanged: `COMMITTEE_LEAD_DAYS = 7`, Asia/Jerusalem "today", and the shared fixture
+`test/fixtures/committee-alert-cases.json`, pinned by sha256 in both repos.
+
+## Tests
+
+`test/committee.test.js`:
+
+- 410 for manager and admin, and nothing forwarded;
+- the sub-tab list, escaping and unavailable states;
+- no editor on «מטופלים»;
+- the fixture boundaries on the new shape;
+- the text-only card with no edit button;
+- the admin filter, the badge and the wiring.
+
+---
+
+## History — the 15 Oct 2026 per-patient editor (retired)
+
 
 House managers record a committee («ועדה») date for each patient: one current date per stay,
 with an optional short label (≤ 60 characters, e.g. the type of committee).

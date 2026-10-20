@@ -3,6 +3,24 @@
 
 ## Unreleased
 
+### Changed — committees are READ-ONLY; the coordinators set them (October 20, 2026)
+
+- **Why (Sandra)**: committees reverse direction. The coordinators set them (date, time, type,
+  participants, patient); the house manager only views them.
+- **Server**: `/api/work` `committeeSet` → **410** `committee_read_only` for every role, never
+  forwarded. The validation block and `COMMITTEE_LABEL_MAX` are removed.
+- **UI**:
+  - The «מטופלים» committee editor is removed (form, spinner, save / clear, pending-edit).
+  - New read-only **«ועדות»** sub-tab: the house's upcoming committees.
+  - «ועדות קרובות» on «הבית היום» is always drawn, with «לוועדות» instead of «שינוי».
+  - The admin card keeps its house filter.
+- **Data**: `houseData.committees` (the Dashboard reads the coordinators' `getCommitteesForManagers` feed).
+  `public/committee-alerts.js` reads `committees.items`; the old `patients[].committee` is ignored.
+  When the feed is unavailable, the app shows an honest reason.
+- Guide §7: «בקרוב» removed. SW v34 → v35. **Tests 419 → 408** (the editor's tests are replaced by
+  read-only / 410 tests). Details: `docs/committee.md`.
+- **Order**: coordinators PR → Dashboard PR → this PR. Script Properties: see `docs/committee.md`.
+
 ### Added — «מדריך» usage guide tab (October 20, 2026)
 
 - **What**: a static Hebrew RTL guide, in the same style as the coordinators `guide.html`. It has a
