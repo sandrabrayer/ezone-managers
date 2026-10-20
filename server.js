@@ -143,11 +143,16 @@ const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, house: u.hous
 // ---- static: public assets only (they hold no data; data needs a login) ----
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Expose ONLY the client-shared bonus module. There is no static mount on
-// lib/, so nothing else under it is reachable over HTTP.
+// Expose ONLY the client-shared modules (bonus math; the feedback due-date
+// logic, 20 Oct 2026). There is no static mount on lib/, so nothing else under
+// it is reachable over HTTP.
 app.get('/lib/bonus-eligibility.js', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'lib', 'bonus-eligibility.js'));
+});
+app.get('/lib/feedback-due.js', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'lib', 'feedback-due.js'));
 });
 
 // Railway activates a deployment only after this authenticated, data-free probe.
@@ -333,7 +338,7 @@ app.get('/api/sheets', requireUser, async (req, res) => {
 });
 
 // ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
-const WORK_OPS = new Set(['houseData', 'houseCost', 'logAdd', 'logUpdate', 'dischargeSet', 'meetingSummaries']);
+const WORK_OPS = new Set(['houseData', 'houseCost', 'logAdd', 'logUpdate', 'dischargeSet', 'meetingSummaries', 'feedbackDone']);
 // Committees are READ-ONLY here since 20 Oct 2026 (docs/committee.md): the coordinators set them in
 // their app; the managers see them in houseData.committees. The old write op is GONE (410), refused
 // before anything is forwarded — never reaches the Dashboard.
@@ -343,7 +348,7 @@ const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // Writes get their own, tighter bucket on top of the shared one.
 const allowWrites = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 });
-const WRITE_OPS = new Set(['logAdd', 'logUpdate', 'dischargeSet']);
+const WRITE_OPS = new Set(['logAdd', 'logUpdate', 'dischargeSet', 'feedbackDone']);
 const DISCHARGE_MODES = new Set(['set', 'clear', 'none']);
 // A write may wait up to 5 s for the Dashboard's script lock on top of its
 // reads, so it gets a longer budget than a read (docs/expected-discharge.md).
@@ -393,6 +398,15 @@ app.post('/api/work', requireUser, async (req, res) => {
     if (mode === 'set' && expected < String(b.entryDate)) return res.status(400).json({ error: 'before_admission' });
     Object.assign(body, { patientName: name, entryDate: String(b.entryDate), expectedDate: expected, previousDate: prev });
     if (mode !== 'set') body.mode = mode;
+  }
+  if (op === 'feedbackDone') {
+    // Half-yearly feedback «משוב» (20 Oct 2026, docs/feedback-reminders.md). Shape check
+    // only; the Dashboard re-validates (employee on THIS house's staff, not a future date)
+    // and appends to the append-only ManagersFeedbackLog with the server-decided author.
+    const employee = typeof b.employee === 'string' ? b.employee.trim() : '';
+    if (!employee || employee.length > 80) return res.status(400).json({ error: 'bad_request' });
+    if (!ISO_DATE_RE.test(String(b.doneAt || ''))) return res.status(400).json({ error: 'bad_date' });
+    Object.assign(body, { employee, doneAt: String(b.doneAt) });
   }
   if (op === 'logAdd' || op === 'logUpdate') {
     if (!WORK_LOGS.has(String(b.log || ''))) return res.status(400).json({ error: 'unknown_log' });

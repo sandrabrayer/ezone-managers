@@ -356,6 +356,17 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: half-yearly feedback «משוב» reminders (October 20, 2026)
+
+- The next due date is 6 months after the last feedback, or after the start date (`lib/feedback-due.js`;
+  month ends clamp; no start date → «אין תאריך התחלה»).
+- «הבית היום» shows a card with the overdue (red) and the due-in-30-days employees. «צוות ומשמרות» shows the list
+  with «בוצע» + a date.
+- The write goes `/api/work` `feedbackDone` → Dashboard `ManagersFeedbackLog` (append-only). The employee must be on
+  the house staff.
+- The roster comes from the coordinators digest (`startDate` appended).
+- SW v37, tests 426. Details: `docs/feedback-reminders.md`.
+
 ## Managers: «סיכומי ישיבות» — read-only, own house (October 20, 2026)
 
 - A new sub-tab with a month filter. It shows the coordinators' FINAL team-meeting summaries:

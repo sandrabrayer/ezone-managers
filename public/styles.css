@@ -2073,3 +2073,11 @@ body.is-locked { overflow: hidden; }
 .wk-ms-row { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
 .wk-ms-patient { font-weight: 700; font-size: 16px; }
 .wk-ms-label { font-size: 13px; color: var(--text-mute); margin-top: 4px; }
+
+/* ===== משובים חצי־שנתיים (20 Oct 2026) — docs/feedback-reminders.md ===== */
+.wk-fb-overdue { border-inline-start: 4px solid var(--red, #e5484d); padding-inline-start: 8px; }
+.wk-fb-overdue .wk-meta { color: var(--red, #e5484d); font-weight: 700; }
+.wk-fb-soon { border-inline-start: 4px solid var(--amber, #f5a524); padding-inline-start: 8px; }
+.wk-fb-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 6px; width: 100%; }
+.wk-fb-form input[type="date"] { min-height: 44px; font-size: 16px; }
+.wk-fb-form .wk-dis-btn { min-height: 44px; }
