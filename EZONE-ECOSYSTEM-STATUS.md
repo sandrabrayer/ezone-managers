@@ -1,5 +1,8 @@
 # E-ZONE Ecosystem Status — updated September 10, 2026
 
+> **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
+> Dashboard changes, the Script Properties to set and the deploy order.
+
 ## Managers protocol 2 — prepared October 14, 2026 (not activated)
 
 Coordinated Managers/Dashboard hardening requires immutable account IDs,
