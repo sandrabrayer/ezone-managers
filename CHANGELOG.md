@@ -3,6 +3,26 @@
 
 ## Unreleased
 
+### Added — «מדריך» usage guide tab (October 20, 2026)
+
+- **What**: a static Hebrew RTL guide, in the same style as the coordinators `guide.html`. It has a
+  table of contents and 10 short sections:
+  - what each tab shows;
+  - how to read «הבית היום»;
+  - how the bonus is calculated and read, with a per-house table;
+  - patients and alerts;
+  - team and shifts;
+  - logs and follow-ups;
+  - committees, meeting summaries and feedback reminders (marked «בקרוב» until PRs 3–5 ship);
+  - login and privacy.
+
+  It also has a print / PDF button.
+- **Access**: open to every role. A house manager keeps the tab next to their house.
+- **Safety**: static text only. No script, no inline handler, only in-page links.
+- **Drift guard**: the bonus table is checked against the latest `RULE_SETS` in
+  `lib/bonus-eligibility.js` (unchanged).
+- No new endpoint, env var or secret. SW v33 → v34. **Tests 412 → 419**. Details: `docs/guide.md`.
+
 ### Changed — «הבית היום» landing tab + one «בונוס» tab; no settled-month banner on load (October 20, 2026)
 
 - **Why**: the house page opened with the settled previous month as a hero («ספטמבר: לא זכאי

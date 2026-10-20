@@ -2035,3 +2035,29 @@ body.is-locked { overflow: hidden; }
 .today-all { display: grid; gap: 14px; }
 .today-house .card-title { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .today-house .dash-go { margin-top: 8px; }
+
+/* ===== «מדריך» (20 Oct 2026) — docs/guide.md ===== */
+.guide { max-width: 860px; margin: 0 auto; }
+.guide-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.guide-top h1 { font-family: 'Frank Ruhl Libre', serif; font-size: 22px; margin: 0; }
+.guide-what { color: var(--text-dim); font-size: 15px; line-height: 1.6; margin: 0 0 12px; }
+.guide-toc ol { margin: 6px 0 0; padding-inline-start: 22px; columns: 2; column-gap: 24px; }
+.guide-toc li { margin: 4px 0; break-inside: avoid; font-size: 15px; }
+.guide-toc a, .guide a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.guide-sec { margin-top: 14px; scroll-margin-top: 70px; }
+.guide-sec h2 { font-size: 18px; margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.guide-sec h3 { font-size: 15px; margin: 12px 0 4px; }
+.guide-sec ul { margin: 6px 0; padding-inline-start: 22px; }
+.guide-sec li, .guide-sec p { font-size: 15px; line-height: 1.65; }
+.guide-note { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin: 8px 0 0; font-size: 14px; }
+.guide-table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 14px; }
+.guide-table th, .guide-table td { border: 1px solid var(--line); padding: 6px 8px; text-align: right; }
+@media (max-width: 480px) { .guide-toc ol { columns: 1; } }
+@media print {
+  .top-bar, .tabs, .foot, .stale-notice, .guide-print { display: none !important; }
+  .panel { display: none !important; }
+  #panel-guide { display: block !important; }
+  body { background: #fff !important; color: #000 !important; }
+  .guide-sec { break-inside: avoid; }
+}
+.guide-soon { font-size: 12px; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; vertical-align: middle; }

@@ -80,6 +80,9 @@ sub-tab. Every bonus element (the picker, hero, dial, plan, KPIs, chart, history
 banner and house cards) lives in a «בונוס» tab. No settled-month banner shows on load; a finished
 month appears only when it is picked in «חודש בונוס».
 
+**Guide (20 Oct 2026)**: a static «מדריך» tab, open to every role, explains every tab and how
+the bonus is calculated and read. See `docs/guide.md`.
+
 Username + personal code per person (`docs/access.md`): a house manager sees only their
 house; Sandra and Ron see all. Each house has sub-tabs — הבית היום, בונוס, מטופלים
 (patients, outpatients, visits and admissions this month), שיחות משפחה,

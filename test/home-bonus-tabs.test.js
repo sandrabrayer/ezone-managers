@@ -27,7 +27,7 @@ test('top tabs: «הבית היום» is first and active (the landing screen), 
   const nav = section(html, /<nav class="tabs"[\s\S]*?<\/nav>/);
   const tabs = [...nav.matchAll(/<button class="tab( is-active)?" data-tab="(\w+)"[^>]*>([^<]+)</g)].map((m) => [m[2], m[3], !!m[1]]);
   assert.deepEqual(tabs.slice(0, 2), [['today', 'הבית היום', true], ['overview', 'בונוס', false]]);
-  assert.deepEqual(tabs.slice(2).map((t) => t[0]), ['raanana', 'ramot', 'efroni', 'rehab', 'pardes']);
+  assert.deepEqual(tabs.slice(2, 7).map((t) => t[0]), ['raanana', 'ramot', 'efroni', 'rehab', 'pardes']);
   assert.equal(tabs.filter((t) => t[2]).length, 1, 'exactly one active tab');
   assert.match(html, /<section class="panel is-active" id="panel-today"/);
   assert.match(html, /<section class="panel" id="panel-overview"/);
