@@ -333,7 +333,7 @@ app.get('/api/sheets', requireUser, async (req, res) => {
 });
 
 // ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
-const WORK_OPS = new Set(['houseData', 'houseCost', 'logAdd', 'logUpdate', 'dischargeSet']);
+const WORK_OPS = new Set(['houseData', 'houseCost', 'logAdd', 'logUpdate', 'dischargeSet', 'meetingSummaries']);
 // Committees are READ-ONLY here since 20 Oct 2026 (docs/committee.md): the coordinators set them in
 // their app; the managers see them in houseData.committees. The old write op is GONE (410), refused
 // before anything is forwarded — never reaches the Dashboard.
@@ -370,7 +370,9 @@ app.post('/api/work', requireUser, async (req, res) => {
     return res.status(403).json({ error: 'forbidden' });
   }
   const body = { action: 'managersWork', secret: WORK_SECRET, op, house, role: u.role, actor: u.name, actorId: u.id };
-  if ((op === 'houseData' || op === 'houseCost') && YM_RE.test(String(b.month || ''))) body.month = String(b.month);
+  if ((op === 'houseData' || op === 'houseCost' || op === 'meetingSummaries') && YM_RE.test(String(b.month || ''))) body.month = String(b.month);
+  // «סיכומי ישיבות» (20 Oct 2026, docs/meeting-summaries.md): READ-ONLY; a bad month is refused here.
+  if (op === 'meetingSummaries' && b.month != null && b.month !== '' && !YM_RE.test(String(b.month))) return res.status(400).json({ error: 'bad_month' });
   if (WRITE_OPS.has(op) && !allowWrites(clientIp(req))) {
     return res.status(429).json({ error: 'יותר מדי עדכונים. נסו שוב מאוחר יותר.' });
   }

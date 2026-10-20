@@ -3,6 +3,18 @@
 
 ## Unreleased
 
+### Added — «סיכומי ישיבות»: the coordinators' meeting summaries, read-only (October 20, 2026)
+
+- **What**: a new house sub-tab «סיכומי ישיבות» with a month filter (12 months). It shows the FINAL team-meeting
+  summaries of the manager's own house: participants, general summary, and the weekly update + goals per
+  patient. There is no edit.
+- **Server**: `/api/work` op `meetingSummaries` (read). The house is pinned by the session; the month is validated
+  (`bad_month` 400). Data comes from the Dashboard `meetingSummaries` ← coordinators `getMeetingSummariesForManagers`
+  (same secrets as the committees feed).
+- **Safety**: every value is escaped; line breaks come from CSS. Loaded only when opened. Explicit error / unavailable
+  states; raw codes are never shown.
+- Guide §8: «בקרוב» removed. SW v35 → v36. **Tests 408 → 413**. Details: `docs/meeting-summaries.md`.
+
 ### Changed — committees are READ-ONLY; the coordinators set them (October 20, 2026)
 
 - **Why (Sandra)**: committees reverse direction. The coordinators set them (date, time, type,

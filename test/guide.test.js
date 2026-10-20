@@ -70,7 +70,7 @@ test('guide: SW cache bumped to v34 (monotonic from live v33)', () => {
 
 test('guide: sections for features not shipped yet carry «בקרוב» (removed by the PR that ships each one); committees shipped 20 Oct 2026', () => {
   assert.match(guide, /<section class="card guide-sec" id="g-committees">\s*<h2>7\. ועדות<\/h2>/);
-  for (const id of ['g-summaries', 'g-feedback']) {
+  for (const id of ['g-feedback']) {
     const sec = new RegExp(`<section class="card guide-sec" id="${id}">\\s*<h2>[^<]*<span class="guide-soon">בקרוב</span></h2>`);
     assert.match(guide, sec, id);
   }
