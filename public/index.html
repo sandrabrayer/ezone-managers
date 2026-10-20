@@ -54,7 +54,10 @@
   <div class="stale-notice" id="staleNotice" role="status" aria-live="polite" hidden></div>
 
   <nav class="tabs" id="tabs" role="tablist" aria-label="ניווט">
-    <button class="tab is-active" data-tab="overview" role="tab" aria-selected="true">דשבורד</button>
+    <!-- «הבית היום» is the landing screen (20 Oct 2026); every bonus figure
+         lives in «בונוס» (see docs/home-and-bonus-tabs.md). -->
+    <button class="tab is-active" data-tab="today" role="tab" aria-selected="true">הבית היום</button>
+    <button class="tab" data-tab="overview" role="tab" aria-selected="false">בונוס</button>
     <button class="tab" data-tab="raanana" role="tab">רעננה אשר</button>
     <button class="tab" data-tab="ramot" role="tab">רמות השבים</button>
     <button class="tab" data-tab="efroni" role="tab">קיסריה עפרוני</button>
@@ -64,8 +67,19 @@
 
   <main class="screen" id="screen">
 
-    <!-- TAB 1: OVERVIEW -->
-    <section class="panel is-active" id="panel-overview" role="tabpanel">
+    <!-- TAB 1: TODAY — what is happening in the houses today (admin: every
+         house; a house manager lands on their own house's «הבית היום»).
+         No bonus figure is ever drawn here. Filled by work.js, text-only. -->
+    <section class="panel is-active" id="panel-today" role="tabpanel">
+      <!-- Admin only: committees («ועדה») of every house, with a house filter. -->
+      <!-- Admin only: discharge alerts of every house, with a house filter. -->
+      <div id="committeeAlertsAll" class="dis-alerts-all" hidden></div>
+      <div id="dischargeAlertsAll" class="dis-alerts-all" hidden></div>
+      <div id="todayAll" class="today-all"><div class="card dash-card"><div class="wk-empty">טוען את הבתים…</div></div></div>
+    </section>
+
+    <!-- TAB 2: BONUS (network overview) — every bonus element of the network. -->
+    <section class="panel" id="panel-overview" role="tabpanel">
       <!-- Bonus history: pick any finished month since May 2026 (the
            quarterly anchor). A finished month renders the whole overview
            settled; the running month is the default (see
@@ -77,11 +91,6 @@
         </label>
         <button type="button" class="link-btn" id="bonusMonthBackOverview" hidden>חזרה לחודש נוכחי</button>
       </div>
-
-      <!-- Admin only: discharge alerts of every house, with a house filter. -->
-      <!-- Admin only: committees («ועדה») of every house, with a house filter. -->
-      <div id="committeeAlertsAll" class="dis-alerts-all" hidden></div>
-      <div id="dischargeAlertsAll" class="dis-alerts-all" hidden></div>
 
       <div class="kpis" id="networkKpis">
         <div class="kpi kpi-green">
@@ -130,7 +139,7 @@
       <div class="card occupancy-card" id="occupancyCard"></div>
     </section>
 
-    <!-- TABS 2-6: HOUSE DETAIL (shared template, populated by JS) -->
+    <!-- TABS 3-7: HOUSE DETAIL (shared template, populated by JS) -->
     <section class="panel" id="panel-raanana" role="tabpanel" data-house-key="raanana"></section>
     <section class="panel" id="panel-ramot" role="tabpanel" data-house-key="ramot"></section>
     <section class="panel" id="panel-efroni" role="tabpanel" data-house-key="efroni"></section>
@@ -146,22 +155,12 @@
   <!-- House detail template -->
   <template id="houseDetailTpl">
     <div class="house-detail">
-      <!-- Bonus history: same picker as the overview — a finished month
-           renders this whole tab settled. -->
-      <div class="bonus-month-bar">
-        <label class="month-picker">
-          <span>חודש בונוס</span>
-          <select data-bonus-month aria-label="בחירת חודש בונוס"></select>
-        </label>
-        <button type="button" class="link-btn" data-bonus-month-back hidden>חזרה לחודש נוכחי</button>
-      </div>
-
-      <div class="status-banner" data-status-banner></div>
-
-      <!-- Work tabs (13 Oct 2026): the bonus page plus the manager's work tools. -->
+      <!-- Work tabs (13 Oct 2026). From 20 Oct 2026 «הבית היום» is the
+           landing sub-tab and holds NO bonus element; every bonus block
+           (picker, hero, dial, plan, KPIs, chart, history) is in «בונוס». -->
       <nav class="subtabs" data-subtabs role="tablist" aria-label="תפריט הבית">
-        <button type="button" class="subtab is-active" data-sub="home" role="tab" aria-selected="true">ראשי</button>
-        <button type="button" class="subtab" data-sub="bonus" role="tab" aria-selected="false">בונוסים</button>
+        <button type="button" class="subtab is-active" data-sub="home" role="tab" aria-selected="true">הבית היום</button>
+        <button type="button" class="subtab" data-sub="bonus" role="tab" aria-selected="false">בונוס</button>
         <button type="button" class="subtab" data-sub="patients" role="tab" aria-selected="false">מטופלים</button>
         <button type="button" class="subtab" data-sub="team" role="tab" aria-selected="false">צוות ומשמרות</button>
         <button type="button" class="subtab" data-sub="therapists" role="tab" aria-selected="false">מטפלים</button>
@@ -170,17 +169,12 @@
       </nav>
       <div data-followups></div>
 
-      <!-- The manager's dashboard (14 Oct 2026): the bonus dial (app.js, from
-           BonusView.bonusGaugeView) + today / this week in the house (work.js). -->
+      <!-- «הבית היום»: today / this week in the house (work.js). -->
       <section data-sub-panel="home">
         <!-- Committee alerts: «ועדה היום» / «ועדה השבוע» (top). -->
         <div data-dash-committees></div>
         <!-- Discharge alerts (Task E): from the manager's own expected dates. -->
         <div data-dash-alerts></div>
-        <div class="card dash-card dash-bonus" data-dash-bonus>
-          <div class="card-title">הבונוס שלי</div>
-          <div class="wk-empty">טוען…</div>
-        </div>
         <div data-dash-house><div class="card dash-card"><div class="wk-empty">טוען את נתוני הבית…</div></div></div>
         <div class="card dash-card dash-cost" data-dash-cost>
           <div class="card-title">עלות כוח אדם</div>
@@ -194,6 +188,27 @@
       <section data-sub-panel="events" hidden></section>
 
       <section data-sub-panel="bonus" hidden>
+      <!-- Bonus history: same picker as the overview — a finished month
+           renders this whole sub-tab settled. -->
+      <div class="bonus-month-bar">
+        <label class="month-picker">
+          <span>חודש בונוס</span>
+          <select data-bonus-month aria-label="בחירת חודש בונוס"></select>
+        </label>
+        <button type="button" class="link-btn" data-bonus-month-back hidden>חזרה לחודש נוכחי</button>
+      </div>
+
+      <!-- Hero: empty in the running month (no settled-month headline on
+           load, 20 Oct 2026); a PICKED finished month is shown here, labelled
+           «<month> — סופי». Also the house's loading / error state. -->
+      <div class="status-banner" data-status-banner hidden></div>
+
+      <!-- The bonus dial (app.js, from BonusView.bonusGaugeView) + «מה אם?». -->
+      <div class="card dash-card dash-bonus" data-dash-bonus>
+        <div class="card-title">הבונוס שלי</div>
+        <div class="wk-empty">טוען…</div>
+      </div>
+
       <!-- The bonuses of the month, one block each: what it pays, the
            condition in plain words and the real figures now (13 Oct 2026). -->
       <div class="card bonus-plan-card" data-bonus-plan>

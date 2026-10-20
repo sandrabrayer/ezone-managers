@@ -224,14 +224,13 @@ test('house detail: days-so-far is ONE number across KPI, bonus plan, progress b
   assert.equal(panel.querySelector('[data-stat="daysTarget"]').textContent, '510', 'target = what the first bonus needs');
 });
 
-test('house detail: hero headline is the SETTLED previous month; the running month is told by the bonus plan, not a hero line', () => {
+test('house detail (20 Oct 2026): NO settled-previous-month hero in the running month — the banner is empty and hidden; the running month is told by the bonus plan', () => {
   const { panel } = renderDetail();
-  const hero = panel.querySelector('[data-status-banner]').innerHTML;
-  const headline = /data-hero-headline>([^<]*)</.exec(hero)[1];
-  assert.equal(headline, 'אוגוסט 2026: לא זכאי · המכסה לא הושלמה (441/510)');
-  for (const w of FORBIDDEN) assert.ok(!headline.includes(w), `settled headline must not say "${w}"`);
-  assert.doesNotMatch(hero, /data-hero-current/, 'no running-month line in the hero');
-  assert.doesNotMatch(hero, /2577|2,577|2500|2,500/);
+  const banner = panel.querySelector('[data-status-banner]');
+  assert.equal(banner.innerHTML, '');
+  assert.equal(banner.hidden, true);
+  assert.equal(banner.className, 'status-banner');
+  assert.doesNotMatch(panel.innerHTML || '', /אוגוסט 2026: לא זכאי/, 'the settled month is never headlined while the running month is on screen');
 });
 
 test('house detail: the bonus plan says the condition in words and where the house stands now — never a bare 0', () => {
@@ -925,7 +924,7 @@ test('bonus picker: the occupancy-history picker on the house tab still works in
 
 test('index.html / sw.js: both pickers exist, the legend labels are addressable, SW cache is v10+', () => {
   const html = pub('index.html');
-  const overview = /<section class="panel is-active" id="panel-overview"[\s\S]*?<\/section>/.exec(html)[0];
+  const overview = /<section class="panel" id="panel-overview"[\s\S]*?<\/section>/.exec(html)[0];
   assert.match(overview, /<select id="bonusMonthOverview"/);
   assert.match(overview, /id="bonusMonthBackOverview" hidden>חזרה לחודש נוכחי</);
   assert.ok(overview.indexOf('bonusMonthOverview') < overview.indexOf('id="networkKpis"'), 'overview picker sits above the KPI cards');
@@ -1562,10 +1561,13 @@ test('a house tab opened before the overview finished is redrawn with last month
   vm.runInContext(`cacheHouseDetail_('ramot', ${JSON.stringify(detailNoPrev)}, '2026-09')`, s.ctx);
   call(s.ctx, 'renderHouseDetail', 'ramot', vm.runInContext('state.details.ramot', s.ctx));
   const panel = s.byId.get('panel-ramot');
-  assert.match(panel.querySelector('[data-status-banner]').innerHTML, /הנתונים לא זמינים/);
+  const before = panel.querySelector('[data-stat="bonusTotal"]').textContent;
+  assert.equal(panel.querySelector('[data-status-banner]').innerHTML, '', 'no settled hero in the running month (20 Oct 2026)');
   await vm.runInContext('loadOverview', s.ctx)();
-  assert.doesNotMatch(panel.querySelector('[data-status-banner]').innerHTML, /הנתונים לא זמינים/, 'redrawn with August');
-  assert.match(panel.querySelector('[data-status-banner]').innerHTML, /אוגוסט 2026/);
+  assert.equal(panel.getAttribute('data-rendered'), '1', 'redrawn once the overview lands');
+  assert.equal(panel.querySelector('[data-status-banner]').innerHTML, '', 'still no settled-previous-month banner after the redraw');
+  assert.equal(panel.querySelector('[data-status-banner]').hidden, true);
+  assert.equal(panel.querySelector('[data-stat="bonusTotal"]').textContent, before);
   assert.ok(calls.length > 0);
 });
 
@@ -1694,4 +1696,30 @@ test('house tab fails with no copy → Hebrew error + «נסו שוב» (never �
   btn._listeners.click[0]({ preventDefault() {} });
   await new Promise((r) => setImmediate(r));
   assert.ok(n > before, 'retry reloads the house');
+});
+
+/* ── «הבית היום» + «בונוס» tabs (20 Oct 2026, docs/home-and-bonus-tabs.md) ── */
+test('tabs (20 Oct 2026): no settled-month banner on load; a PICKED finished month shows it, labelled «— סופי»; back to the running month hides it again', async () => {
+  const { ctx, panel } = await bootWithHistory();
+  const banner = () => panel.querySelector('[data-status-banner]');
+  // On load (running month September): nothing about August at the top.
+  assert.equal(banner().hidden, true);
+  assert.equal(banner().innerHTML, '');
+  // Picking August — the settled month appears, clearly labelled.
+  await call(ctx, 'selectBonusMonth_', '2026-08');
+  assert.equal(banner().hidden, false);
+  assert.match(/data-hero-headline>([^<]*)</.exec(banner().innerHTML)[1], /^אוגוסט 2026 — סופי: /);
+  // «חזרה לחודש נוכחי» — the banner is gone again.
+  await call(ctx, 'selectBonusMonth_', null);
+  assert.equal(banner().hidden, true);
+  assert.equal(banner().innerHTML, '');
+});
+
+test('tabs (20 Oct 2026): a manager lands on their own house — the network «הבית היום» and «בונוס» panels are hidden', () => {
+  const s = setup();
+  vm.runInContext('window.scrollTo = () => {}; loadHouseDetail = () => {};', s.ctx);
+  call(s.ctx, 'applyRole_', { role: 'manager', house: 'ramot' });
+  assert.equal(s.byId.get('panel-overview').hidden, true);
+  assert.equal(s.byId.get('panel-today').hidden, true);
+  assert.equal(vm.runInContext('JSON.stringify(TOP_TABS_.slice(0, 2))', s.ctx), '["today","overview"]', '«הבית היום» first, «בונוס» second');
 });

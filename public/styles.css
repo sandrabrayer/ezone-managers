@@ -607,6 +607,9 @@ body::before {
   margin-bottom: 16px;
   border: 1px solid var(--line);
 }
+/* Running month: no hero (20 Oct 2026) — only a picked settled month,
+   loading or an error shows it. */
+.status-banner[hidden] { display: none; }
 .status-banner.above {
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(52, 211, 153, 0.10));
   border-color: var(--green-2);
@@ -2025,3 +2028,10 @@ body.is-locked { overflow: hidden; }
 .retry-btn { font-size: 16px; min-height: 44px; padding: 10px 6px; }
 .read-error { direction: rtl; }
 .read-error .retry-btn { margin-top: 6px; }
+
+/* ===== «הבית היום» (20 Oct 2026) — docs/home-and-bonus-tabs.md ===== */
+.today-date { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+.wk-shifts .wk-shift-empty .wk-name { color: var(--text-mute); }
+.today-all { display: grid; gap: 14px; }
+.today-house .card-title { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.today-house .dash-go { margin-top: 8px; }

@@ -116,7 +116,7 @@ test('own house vs other house: a house model holds only its own patients; the a
   // card is mounted for admins only (houseData is pinned server-side anyway).
   const w = pub('work.js');
   assert.match(w, /function renderHouseAlerts\(panel, key, d\)[\s\S]*?DA\.houseAlerts\(d, key,/);
-  assert.match(w, /function mountAdmin\(el, keys, labels\) \{\s*var u = me\(\);\s*if \(!el \|\| !u \|\| u\.role !== 'admin'\) return;/);
+  assert.match(w, /function mountAdmin\(el, keys, labels, todayEl\) \{\s*var u = me\(\);\s*if \(!el \|\| !u \|\| u\.role !== 'admin'\) return;/);
   assert.match(pub('app.js'), /u && u\.role === 'admin' && window\.Work && window\.Work\.mountAdmin/);
 });
 

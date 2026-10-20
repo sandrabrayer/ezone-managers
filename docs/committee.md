@@ -56,7 +56,7 @@ previousDate, previousLabel, correction?, mode? }` → Dashboard `managersWork` 
   `houseData`: `patients[].committee` (`{ date, label, editedAt, editedBy }` or `null`), plus
   `committeeSupported: true`. With no flag (an older backend), nothing new is shown.
 
-## Alerts (house «ראשי» + badge)
+## Alerts (house «הבית היום», was «ראשי», + badge)
 
 `public/committee-alerts.js`, computed from the cached `houseData`. It needs no extra request.
 
@@ -69,7 +69,7 @@ previousDate, previousLabel, correction?, mode? }` → Dashboard `managersWork` 
 - Each alert shows the name, `ועדה: dd/m/yy · <label>`, «היום» / «מחר» / «בעוד N ימים», and a
   one-tap «שינוי» that opens that patient's form.
 - Alerts are sorted by date, then name.
-- The «ראשי» sub-tab gets an amber badge with the count, beside the red discharge badge.
+- The «הבית היום» sub-tab (was «ראשי») gets an amber badge with the count, beside the red discharge badge.
 - **Admin (Sandra, Ron)**: the overview has «ועדות קרובות — כל הבתים» with its own house
   filter. Every alert names its house.
 - Text-only DOM; nothing logs; no names in logs. In-app only: no email, WhatsApp or push.

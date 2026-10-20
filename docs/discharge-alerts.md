@@ -4,7 +4,7 @@
 manager sets by hand on «מטופלים בבית» (`docs/expected-discharge.md`). Nothing is
 auto-filled from the Dashboard.
 
-## What the manager sees (house tab → «ראשי»)
+## What the manager sees (house tab → «הבית היום», was «ראשי»)
 
 | Case | Shows |
 |---|---|
@@ -16,7 +16,7 @@ auto-filled from the Dashboard.
 
 - Alerts are sorted by date, so overdue ones come first.
 - «שינוי תאריך» opens that patient's date picker on «מטופלים» in one tap.
-- The «ראשי» sub-tab shows a red badge with the number of alerts.
+- The «הבית היום» sub-tab (was «ראשי») shows a red badge with the number of alerts.
 - An alert disappears when the date is updated beyond 14 days or the patient
   is discharged. A discharged patient is no longer in `houseData.patients`.
 

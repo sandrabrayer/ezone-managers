@@ -278,27 +278,6 @@ function prevMonthSettled_(key) {
   return { ...v, minRequired: v.gate };
 }
 
-/* Settled previous month for a house — prefers the prev-month overview feed,
- * falling back to the raw prevMonth block a house-detail payload may carry.
- * Either way the amount is computed locally; backend bonus fields are never
- * read. */
-function settledPrevFor_(h) {
-  const fromOverview = prevMonthSettled_(h?.key);
-  if (fromOverview) return fromOverview;
-  const pm = h && h.prevMonth;
-  if (!pm || !pm.month) return null;
-  const dim = daysInMonthFromLabel(pm.month);
-  const td = Number.isFinite(pm.treatmentDays)
-    ? pm.treatmentDays
-    : Math.round((Number(pm.avgDaily) || 0) * dim);
-  const v = window.BonusView.settledMonthView(
-    { key: h.key, ym: pm.month, avgDaily: Number(pm.avgDaily) || 0, treatmentDays: td },
-    resolveThreshold
-  );
-  return { ...v, minRequired: v.gate };
-}
-
-
 /* One-decimal number for display (e.g. avgDaily 18.4). */
 function fmtNum1_(v) {
   const n = Number(v) || 0;
@@ -513,6 +492,7 @@ function activateTab(key) {
   if (HOUSE_KEYS.includes(key)) {
     loadHouseDetail(key);
   }
+  if (key === 'today' && window.Work && window.Work.renderTodayAll) window.Work.renderTodayAll();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (history && history.replaceState) {
@@ -1064,10 +1044,20 @@ async function loadHouseDetail(key) {
 
 function showHouseLoading(panel) {
   const banner = panel.querySelector('[data-status-banner]');
-  if (banner) banner.innerHTML = '<div class="loading">טוען נתוני בית…</div>';
+  if (banner) { banner.hidden = false; banner.innerHTML = '<div class="loading">טוען נתוני בית…</div>'; }
 }
 function showHouseError(panel, err, key) {
-  readErrorBox_(panel.querySelector('[data-status-banner]'), 'שגיאה בטעינת נתוני הבית', err, () => loadHouseDetail(key), 'house');
+  const banner = panel.querySelector('[data-status-banner]');
+  if (banner) banner.hidden = false;
+  readErrorBox_(banner, 'שגיאה בטעינת נתוני הבית', err, () => loadHouseDetail(key), 'house');
+}
+/* The «בונוס» sub-tab hero is empty and hidden in the running month. */
+function hideHeroBanner_(panel) {
+  const banner = panel.querySelector('[data-status-banner]');
+  if (!banner) return;
+  banner.className = 'status-banner';
+  banner.innerHTML = '';
+  banner.hidden = true;
 }
 
 function renderHouseDetail(key, data) {
@@ -1110,20 +1100,12 @@ function renderHouseDetail(key, data) {
   // figure from the actual days-so-far, always labelled "צפי לסוף החודש".
   const projection = cur ? cur.projectedDays : nights;
 
-  // ── Hero banner: headline = SETTLED previous month; running month on a
-  //    secondary line, always named and marked "בתהליך". ──
-  const prev = settledPrevFor_(merged);
-  const hero = BV.houseHeroView({
-    name, manager, settled: prev, prevYm: prevMonthYM_(viewingYM), current: cur
-  });
-  const banner = panel.querySelector('[data-status-banner]');
-  banner.className = 'status-banner ' + hero.tone;
-  banner.innerHTML = `<div class="big-emoji">${hero.emoji}</div>
-     <div>
-       <div class="sb-name">${name}</div>
-       <div class="sb-title" data-hero-headline>${hero.headline}</div>
-       <div class="sb-sub">${hero.sub}</div>
-     </div>`;
+  // ── Hero banner: NONE in the running month (20 Oct 2026). The settled
+  //    previous month used to headline here ("ספטמבר: לא זכאי 432/510" while
+  //    October was on screen); a finished month now appears only when it is
+  //    PICKED in «חודש בונוס» (renderHouseDetailSettled_), labelled «— סופי».
+  //    The running month is told by the bonus plan below. ──
+  hideHeroBanner_(panel);
 
   // KPI stats — every label names its month.
   setStat(panel, 'entries', fmtInt(entries.length || data.entriesMonth || 0));
@@ -1790,6 +1772,7 @@ function renderHouseDetailSettled_(panel, key, ym) {
   const manager = BV.safeLabel(h.manager) || labels.manager || '';
   const s = settledViewFor_(h);
   const banner = panel.querySelector('[data-status-banner]');
+  banner.hidden = false;   // a PICKED finished month: the hero says which month, «— סופי»
 
   // The month's own house payload (entries / exits / names / referrals /
   // chart). Requested here when missing — a tab opened while a finished month
@@ -2637,17 +2620,24 @@ function startData() {
  * their own house — the server enforces it; the client just hides the rest. */
 let currentUser = null;
 
-/* Manager: hide the network overview and the other houses' tabs, open theirs. */
+/* Manager: hide the network tabs («הבית היום» of all houses, «בונוס»
+ * overview) and the other houses' tabs, open theirs — it lands on the
+ * house's own «הבית היום» sub-tab. */
 function applyRole_(u) {
   currentUser = u || null;
   if (!u || u.role === 'admin' || !HOUSE_KEYS.includes(u.house)) return;
   document.querySelectorAll('.tab').forEach(btn => {
     btn.hidden = btn.dataset.tab !== u.house;
   });
-  const ov = document.getElementById('panel-overview');
-  if (ov) ov.hidden = true;
+  ['panel-overview', 'panel-today'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  });
   activateTab(u.house);
 }
+
+/* Top-level tabs: «הבית היום» (landing), «בונוס» (network overview), houses. */
+const TOP_TABS_ = ['today', 'overview', ...HOUSE_KEYS];
 
 /* The tab a user may open: a manager is always sent to their own house. */
 function allowedTab_(key) {
@@ -2667,12 +2657,13 @@ function boot() {
   ready.then(u => {
     applyRole_(u);
     const hash = (location.hash || '').replace('#', '');
-    if ((!u || u.role === 'admin') && ['overview', ...HOUSE_KEYS].includes(hash)) activateTab(hash);
-    // Admin: discharge alerts of every house on the overview (work.js).
+    if ((!u || u.role === 'admin') && TOP_TABS_.includes(hash)) activateTab(hash);
+    // Admin: «הבית היום» of every house + the all-houses alerts, on the
+    // landing tab (work.js).
     if (u && u.role === 'admin' && window.Work && window.Work.mountAdmin) {
       const labels = {};
       HOUSE_KEYS.forEach(k => { labels[k] = HOUSE_LABELS[k].name; });
-      window.Work.mountAdmin(document.getElementById('dischargeAlertsAll'), HOUSE_KEYS, labels);
+      window.Work.mountAdmin(document.getElementById('dischargeAlertsAll'), HOUSE_KEYS, labels, document.getElementById('todayAll'));
     }
     startData();
   });

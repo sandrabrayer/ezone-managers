@@ -7,7 +7,7 @@ their own code.
 
 | Who | Sees |
 |---|---|
-| A house manager | **Only their own house**: its bonus page and its work tabs. The network overview and the other houses' tabs are hidden, and the server refuses or filters them. |
+| A house manager | **Only their own house**: its «הבית היום» and «בונוס» sub-tabs and its work tabs. The network tabs («הבית היום» of all houses, «בונוס» overview) and the other houses' tabs are hidden, and the server refuses or filters them. |
 | Admin (Sandra, Ron) | Every house and the network overview. |
 | Staff talks («שיחות עם עובדים») | Only the manager who wrote them, and the admins. |
 

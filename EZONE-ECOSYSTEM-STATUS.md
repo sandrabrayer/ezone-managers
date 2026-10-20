@@ -356,6 +356,23 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: «הבית היום» landing tab + one «בונוס» tab (October 20, 2026)
+
+- **Why**: the house page headlined the settled previous month («ספטמבר: לא זכאי 432/510») while
+  October was on screen.
+- **Tabs**:
+  - The app opens on «הבית היום». Admins get one card per house: the date and weekday,
+    patients, the בוקר / ערב / לילה shifts, sessions, open reminders and the all-houses alerts.
+  - A manager lands on their house's «הבית היום» sub-tab (was «ראשי»).
+  - Every bonus element (picker, hero, dial, plan, KPIs, chart, history, winners banner, house
+    cards) moved to «בונוס».
+- **Banner**: none in the running month. A finished month picked in «חודש בונוס» shows its hero
+  inside «בונוס», labelled «— סופי».
+- **Data**: the existing `houseData` (coordinators digest) only. A missing feed gives `—` and the
+  reason, never invented rows.
+- `lib/bonus-eligibility.js` untouched. The golden snapshot differs only in the now-empty hero.
+  No new endpoint, env var or secret. SW v33, tests 412. Details: `docs/home-and-bonus-tabs.md`.
+
 ## Managers: read failures classified + last-good cache (October 19, 2026)
 
 - **Symptom (19 Oct, ~15:00)**: «שגיאה: upstream_error» and every card stuck on «טוען…».
