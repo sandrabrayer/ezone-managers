@@ -178,68 +178,38 @@
     return h + '</div>';
   }
 
-  /* ── committee date «ועדה» (15 Oct 2026, docs/committee.md) ───────────
-   * A second line under each patient: «ועדה: dd/m/yy · <label>» with «שינוי»
-   * and «ניקוי», or «הגדרת תאריך ועדה». Stored by the Dashboard (`managersWork`
-   * committeeSet, append-only, audited); shown only when the backend says
-   * `committeeSupported`. Today or later; a past date only as a confirmed
-   * correction of an existing date. Display-only. */
-  var COMMITTEE_LABEL_MAX = 60;
-  var COMMITTEE_ERRORS = {
-    conflict: 'תאריך הוועדה עודכן בינתיים — מוצג עכשיו העדכני. בדקו ונסו שוב.',
-    past_date: 'לא ניתן לקבוע ועדה בתאריך שעבר. תיקון של תאריך קיים — אשרו את האזהרה.',
-    before_admission: 'תאריך הוועדה לא יכול להיות לפני תאריך הכניסה',
-    bad_date: 'תאריך לא תקין',
-    too_far: 'התאריך רחוק מדי (יותר משנתיים קדימה)',
-    label_too_long: 'התיאור ארוך מדי (עד ' + COMMITTEE_LABEL_MAX + ' תווים)',
-    not_found: 'המטופל/ת כבר לא רשום/ה בבית — רעננו את הדף',
-    forbidden: 'אין הרשאה לעדכן את הבית הזה'
+  /* ── committees «ועדות» — READ-ONLY (20 Oct 2026, docs/committee.md) ──
+   * The coordinators set committees in their app; houseData.committees carries
+   * this house's upcoming ones ({ available, today, items } or { available:false,
+   * reason }). No editor here — the server refuses the old write (410). */
+  var COMMITTEE_REASON = {
+    not_configured: 'הוועדות מאפליקציית הרכזים עוד לא מחוברות.',
+    coordinators_not_configured: 'הוועדות מאפליקציית הרכזים עוד לא מחוברות.',
+    unauthorized: 'הוועדות מאפליקציית הרכזים עוד לא מחוברות.'
   };
-  var COMMITTEE_PAST_WARNING = 'שימו לב: התאריך כבר עבר. זה תיקון של תאריך הוועדה — לחצו «שמירה» שוב לאישור.';
-  function committeeErrorText(err) {
-    var code = err && err.data && typeof err.data.error === 'string' ? err.data.error : '';
-    if (code && Object.prototype.hasOwnProperty.call(COMMITTEE_ERRORS, code)) return COMMITTEE_ERRORS[code];
-    if (err && err.status === 403 && !code) return COMMITTEE_ERRORS.forbidden;
-    return dischargeErrorText(err);
+  var COMMITTEE_UNREADABLE = 'לא הצלחנו לקרוא את הוועדות מאפליקציית הרכזים. נסו שוב מאוחר יותר.';
+  function committeesState(d) {
+    var c = d && d.committees;
+    if (c && c.available === true && Array.isArray(c.items)) return { ok: true, items: c.items, today: isRealIso(c.today) ? c.today : '' };
+    if (!c) return { ok: false, text: 'הוועדות יופיעו אחרי עדכון השרת.' };
+    return { ok: false, text: COMMITTEE_REASON[c.reason] || COMMITTEE_UNREADABLE };
   }
-  function committeeOf(p) {
-    var c = p && p.committee;
-    return c && typeof c === 'object' && isRealIso(c.date) ? { date: c.date, label: String(c.label == null ? '' : c.label) } : null;
+  function committeeWhen(c) {
+    var wd = weekdayOf(c.date);
+    return (WEEKDAYS[wd] ? 'יום ' + WEEKDAYS[wd] + ' ' : '') + fmtDate(c.date) + (/^\d{2}:\d{2}$/.test(String(c.time || '')) ? ' · ' + c.time : '');
   }
-  /* What may be saved: { error } | { warn } (a past date that needs confirming) | {}. */
-  function committeeCheck(value, label, p, today) {
-    var v = String(value || '').trim();
-    if (!v) return { error: 'בחרו תאריך' };
-    if (!isRealIso(v)) return { error: 'תאריך לא תקין' };
-    if (String(label || '').trim().length > COMMITTEE_LABEL_MAX) return { error: COMMITTEE_ERRORS.label_too_long };
-    if (isRealIso(p && p.entryDate) && v < p.entryDate) return { error: COMMITTEE_ERRORS.before_admission };
-    if (isRealIso(today) && v < today) return committeeOf(p) ? { warn: COMMITTEE_PAST_WARNING } : { error: 'לא ניתן לקבוע ועדה בתאריך שעבר' };
-    return {};
-  }
-  function committeeHtml(p, i, today) {
-    var cur = committeeOf(p);
-    var who = esc(p.name);
-    var h = '<div class="wk-cm" data-cm-row="' + i + '">';
-    if (cur) {
-      h += '<span class="wk-cm-text">ועדה: <b>' + esc(fmtDate(cur.date)) + '</b>' + (cur.label ? ' · ' + esc(cur.label) : '') + '</span>' +
-        '<button type="button" class="wk-dis-btn" data-cm-edit="' + i + '" aria-label="שינוי תאריך הוועדה — ' + who + '">שינוי</button>' +
-        '<button type="button" class="wk-dis-btn wk-cm-clear" data-cm-clear="' + i + '" aria-label="ניקוי תאריך הוועדה — ' + who + '">' +
-        '<span class="wk-spin" data-cm-clear-spin aria-hidden="true" hidden></span><span data-cm-clear-label>ניקוי</span></button>';
-    } else {
-      h += '<button type="button" class="wk-dis-btn wk-dis-empty" data-cm-edit="' + i + '" aria-label="הגדרת תאריך ועדה — ' + who + '">הגדרת תאריך ועדה</button>';
-    }
-    // min = today for a new date; an existing one may be corrected to the past (with a warning).
-    var min = !cur && isRealIso(today) ? today : (isRealIso(p.entryDate) ? p.entryDate : '');
-    h += '<form class="wk-dis-form wk-cm-form" data-cm-form="' + i + '" novalidate hidden>' +
-      '<label class="wk-dis-label"><span>תאריך ועדה</span>' +
-      '<input name="committeeDate" type="date" required' + (min ? ' min="' + esc(min) + '"' : '') + (cur ? ' value="' + esc(cur.date) + '"' : '') + '></label>' +
-      '<label class="wk-dis-label wk-cm-label"><span>סוג הוועדה (לא חובה)</span>' +
-      '<input name="committeeLabel" type="text" maxlength="' + COMMITTEE_LABEL_MAX + '" autocomplete="off"' + (cur && cur.label ? ' value="' + esc(cur.label) + '"' : '') + '></label>' +
-      '<button type="submit" class="wk-dis-btn wk-dis-save"><span class="wk-spin" data-cm-spin aria-hidden="true" hidden></span>' +
-      '<span data-cm-save-label>שמירה</span></button>' +
-      '<button type="button" class="wk-dis-btn wk-dis-cancel" data-cm-cancel="' + i + '">ביטול</button>' +
-      '<span class="wk-msg" data-cm-msg role="status" aria-live="polite"></span></form>' +
-      '<span class="wk-dis-flash" data-cm-flash role="status" aria-live="polite"></span>';
+  /* «ועדות» sub-tab: every upcoming committee of the house, read-only. */
+  function committeesHtml(d) {
+    var st = committeesState(d);
+    var h = '<div class="card work-card wk-committees"><div class="card-title">ועדות קרובות' + (st.ok ? ' (' + st.items.length + ')' : '') + '</div>';
+    h += '<div class="wk-note">את הוועדות קובעים הרכזים באפליקציית הרכזים. כאן — לקריאה בלבד.</div>';
+    if (!st.ok) return h + '<div class="wk-empty">' + esc(st.text) + '</div></div>';
+    if (!st.items.length) return h + '<div class="wk-empty">אין ועדות קרובות</div></div>';
+    h += '<ul class="wk-list">' + st.items.map(function (c) {
+      return '<li><span class="wk-shift">' + esc(committeeWhen(c)) + '</span><span class="wk-name">' + esc(c.type) +
+        (c.patientName ? ' · ' + esc(c.patientName) : '') + '</span>' +
+        (c.participants ? '<span class="wk-meta">משתתפים: ' + esc(c.participants) + '</span>' : '') + '</li>';
+    }).join('') + '</ul>';
     return h + '</div>';
   }
 
@@ -247,13 +217,11 @@
     var pats = d.patients || [], outs = d.outpatients || [], visits = d.visits || [], adm = d.admissions || [];
     var dis = d.expectedDischargeSupported === true;
     var modes = dischargeModes(d);
-    var cm = d.committeeSupported === true;
-    var cmToday = root.CommitteeAlerts ? root.CommitteeAlerts.israelToday() : (isRealIso(d.committeeToday) ? d.committeeToday : '');
     var h = '';
     h += '<div class="card work-card wk-patients"><div class="card-title">מטופלים בבית (' + pats.length + ')</div>';
-    h += pats.length ? '<ul class="wk-list' + (dis || cm ? ' wk-pat-list' : '') + '">' + pats.map(function (p, i) {
+    h += pats.length ? '<ul class="wk-list' + (dis ? ' wk-pat-list' : '') + '">' + pats.map(function (p, i) {
       return '<li><span class="wk-name">' + esc(p.name) + '</span><span class="wk-meta">מ-' + esc(fmtDate(p.entryDate)) +
-        ' · יום ' + esc(p.days) + (p.status === 'trial' ? ' · ניסיון' : '') + '</span>' + (dis ? dischargeHtml(p, i, modes) : '') + (cm ? committeeHtml(p, i, cmToday) : '') + '</li>';
+        ' · יום ' + esc(p.days) + (p.status === 'trial' ? ' · ניסיון' : '') + '</span>' + (dis ? dischargeHtml(p, i, modes) : '') + '</li>';
     }).join('') + '</ul>' : '<div class="wk-empty">אין מטופלים רשומים בבית</div>';
     h += '</div>';
     h += '<div class="card work-card wk-out"><div class="card-title">מטופלי חוץ שיצאו מהבית (' + outs.length + ')</div>';
@@ -684,8 +652,8 @@
   var WorkView = { LOGS: LOGS, esc: esc, fmtDate: fmtDate, patientsHtml: patientsHtml, formHtml: formHtml,
     dischargeHtml: dischargeHtml, dischargeCheck: dischargeCheck, DISCHARGE_ERRORS: DISCHARGE_ERRORS,
     dischargeModes: dischargeModes, dischargeStateOf: dischargeStateOf, dischargeToken: dischargeToken, DISCHARGE_DONE: DISCHARGE_DONE,
-    committeeHtml: committeeHtml, committeeCheck: committeeCheck, committeeOf: committeeOf, committeeErrorText: committeeErrorText,
-    COMMITTEE_ERRORS: COMMITTEE_ERRORS, COMMITTEE_LABEL_MAX: COMMITTEE_LABEL_MAX, COMMITTEE_PAST_WARNING: COMMITTEE_PAST_WARNING,
+    committeesHtml: committeesHtml, committeesState: committeesState, committeeWhen: committeeWhen,
+    COMMITTEE_REASON: COMMITTEE_REASON,
     WORK_ERRORS: WORK_ERRORS, dischargeErrorText: dischargeErrorText, setDischargeBusy: setDischargeBusy,
     teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml, costHtml: costHtml,
     todayModel: todayModel, todayCardHtml: todayCardHtml, todayAllHtml: todayAllHtml, SHIFT_ORDER: SHIFT_ORDER,
@@ -748,12 +716,8 @@
       // person has open: remember it and reopen it with what they picked.
       var open = p.querySelector('[data-dis-form]:not([hidden])');
       var keep = open ? { i: open.getAttribute('data-dis-form'), v: open.elements.expectedDate.value } : null;
-      var cmOpen = p.querySelector('[data-cm-form]:not([hidden])');
-      var cmKeep = cmOpen ? { i: cmOpen.getAttribute('data-cm-form'), v: cmOpen.elements.committeeDate.value, l: cmOpen.elements.committeeLabel.value } : null;
       p.innerHTML = patientsHtml(d);
       if (keep) reopenDischargeForm(p, keep.i, keep.v);
-      if (cmKeep) reopenCommitteeForm(p, cmKeep.i, cmKeep.v, cmKeep.l);
-      if (cmKeep && savingCommittee[key + '|' + cmKeep.i]) setCommitteeBusy(p.querySelector('[data-cm-row="' + Number(cmKeep.i) + '"]'), true, savingCommittee[key + '|' + cmKeep.i]);
       // A save still in flight keeps its form busy across the redraw.
       if (keep && savingDischarge[key + '|' + keep.i]) setDischargeBusy(p.querySelector('[data-dis-form="' + Number(keep.i) + '"]'), true, savingDischarge[key + '|' + keep.i]);
     }
@@ -764,7 +728,8 @@
     if (tm) tm.innerHTML = teamHtml(d);
     var th = host(panel, 'therapists');
     if (th) th.innerHTML = therapistsHtml(d);
-    if (pendingCm[key] != null) { var ci = pendingCm[key]; delete pendingCm[key]; openCommitteeEdit(panel, ci); }
+    var cmt = host(panel, 'committees');
+    if (cmt) cmt.innerHTML = committeesHtml(d);
     if (pendingEdit[key] != null) {
       var pi = pendingEdit[key]; delete pendingEdit[key];
       if (pi === 'list') showSub(panel, 'patients'); else openDischargeEdit(panel, pi);
@@ -785,7 +750,7 @@
   }
 
   async function refresh(panel, key, force) {
-    var subs = ['patients', 'team', 'therapists'].concat(Object.keys(LOGS));
+    var subs = ['patients', 'team', 'therapists', 'committees'].concat(Object.keys(LOGS));
     try {
       var d = await load(key, force);
       renderAll(panel, key, d);
@@ -822,33 +787,15 @@
     renderHouseCommittees(panel, key, d);
   }
   /* «ועדות קרובות» on the house's «ראשי» (above the discharge alerts) + its badge. */
-  var pendingCm = {};   // houseKey → patient index whose committee form opens once drawn
   function renderHouseCommittees(panel, key, d) {
     var CA = root.CommitteeAlerts;
     var hostEl = panel.querySelector('[data-dash-committees]');
     if (!CA || !hostEl || !root.document) return;
     var model = CA.houseAlerts(d, key, CA.israelToday());
     hostEl.textContent = '';
-    if (model.supported) hostEl.appendChild(CA.renderCard(root.document, model));
+    // Always drawn (20 Oct 2026): the upcoming committees, or why they are not available.
+    hostEl.appendChild(CA.renderCard(root.document, model));
     CA.setBadge(root.document, panel.querySelector('[data-sub="home"]'), model.supported ? model.count : 0);
-  }
-  function reopenCommitteeForm(p, i, value, label) {
-    var f = p.querySelector('[data-cm-form="' + Number(i) + '"]');
-    if (!f) return;
-    f.hidden = false;
-    var row = f.closest('[data-cm-row]');
-    if (row) row.querySelectorAll('[data-cm-edit], [data-cm-clear]').forEach(function (b) { b.hidden = true; });
-    if (value) f.elements.committeeDate.value = value;
-    if (label != null) f.elements.committeeLabel.value = label;
-  }
-  /* Show «מטופלים» and open patient i's committee form. */
-  function openCommitteeEdit(panel, i) {
-    showSub(panel, 'patients');
-    var b = panel.querySelector('[data-cm-edit="' + Number(i) + '"]');
-    if (!b) return;
-    b.click();
-    var row = b.closest && b.closest('li');
-    if (row && row.scrollIntoView) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
   function reopenDischargeForm(p, i, value) {
     var f = p.querySelector('[data-dis-form="' + Number(i) + '"]');
@@ -947,20 +894,15 @@
         renderAdminCommittees();
       });
       cmEl.addEventListener('click', function (ev) {
-        var b = ev.target.closest && ev.target.closest('[data-cm-alert-edit]');
+        // Read-only (20 Oct 2026): «לוועדות של הבית» opens the house's «ועדות» sub-tab.
+        var b = ev.target.closest && ev.target.closest('[data-cm-alert-open]');
         if (!b) return;
-        var parts = b.getAttribute('data-cm-alert-edit').split('|');
-        var house = parts[0];
+        var house = b.getAttribute('data-cm-alert-open');
         if (admin.keys.indexOf(house) < 0) return;
-        // The house tab may not be drawn yet: queue it; renderAll opens the form.
-        pendingCm[house] = Number(parts[1]);
         var tab = root.document.querySelector('.tab[data-tab="' + house + '"]');
         if (tab) tab.click();
         var panel = root.document.getElementById('panel-' + house);
-        if (panel && panel.querySelector('[data-cm-edit="' + Number(parts[1]) + '"]')) {
-          delete pendingCm[house];
-          openCommitteeEdit(panel, parts[1]);
-        }
+        if (panel) showSub(panel, 'committees');
       });
     }
     if (el.getAttribute('data-wired') !== '1') {
@@ -1011,36 +953,8 @@
     panel.addEventListener('click', async function (ev) {
       var t = ev.target;
       if (onAlertClick(ev, function (house) { return house === key ? panel : null; })) return;
-      var cmAlert = t.closest && t.closest('[data-cm-alert-edit]');
-      if (cmAlert) {
-        var cp = cmAlert.getAttribute('data-cm-alert-edit').split('|');
-        if (cp[0] !== key) return;
-        if (panel.querySelector('[data-cm-edit="' + Number(cp[1]) + '"]')) openCommitteeEdit(panel, cp[1]);
-        else pendingCm[key] = Number(cp[1]);
-        return;
-      }
-      var cmEdit = t.closest && t.closest('[data-cm-edit]');
-      var cmCancel = t.closest && t.closest('[data-cm-cancel]');
-      if (cmEdit || cmCancel) {
-        var crow = (cmEdit || cmCancel).closest('[data-cm-row]');
-        var cf = crow && crow.querySelector('[data-cm-form]');
-        if (!cf || crow.getAttribute('data-cm-busy') === '1') return;
-        cf.hidden = !!cmCancel;
-        cf.removeAttribute('data-cm-confirm');
-        crow.querySelectorAll('[data-cm-edit], [data-cm-clear]').forEach(function (b) { b.hidden = !cmCancel; });
-        var cin = cf.querySelector('input[type="date"]');
-        if (cmEdit && cin) {
-          cin.focus();
-          try { if (cin.showPicker) cin.showPicker(); } catch (e) { /* not allowed here — the field is still usable */ }
-        }
-        return;
-      }
-      var cmClear = t.closest && t.closest('[data-cm-clear]');
-      if (cmClear) {
-        var clearRow = cmClear.closest('[data-cm-row]');
-        if (clearRow) await saveCommittee(panel, key, clearRow, undefined, 'clear');
-        return;
-      }
+      var cmOpen = t.closest && t.closest('[data-cm-alert-open]');
+      if (cmOpen) { if (cmOpen.getAttribute('data-cm-alert-open') === key) showSub(panel, 'committees'); return; }
       var subBtn = t.closest && t.closest('[data-sub]');
       if (subBtn) { showSub(panel, subBtn.getAttribute('data-sub')); return; }
       var go = t.closest && t.closest('[data-go-sub]');
@@ -1090,8 +1004,6 @@
     panel.addEventListener('submit', async function (ev) {
       var dform = ev.target.closest && ev.target.closest('[data-dis-form]');
       if (dform) { ev.preventDefault(); await saveDischarge(panel, key, dform); return; }
-      var cform = ev.target.closest && ev.target.closest('[data-cm-form]');
-      if (cform) { ev.preventDefault(); await saveCommittee(panel, key, cform.closest('[data-cm-row]'), undefined, 'set'); return; }
       var form = ev.target.closest && ev.target.closest('[data-wk-form]');
       if (!form) return;
       ev.preventDefault();
@@ -1200,99 +1112,6 @@
     if (flash) flash.textContent = DISCHARGE_DONE[m];
   }
 
-  /* Busy state of one committee row (its form AND its «ניקוי»): text-only DOM.
-   * The spinner + «שומר...» sit on the tapped button; everything is disabled. */
-  function setCommitteeBusy(row, busy, mode) {
-    if (!row) return;
-    var m = mode === 'clear' ? 'clear' : 'set';
-    if (busy) { row.setAttribute('data-cm-busy', '1'); row.setAttribute('aria-busy', 'true'); }
-    else { row.removeAttribute('data-cm-busy'); row.removeAttribute('aria-busy'); }
-    Array.prototype.forEach.call(row.querySelectorAll('input, button'), function (el) { el.disabled = !!busy; });
-    var spin = row.querySelector('[data-cm-spin]');
-    if (spin) spin.hidden = !(busy && m === 'set');
-    var label = row.querySelector('[data-cm-save-label]');
-    if (label) label.textContent = busy && m === 'set' ? 'שומר...' : 'שמירה';
-    var cspin = row.querySelector('[data-cm-clear-spin]');
-    if (cspin) cspin.hidden = !(busy && m === 'clear');
-    var clabel = row.querySelector('[data-cm-clear-label]');
-    if (clabel) clabel.textContent = busy && m === 'clear' ? 'שומר...' : 'ניקוי';
-    if (busy) { var msg = row.querySelector('[data-cm-msg]'); if (msg) msg.textContent = ''; }
-  }
-
-  var savingCommittee = {};   // house|row → mode, survives a redraw
-
-  /* Save (mode 'set') or clear one patient's committee date. previousDate +
-   * previousLabel = what this screen showed (conflict instead of a silent
-   * overwrite). A past date needs a second «שמירה» (correction: true).
-   * deps (tests only): { post, refresh, cache, today }. */
-  async function saveCommittee(panel, key, row, deps, mode) {
-    var d = deps || { post: post, refresh: refresh, cache: cache };
-    var m = mode === 'clear' ? 'clear' : 'set';
-    if (!row) return;
-    var i = row.getAttribute('data-cm-row');
-    var slot = key + '|' + i;
-    if (savingCommittee[slot] || row.getAttribute('data-cm-busy') === '1') return;   // double tap
-    var form = row.querySelector('[data-cm-form]');
-    var msg = row.querySelector('[data-cm-msg]');
-    var c = d.cache[key];
-    var p = c && c.data && (c.data.patients || [])[Number(i)];
-    var show = function (text) {
-      if (form) form.hidden = false;
-      row.querySelectorAll('[data-cm-edit], [data-cm-clear]').forEach(function (b) { b.hidden = true; });
-      if (msg) msg.textContent = text;
-    };
-    if (!p) { show(COMMITTEE_ERRORS.not_found); return; }
-    var cur = committeeOf(p);
-    var value = m === 'set' ? String(form.elements.committeeDate.value || '').trim() : '';
-    var label = m === 'set' ? String(form.elements.committeeLabel.value || '').trim() : '';
-    var correction = false;
-    if (m === 'set') {
-      var today = d.today || (root.CommitteeAlerts ? root.CommitteeAlerts.israelToday() : '');
-      var chk = committeeCheck(value, label, p, today);
-      if (chk.error) { show(chk.error); return; }
-      if (chk.warn) {
-        // First tap: warn. A second tap with the same date confirms the correction.
-        if (form.getAttribute('data-cm-confirm') !== value) { form.setAttribute('data-cm-confirm', value); show(chk.warn); return; }
-        correction = true;
-      }
-    }
-    if (m === 'clear' && !cur) return;
-    savingCommittee[slot] = m;
-    setCommitteeBusy(row, true, m);
-    var body = { op: 'committeeSet', house: key, patientName: p.name, entryDate: p.entryDate,
-      committeeDate: value, label: label, previousDate: cur ? cur.date : '', previousLabel: cur ? cur.label : '' };
-    if (m === 'clear') body.mode = 'clear';
-    if (correction) body.correction = true;
-    try {
-      await d.post(body);
-    } catch (e) {
-      delete savingCommittee[slot];
-      var text = committeeErrorText(e);
-      var code = e && e.data && e.data.error;
-      if (code === 'conflict') await d.refresh(panel, key, true);
-      var again = panel.querySelector('[data-cm-row="' + i + '"]') || row;
-      setCommitteeBusy(row, false);
-      if (again !== row) setCommitteeBusy(again, false);
-      var af = again.querySelector('[data-cm-form]');
-      if (af) {
-        af.hidden = false;
-        af.removeAttribute('data-cm-confirm');
-        if (m === 'set') { af.elements.committeeDate.value = value; af.elements.committeeLabel.value = label; }
-      }
-      again.querySelectorAll('[data-cm-edit], [data-cm-clear]').forEach(function (b) { b.hidden = true; });
-      var m2 = again.querySelector('[data-cm-msg]');
-      if (m2) m2.textContent = text;
-      return;
-    }
-    delete savingCommittee[slot];
-    setCommitteeBusy(row, false);
-    if (form) { form.hidden = true; form.removeAttribute('data-cm-confirm'); }
-    await d.refresh(panel, key, true);
-    var nr = panel.querySelector('[data-cm-row="' + i + '"]');
-    var flash = nr && nr.querySelector('[data-cm-flash]');
-    if (flash) flash.textContent = m === 'clear' ? 'תאריך הוועדה נוקה ✓' : (correction ? 'נשמר (תיקון לתאריך שעבר) ✓' : 'נשמר ✓');
-  }
-
   /* Called by app.js after a house tab is drawn. */
   function onHouseRendered(panel, key) {
     if (!panel || !panel.querySelector('[data-subtabs]')) return;
@@ -1302,8 +1121,6 @@
   }
 
   WorkView.saveDischarge = saveDischarge;   // tests drive it with injected post / refresh / cache
-  WorkView.saveCommittee = saveCommittee;
-  WorkView.setCommitteeBusy = setCommitteeBusy;
   root.WorkView = WorkView;
   root.Work = { onHouseRendered: onHouseRendered, showSub: showSub, mountAdmin: mountAdmin, renderTodayAll: renderTodayAll, _cache: cache };
   if (typeof module === 'object' && module.exports) module.exports = WorkView;

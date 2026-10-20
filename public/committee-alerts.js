@@ -1,10 +1,11 @@
-/* Committee alerts — «ועדה היום» / «ועדה השבוע» (15 Oct 2026).
+/* Committee alerts — «ועדה היום» / «ועדה השבוע» (15 Oct 2026; READ-ONLY from 20 Oct 2026).
  *
- * Driven ONLY by the committee («ועדה») date the house manager records on
- * «מטופלים בבית» (docs/committee.md). Computed in the browser from the
- * existing houseData payload (`patients[].committee`) — no extra endpoint.
- * The server already scopes houseData to the manager's own house; an admin
- * loads each house and filters here.
+ * Since 20 Oct 2026 the COORDINATORS set committees in their app; houseData
+ * carries this house's upcoming ones as `committees: { available, today, items:
+ * [{ id, date, time, type, participants, patientName }] }` (or { available:false,
+ * reason }) — docs/committee.md. Computed in the browser from that payload; no
+ * extra endpoint, no editing. The server scopes houseData to the manager's own
+ * house; an admin loads each house and filters here.
  *
  * THE RULE — shared with the E-Zone-Dashboard card «ועדות קרובות» (its copy in
  * lib/committee-alerts.js). Both repos run the identical fixture
@@ -68,20 +69,35 @@
 
   /* ── Managers view model ── */
 
-  /* ONE house's payload → { house, supported, alerts, count }; alerts sorted by date, then name.
-   * Each alert: { house, index, name, date, dateText, label, days, kind, whenText }. */
+  var UNAVAILABLE = {
+    missing: 'הוועדות יופיעו אחרי עדכון השרת',
+    not_configured: 'הוועדות מאפליקציית הרכזים עוד לא מחוברות',
+    coordinators_not_configured: 'הוועדות מאפליקציית הרכזים עוד לא מחוברות',
+    unauthorized: 'הוועדות מאפליקציית הרכזים עוד לא מחוברות'
+  };
+  var UNREADABLE = 'לא הצלחנו לקרוא את הוועדות מאפליקציית הרכזים';
+  function str(v) { return String(v == null ? '' : v); }
+
+  /* ONE house's payload → { house, supported, unavailableText, alerts, count }; alerts sorted by
+   * date, then name. Each alert: { house, id, name, date, dateText, label, days, kind, whenText }:
+   * name = the patient, else the committee type; label = the type (with a patient) and the time. */
   function houseAlerts(data, house, today) {
     var d = data || {};
-    var out = { house: String(house || d.house || ''), supported: d.committeeSupported === true, alerts: [], count: 0 };
-    if (!out.supported) return out;
+    var cm = d.committees;
+    var out = { house: String(house || d.house || ''), supported: !!(cm && cm.available === true && Array.isArray(cm.items)), unavailableText: '', alerts: [], count: 0 };
+    if (!out.supported) {
+      out.unavailableText = !cm ? UNAVAILABLE.missing : (UNAVAILABLE[cm.reason] || UNREADABLE);
+      return out;
+    }
     var t = isRealIso(today) ? today : israelToday();
-    (Array.isArray(d.patients) ? d.patients : []).forEach(function (p, i) {
-      if (!p || typeof p !== 'object' || !p.committee || typeof p.committee !== 'object') return;
-      var c = classify(p.committee.date, t);
+    cm.items.forEach(function (it) {
+      if (!it || typeof it !== 'object') return;
+      var c = classify(it.date, t);
       if (!c) return;
+      var pat = str(it.patientName).trim(), type = str(it.type).trim(), time = /^\d{2}:\d{2}$/.test(str(it.time)) ? str(it.time) : '';
       out.alerts.push({
-        house: out.house, index: i, name: String(p.name == null ? '' : p.name),
-        date: p.committee.date, dateText: fmtDate(p.committee.date), label: String(p.committee.label == null ? '' : p.committee.label),
+        house: out.house, id: str(it.id), name: pat || type || 'ועדה',
+        date: it.date, dateText: fmtDate(it.date), label: [pat ? type : '', time].filter(Boolean).join(' · '),
         days: c.days, kind: c.kind, whenText: c.whenText
       });
     });
@@ -92,10 +108,11 @@
 
   /* Admin: several houses merged; `filter` = a house key or '' (all). */
   function mergeAlerts(list, filter) {
-    var out = { alerts: [], count: 0, supported: false };
+    var out = { alerts: [], count: 0, supported: false, unavailableText: '' };
     (list || []).forEach(function (h) {
       if (!h || (filter && h.house !== filter)) return;
       if (h.supported) out.supported = true;
+      else if (!out.unavailableText) out.unavailableText = h.unavailableText || '';
       out.alerts = out.alerts.concat(h.alerts);
     });
     out.alerts.sort(byDateThenName);
@@ -119,10 +136,10 @@
     main.appendChild(node(doc, 'span', 'cm-alert-tag', a.kind === 'today' ? 'ועדה היום' : 'ועדה השבוע'));
     li.appendChild(main);
     li.appendChild(node(doc, 'div', 'cm-alert-meta', 'ועדה: ' + a.dateText + (a.label ? ' · ' + a.label : '') + ' · ' + a.whenText));
-    var btn = node(doc, 'button', 'cm-alert-btn', 'שינוי');
+    var btn = node(doc, 'button', 'cm-alert-btn', 'לוועדות');
     btn.type = 'button';
-    btn.setAttribute('data-cm-alert-edit', a.house + '|' + a.index);
-    btn.setAttribute('aria-label', 'שינוי תאריך הוועדה — ' + a.name);
+    btn.setAttribute('data-cm-alert-open', a.house);
+    btn.setAttribute('aria-label', 'לכל הוועדות של הבית');
     li.appendChild(btn);
     return li;
   }
@@ -154,7 +171,7 @@
     }
     card.appendChild(head);
     if (!model.supported) {
-      card.appendChild(node(doc, 'div', 'wk-empty', 'הוועדות יופיעו אחרי עדכון השרת'));
+      card.appendChild(node(doc, 'div', 'wk-empty', model.unavailableText || UNAVAILABLE.missing));
       return card;
     }
     if (!model.alerts.length) {
@@ -185,7 +202,7 @@
   var CommitteeAlerts = {
     COMMITTEE_LEAD_DAYS: COMMITTEE_LEAD_DAYS, TIME_ZONE: TIME_ZONE,
     isRealIso: isRealIso, israelToday: israelToday, dayDiff: dayDiff, fmtDate: fmtDate, whenText: whenText, classify: classify,
-    houseAlerts: houseAlerts, mergeAlerts: mergeAlerts, renderCard: renderCard, setBadge: setBadge
+    houseAlerts: houseAlerts, mergeAlerts: mergeAlerts, renderCard: renderCard, setBadge: setBadge, UNAVAILABLE: UNAVAILABLE
   };
   root.CommitteeAlerts = CommitteeAlerts;
   if (typeof module === 'object' && module.exports) module.exports = CommitteeAlerts;

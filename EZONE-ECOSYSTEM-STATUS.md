@@ -356,6 +356,21 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: committees READ-ONLY — the coordinators set them (October 20, 2026)
+
+- The coordinators set committees (coordinators `Committees` sheet, «ניהול ועדות» + WhatsApp to the manager).
+- Managers show them read-only:
+  - a new «ועדות» sub-tab;
+  - «ועדות קרובות» on «הבית היום»;
+  - the admin all-houses card.
+- `/api/work` `committeeSet` → 410 `committee_read_only`; the Dashboard refuses it too. The per-patient
+  editor is removed.
+- Data: `houseData.committees` ← Dashboard ← coordinators `getCommitteesForManagers`.
+- Script Properties:
+  - coordinators `MANAGERS_READ_SECRET`, `HOUSE_MANAGER_PHONES`;
+  - Dashboard `COORDINATORS_SHEETS_URL`, `COORDINATORS_MANAGERS_SECRET`.
+- SW v35, tests 408. Details: `docs/committee.md`.
+
 ## Managers: «מדריך» usage guide (October 20, 2026)
 
 - A static Hebrew RTL «מדריך» tab, open to every role. It covers:

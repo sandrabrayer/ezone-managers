@@ -1,12 +1,11 @@
 'use strict';
-/* Committee date per patient «ועדה» (15 Oct 2026; docs/committee.md):
- *   A. proxy /api/work op committeeSet — session, house pinned, shape checks;
- *   B. the «מטופלים בבית» second line + form (escaped, min date, 60-char label);
- *   C. the save flow — spinner, error reasons, concurrency, past-date warning;
- *   D. alerts — shared fixture (today / +7 / +8 / -1, Israel midnight), house
- *      isolation, admin filter, text-only rendering, badge;
- *   E. wiring + bonus untouched.
- * Dummy env values; global.fetch is MOCKED. */
+/* Committees «ועדות» in Managers — READ-ONLY since 20 Oct 2026 (docs/committee.md).
+ *   A. proxy: the old write op committeeSet is GONE — 410 for every role, nothing forwarded;
+ *   B. views: «ועדות» sub-tab lists houseData.committees (escaped, read-only), honest
+ *      unavailable states; no committee editor on «מטופלים»;
+ *   C. alerts: the shared rule (fixture pinned with E-Zone-Dashboard) on the new
+ *      `committees.items` shape; text-only card, «לוועדות» opens the sub-tab, admin filter;
+ *   D. wiring + bonus untouched. */
 process.env.NODE_ENV = 'test';
 process.env.APPS_SCRIPT_URL = 'https://apps-script.test/exec';
 const auth = require('./helpers-auth');
@@ -29,7 +28,7 @@ const TODAY = '2026-10-15';
 
 /* ── A. proxy ─────────────────────────────────────────────── */
 
-test('A: proxy op committeeSet', async (t) => {
+test('A: committeeSet is GONE — 410 committee_read_only for manager and admin, nothing forwarded; no session 401', async (t) => {
   const realFetch = global.fetch;
   let calls = [];
   global.fetch = async (url, opts = {}) => {
@@ -40,289 +39,92 @@ test('A: proxy op committeeSet', async (t) => {
   const server = app.listen(0, '127.0.0.1');
   await new Promise((r) => server.once('listening', r));
   t.after(() => server.close());
-  t.beforeEach(() => { calls = []; _rateLimiters.allowSheets.clear(); _rateLimiters.allowLogin.clear(); _rateLimiters.allowWrites.clear(); });
-  const OK = { op: 'committeeSet', patientName: 'דנה', entryDate: '2026-09-01', committeeDate: '2026-10-20', label: ' ועדת השמה ', previousDate: '', previousLabel: '' };
+  _rateLimiters.allowSheets.clear(); _rateLimiters.allowLogin.clear(); _rateLimiters.allowWrites.clear();
+  const OK = { op: 'committeeSet', patientName: 'דנה', entryDate: '2026-09-01', committeeDate: '2026-10-20', label: 'השמה', previousDate: '', previousLabel: '' };
   const send = (cookie, body) => auth.request(server, '/api/work', { method: 'POST', headers: cookie ? { Cookie: cookie } : {}, body });
-
-  await t.test('no session → 401, nothing proxied', async () => {
-    assert.equal((await send(null, OK)).status, 401);
-    assert.equal(calls.length, 0);
-  });
-
-  await t.test('a manager is pinned to their own house; role / actor / secret from the server only', async () => {
-    const cookie = await auth.login(server, auth.ORAN_CODE);
-    const r = await send(cookie, { ...OK, house: 'efroni', role: 'admin', actorId: 'person-sandra', secret: 'x', editedBy: 'forged' });
-    assert.equal(r.status, 200);
-    const b = calls[0];
-    assert.deepEqual([b.action, b.op, b.house, b.role, b.actor, b.actorId, b.secret],
-      ['managersWork', 'committeeSet', 'ramot', 'manager', 'אורן', 'person-oran', process.env.MANAGERS_WORK_SECRET]);
-    assert.deepEqual([b.patientName, b.entryDate, b.committeeDate, b.label, b.previousDate, b.previousLabel, b.mode, b.correction],
-      ['דנה', '2026-09-01', '2026-10-20', 'ועדת השמה', '', '', undefined, undefined]);
-    assert.equal(b.editedBy, undefined, 'unknown fields are not forwarded');
-  });
-
-  await t.test('an admin names any house; another house manager stays in their own', async () => {
-    const admin = await auth.login(server, auth.ADMIN_CODE);
-    await send(admin, { ...OK, house: 'pardes' });
-    assert.deepEqual([calls[0].house, calls[0].role], ['pardes', 'admin']);
-    const hanan = await auth.login(server, auth.HANAN_CODE);
-    await send(hanan, { ...OK, house: 'ramot' });
-    assert.equal(calls[1].house, 'efroni');
-  });
-
-  await t.test('clear and correction are forwarded; a clear never carries a date or a label', async () => {
-    const cookie = await auth.login(server, auth.ORAN_CODE);
-    await send(cookie, { ...OK, mode: 'clear', committeeDate: '', previousDate: '2026-10-20', previousLabel: 'א' });
-    assert.deepEqual([calls[0].mode, calls[0].committeeDate, calls[0].label, calls[0].previousDate, calls[0].previousLabel], ['clear', '', '', '2026-10-20', 'א']);
-    await send(cookie, { ...OK, committeeDate: '2026-10-10', previousDate: '2026-10-20', correction: true });
-    assert.equal(calls[1].correction, true);
-  });
-
-  await t.test('shape checks → 400, nothing proxied', async () => {
-    const cookie = await auth.login(server, auth.ORAN_CODE);
-    const bad = [
-      [{ ...OK, mode: 'none' }, 'bad_request'],
-      [{ ...OK, committeeDate: '20/10/26' }, 'bad_date'],
-      [{ ...OK, committeeDate: '' }, 'bad_date'],
-      [{ ...OK, mode: 'clear', committeeDate: '2026-10-20' }, 'bad_date'],
-      [{ ...OK, previousDate: 'x' }, 'bad_date'],
-      [{ ...OK, entryDate: '' }, 'bad_date'],
-      [{ ...OK, committeeDate: '2026-08-31' }, 'before_admission'],
-      [{ ...OK, label: 'א'.repeat(61) }, 'label_too_long'],
-      [{ ...OK, label: { x: 1 } }, 'bad_request'],
-      [{ ...OK, correction: 'yes' }, 'bad_request'],
-      [{ ...OK, patientName: '' }, 'bad_request'],
-      [{ ...OK, patientName: 'א'.repeat(81) }, 'bad_request'],
-    ];
-    for (const [body, code] of bad) {
-      const r = await send(cookie, body);
-      assert.equal(r.status, 400, JSON.stringify(body).slice(0, 80));
-      assert.equal(JSON.parse(r.text).error, code, JSON.stringify(body).slice(0, 80));
-    }
-    assert.equal(calls.length, 0);
-    assert.equal((await send(cookie, { ...OK, label: 'א'.repeat(60) })).status, 200, '60 chars is fine');
-  });
+  assert.equal((await send(null, OK)).status, 401);
+  const oran = await auth.login(server, auth.ORAN_CODE);
+  const admin = await auth.login(server, auth.ADMIN_CODE);
+  for (const [cookie, body] of [[oran, OK], [admin, { ...OK, house: 'efroni' }], [oran, { ...OK, mode: 'clear' }], [oran, { op: 'committeeSet' }]]) {
+    const r = await send(cookie, body);
+    assert.equal(r.status, 410);
+    const j = JSON.parse(r.text);
+    assert.equal(j.error, 'committee_read_only');
+    assert.match(j.message, /הרכזים/);
+  }
+  assert.equal(calls.length, 0, 'never forwarded to the Dashboard');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(src, /const WORK_OPS = new Set\(\['houseData', 'houseCost', 'logAdd', 'logUpdate', 'dischargeSet'\]\);/);
+  assert.doesNotMatch(src, /committeeDate|COMMITTEE_LABEL_MAX/, 'no write path left');
 });
 
-/* ── B. view ──────────────────────────────────────────────── */
+/* ── B. views ─────────────────────────────────────────────── */
 
-const P = (committee, extra) => ({ name: 'דנה <img src=x>', entryDate: '2026-09-01', days: 45, status: 'active', expectedDischarge: null, committee, ...extra });
+const ITEMS = [
+  { id: 'c1', date: '2026-10-15', time: '10:00', type: 'ועדת השמה', participants: 'רופא, <b>משפחה</b>', patientName: 'דנה <img src=x>' },
+  { id: 'c2', date: '2026-10-20', time: '', type: 'ועדה רפואית', participants: '', patientName: '' }
+];
+const DATA = (committees) => ({ ok: true, today: TODAY, patients: [{ name: 'דנה', entryDate: '2026-09-01', days: 45, status: 'active', committee: { date: '2026-10-15', label: 'x' } }], committeeSupported: false, committees });
 
-test('B: no committee → «הגדרת תאריך ועדה»; the form: date (min = today), label (maxlength 60), שמירה, ביטול', () => {
-  const h = W.committeeHtml(P(null), 2, TODAY);
-  assert.match(h, /data-cm-edit="2" aria-label="הגדרת תאריך ועדה — דנה &lt;img src=x&gt;">הגדרת תאריך ועדה<\/button>/);
-  assert.ok(!h.includes('<img'), 'name escaped');
-  assert.match(h, /name="committeeDate" type="date" required min="2026-10-15"/);
-  assert.match(h, /name="committeeLabel" type="text" maxlength="60"/);
-  assert.ok(h.includes('data-cm-spin') && h.includes('data-cm-save-label') && h.includes('data-cm-cancel="2"') && h.includes('data-cm-msg'));
-  assert.ok(!h.includes('data-cm-clear'), 'nothing to clear');
+test('B: «ועדות» sub-tab — every upcoming committee: weekday, date, time, type, patient, participants; escaped; read-only note', () => {
+  const h = W.committeesHtml(DATA({ available: true, today: TODAY, items: ITEMS }));
+  assert.match(h, /ועדות קרובות \(2\)/);
+  assert.match(h, /את הוועדות קובעים הרכזים באפליקציית הרכזים/);
+  assert.match(h, /wk-shift">יום חמישי 15\/10\/26 · 10:00<\/span><span class="wk-name">ועדת השמה · דנה &lt;img src=x&gt;<\/span><span class="wk-meta">משתתפים: רופא, &lt;b&gt;משפחה&lt;\/b&gt;/);
+  assert.match(h, /wk-shift">יום שלישי 20\/10\/26<\/span><span class="wk-name">ועדה רפואית<\/span>/);
+  assert.doesNotMatch(h, /<(img|b)[ >]|<form|<input|<button/, 'no markup from the feed, no editor');
+  assert.match(W.committeesHtml(DATA({ available: true, today: TODAY, items: [] })), /אין ועדות קרובות/);
 });
 
-test('B: a committee → «ועדה: dd/m/yy · <label>» + «שינוי» + «ניקוי»; editing may correct to the past (min = admission)', () => {
-  const h = W.committeeHtml(P({ date: '2026-10-20', label: 'ועדת <b>השמה</b>', editedBy: 'אורן' }), 0, TODAY);
-  assert.match(h, /ועדה: <b>20\/10\/26<\/b> · ועדת &lt;b&gt;השמה&lt;\/b&gt;<\/span>/);
-  assert.match(h, /data-cm-edit="0"[^>]*>שינוי<\/button>/);
-  assert.match(h, /data-cm-clear="0"[^>]*><span class="wk-spin" data-cm-clear-spin aria-hidden="true" hidden><\/span><span data-cm-clear-label>ניקוי<\/span>/);
-  assert.match(h, /min="2026-09-01" value="2026-10-20"/);
-  assert.match(h, /value="ועדת &lt;b&gt;השמה&lt;\/b&gt;"/);
-  assert.match(W.committeeHtml(P({ date: '2026-10-20', label: '' }), 0, TODAY), /ועדה: <b>20\/10\/26<\/b><\/span>/, 'no « · » without a label');
+test('B: unavailable feed → an honest message, never an empty list that looks real', () => {
+  assert.match(W.committeesHtml(DATA({ available: false, reason: 'not_configured' })), /עוד לא מחוברות/);
+  assert.match(W.committeesHtml(DATA({ available: false, reason: 'unreachable' })), /לא הצלחנו לקרוא את הוועדות/);
+  assert.match(W.committeesHtml(DATA(undefined)), /אחרי עדכון השרת/);
+  assert.doesNotMatch(W.committeesHtml(DATA({ available: false, reason: 'unreachable' })), /אין ועדות קרובות/);
 });
 
-test('B: patientsHtml shows the line only when the backend supports it', () => {
-  const d = { committeeSupported: true, patients: [P(null)] };
-  assert.ok(W.patientsHtml(d).includes('data-cm-row="0"'));
-  assert.ok(!W.patientsHtml({ patients: [P(null)] }).includes('data-cm-row'));
+test('B: «מטופלים» has no committee editor any more (even if an old payload carries patients[].committee)', () => {
+  const h = W.patientsHtml({ ...DATA({ available: true, items: [] }), committeeSupported: true });
+  assert.doesNotMatch(h, /data-cm-|ועדה:|הגדרת תאריך ועדה/);
+  const w = pub('work.js');
+  assert.doesNotMatch(w, /committeeSet|saveCommittee|data-cm-form|data-cm-edit|data-cm-clear/);
 });
 
-test('B: committeeCheck — today ok, future ok, past: refused when new, a warning when correcting; label ≤ 60', () => {
-  assert.deepEqual(W.committeeCheck('2026-10-15', '', P(null), TODAY), {});
-  assert.deepEqual(W.committeeCheck('2026-10-30', 'א'.repeat(60), P(null), TODAY), {});
-  assert.match(W.committeeCheck('2026-10-14', '', P(null), TODAY).error, /תאריך שעבר/);
-  assert.equal(W.committeeCheck('2026-10-14', '', P({ date: '2026-10-20', label: '' }), TODAY).warn, W.COMMITTEE_PAST_WARNING);
-  assert.match(W.committeeCheck('', '', P(null), TODAY).error, /בחרו תאריך/);
-  assert.match(W.committeeCheck('2026-02-30', '', P(null), TODAY).error, /לא תקין/);
-  assert.match(W.committeeCheck('2026-08-01', '', P({ date: '2026-10-20' }), TODAY).error, /לפני תאריך הכניסה/);
-  assert.match(W.committeeCheck('2026-10-20', 'א'.repeat(61), P(null), TODAY).error, /ארוך מדי/);
-});
+/* ── C. alerts ─────────────────────────────────────────────── */
 
-test('B: error reasons are Hebrew, never a raw code', () => {
-  const T = (code, status) => W.committeeErrorText({ data: { ok: false, error: code }, status: status || 200 });
-  assert.match(T('conflict'), /עודכן בינתיים/);
-  assert.match(T('past_date'), /תאריך שעבר/);
-  assert.match(T('label_too_long'), /עד 60 תווים/);
-  assert.match(T('lock_busy'), /עסוק/);
-  assert.match(T('upstream_timeout', 504), /לא הגיב בזמן/);
-  assert.match(T('unknown_op'), /השרת לא עודכן/);
-  for (const v of Object.values(W.COMMITTEE_ERRORS)) assert.match(v, /[֐-׿]/);
-  for (const c of ['conflict', 'past_date', 'lock_busy', 'unknown_op', 'something']) assert.doesNotMatch(T(c), /[a-z_]{4,}/, c);
-});
+const DM = (items, today) => ({ committees: { available: true, today: today || TODAY, items } });
 
-/* ── C. save flow on a minimal DOM (text-only: innerHTML throws) ── */
-
-function el(tag, attrs, children) {
-  const e = {
-    tagName: tag.toUpperCase(), attrs: Object.assign({}, attrs || {}), children: [], parent: null, hidden: false, disabled: false, value: '', _text: '',
-    getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; },
-    setAttribute(k, v) { this.attrs[k] = String(v); },
-    removeAttribute(k) { delete this.attrs[k]; },
-    matches(sel) {
-      return sel.split(',').map((x) => x.trim()).some((one) => {
-        const m = /^([a-z]*)(?:\[([\w-]+)(?:="([^"]*)")?\])?$/.exec(one);
-        if (!m) throw new Error('selector not supported: ' + one);
-        if (m[1] && this.tagName !== m[1].toUpperCase()) return false;
-        if (m[2] && !(m[2] in this.attrs)) return false;
-        if (m[3] !== undefined && this.attrs[m[2]] !== m[3]) return false;
-        return true;
-      });
-    },
-    querySelectorAll(sel) { const out = []; const walk = (n) => n.children.forEach((c) => { if (c.matches(sel)) out.push(c); walk(c); }); walk(this); return out; },
-    querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
-    closest(sel) { let n = this; while (n) { if (n.matches(sel)) return n; n = n.parent; } return null; },
-    replaceWith(n) { const p = this.parent; p.children[p.children.indexOf(this)] = n; n.parent = p; },
-  };
-  Object.defineProperty(e, 'textContent', { get() { return this._text + this.children.map((c) => c.textContent).join(''); }, set(v) { this._text = String(v); this.children = []; } });
-  Object.defineProperty(e, 'innerHTML', { get() { throw new Error('innerHTML read'); }, set() { throw new Error('innerHTML write — text-only'); } });
-  (children || []).forEach((c) => { c.parent = e; e.children.push(c); });
-  return e;
-}
-/* The same structure committeeHtml draws (asserted in B). */
-function row(i, opts) {
-  const date = el('input', { name: 'committeeDate', type: 'date' }); date.value = opts.value || '';
-  const label = el('input', { name: 'committeeLabel', type: 'text' }); label.value = opts.label || '';
-  const spin = el('span', { 'data-cm-spin': '' }); spin.hidden = true;
-  const sl = el('span', { 'data-cm-save-label': '' }); sl.textContent = 'שמירה';
-  const form = el('form', { 'data-cm-form': String(i) }, [el('label', {}, [date]), el('label', {}, [label]), el('button', { type: 'submit' }, [spin, sl]),
-    el('button', { type: 'button', 'data-cm-cancel': String(i) }), el('span', { 'data-cm-msg': '' })]);
-  form.elements = { committeeDate: date, committeeLabel: label };
-  form.hidden = !!opts.closed;
-  const cspin = el('span', { 'data-cm-clear-spin': '' }); cspin.hidden = true;
-  const cl = el('span', { 'data-cm-clear-label': '' }); cl.textContent = 'ניקוי';
-  return el('div', { 'data-cm-row': String(i) }, [el('button', { 'data-cm-edit': String(i) }), el('button', { 'data-cm-clear': String(i) }, [cspin, cl]), form, el('span', { 'data-cm-flash': '' })]);
-}
-function world(committee, value, label) {
-  const panel = el('div', {}, [row(0, { value, label })]);
-  const cache = { ramot: { at: 0, data: { committeeSupported: true, patients: [{ name: 'דנה', entryDate: '2026-09-01', committee }] } } };
-  const seen = [];
-  const deferred = [];
-  const post = (body) => new Promise((resolve, reject) => { seen.push(body); deferred.push({ resolve, reject }); });
-  let refreshes = 0;
-  const refresh = async () => { refreshes++; panel.querySelector('[data-cm-row="0"]').replaceWith(row(0, { closed: true })); };
-  const r = () => panel.querySelector('[data-cm-row="0"]');
-  return { panel, seen, deferred, row: r, refreshes: () => refreshes, deps: { post, refresh, cache, today: TODAY } };
-}
-const tick = () => new Promise((r) => setImmediate(r));
-
-test('C: set → one request (date, label, previous token), spinner + «שומר...», all disabled; then «נשמר ✓»', async () => {
-  const w = world(null, '2026-10-20', ' ועדת השמה ');
-  const rw = w.row();
-  const p = W.saveCommittee(w.panel, 'ramot', rw, w.deps, 'set');
-  W.saveCommittee(w.panel, 'ramot', rw, w.deps, 'set');   // double tap
-  await tick();
-  assert.equal(w.seen.length, 1, 'one request');
-  assert.deepEqual(w.seen[0], { op: 'committeeSet', house: 'ramot', patientName: 'דנה', entryDate: '2026-09-01', committeeDate: '2026-10-20', label: 'ועדת השמה', previousDate: '', previousLabel: '' });
-  assert.equal(rw.querySelector('[data-cm-spin]').hidden, false);
-  assert.equal(rw.querySelector('[data-cm-save-label]').textContent, 'שומר...');
-  assert.ok(rw.querySelectorAll('input, button').every((b) => b.disabled));
-  assert.equal(rw.getAttribute('aria-busy'), 'true');
-  w.deferred[0].resolve({ ok: true });
-  await p;
-  assert.equal(w.refreshes(), 1);
-  assert.equal(w.row().querySelector('[data-cm-flash]').textContent, 'נשמר ✓');
-});
-
-test('C: clear from the row → mode clear with the current date/label as the token; spinner on «ניקוי»', async () => {
-  const w = world({ date: '2026-10-20', label: 'א' });
-  const rw = w.row();
-  const p = W.saveCommittee(w.panel, 'ramot', rw, w.deps, 'clear');
-  await tick();
-  assert.deepEqual([w.seen[0].mode, w.seen[0].committeeDate, w.seen[0].label, w.seen[0].previousDate, w.seen[0].previousLabel], ['clear', '', '', '2026-10-20', 'א']);
-  assert.equal(rw.querySelector('[data-cm-clear-spin]').hidden, false);
-  assert.equal(rw.querySelector('[data-cm-clear-label]').textContent, 'שומר...');
-  assert.equal(rw.querySelector('[data-cm-spin]').hidden, true);
-  w.deferred[0].resolve({ ok: true });
-  await p;
-  assert.equal(w.row().querySelector('[data-cm-flash]').textContent, 'תאריך הוועדה נוקה ✓');
-});
-
-test('C: a past date → no request, a new committee is refused; an existing one warns, a second «שמירה» sends correction', async () => {
-  const fresh = world(null, '2026-10-14');
-  await W.saveCommittee(fresh.panel, 'ramot', fresh.row(), fresh.deps, 'set');
-  assert.equal(fresh.seen.length, 0);
-  assert.match(fresh.row().querySelector('[data-cm-msg]').textContent, /תאריך שעבר/);
-  const w = world({ date: '2026-10-16', label: '' }, '2026-10-14');
-  await W.saveCommittee(w.panel, 'ramot', w.row(), w.deps, 'set');
-  assert.equal(w.seen.length, 0, 'first tap only warns');
-  assert.equal(w.row().querySelector('[data-cm-msg]').textContent, W.COMMITTEE_PAST_WARNING);
-  const p = W.saveCommittee(w.panel, 'ramot', w.row(), w.deps, 'set');
-  await tick();
-  assert.deepEqual([w.seen[0].committeeDate, w.seen[0].correction, w.seen[0].previousDate], ['2026-10-14', true, '2026-10-16']);
-  w.deferred[0].resolve({ ok: true, warning: 'past_date' });
-  await p;
-  assert.match(w.row().querySelector('[data-cm-flash]').textContent, /תיקון/);
-});
-
-test('C: error → the form comes back enabled with the values and the reason; conflict reloads', async () => {
-  const w = world(null, '2026-10-20', 'א');
-  const rw = w.row();
-  const p = W.saveCommittee(w.panel, 'ramot', rw, w.deps, 'set');
-  await tick();
-  const e = new Error('lock_busy'); e.data = { ok: false, error: 'lock_busy' }; e.status = 200;
-  w.deferred[0].reject(e);
-  await p;
-  assert.ok(rw.querySelectorAll('input, button').every((b) => !b.disabled));
-  assert.equal(rw.querySelector('[data-cm-form]').hidden, false);
-  assert.deepEqual([rw.querySelector('[data-cm-form]').elements.committeeDate.value, rw.querySelector('[data-cm-form]').elements.committeeLabel.value], ['2026-10-20', 'א']);
-  assert.match(rw.querySelector('[data-cm-msg]').textContent, /עסוק/);
-  assert.equal(w.refreshes(), 0);
-  const w2 = world({ date: '2026-10-20', label: '' }, '2026-10-21');
-  const p2 = W.saveCommittee(w2.panel, 'ramot', w2.row(), w2.deps, 'set');
-  await tick();
-  const c = new Error('conflict'); c.data = { ok: false, error: 'conflict' };
-  w2.deferred[0].reject(c);
-  await p2;
-  assert.equal(w2.refreshes(), 1);
-  const nr = w2.row();
-  assert.equal(nr.querySelector('[data-cm-form]').hidden, false);
-  assert.equal(nr.querySelector('[data-cm-form]').elements.committeeDate.value, '2026-10-21', 'the picked date is kept');
-  assert.match(nr.querySelector('[data-cm-msg]').textContent, /עודכן בינתיים/);
-});
-
-/* ── D. alerts ─────────────────────────────────────────────── */
-
-test('D: shared fixture — byte-identical to the one E-Zone-Dashboard pins; constants', () => {
+test('C: shared fixture — byte-identical to the one E-Zone-Dashboard pins; constants', () => {
   assert.equal(crypto.createHash('sha256').update(fs.readFileSync(FIXTURE_PATH)).digest('hex'), SHARED_FIXTURE_SHA256);
   assert.equal(CA.COMMITTEE_LEAD_DAYS, FIXTURE.COMMITTEE_LEAD_DAYS);
   assert.equal(CA.TIME_ZONE, FIXTURE.TIME_ZONE);
   assert.equal((pub('committee-alerts.js').match(/var COMMITTEE_LEAD_DAYS = 7;/g) || []).length, 1);
 });
 
-test('D: boundaries from the fixture (today, +1, +7 in; +8, -1 out; year / leap; bad dates)', () => {
+test('C: boundaries from the fixture (today, +1, +7 in; +8, -1 out; year / leap; bad dates)', () => {
   for (const c of FIXTURE.alerts) {
-    const data = { committeeSupported: true, patients: [{ name: 'א', committee: { date: c.date, label: '' } }] };
-    const a = CA.houseAlerts(data, 'ramot', c.today).alerts[0];
+    const a = CA.houseAlerts(DM([{ id: 'x', date: c.date, time: '', type: 'ועדה', participants: '', patientName: 'א' }], c.today), 'ramot', c.today).alerts[0];
     assert.deepEqual(a ? { days: a.days, kind: a.kind, whenText: a.whenText } : null, c.expect, c.today + ' → ' + c.date);
   }
 });
 
-test('D: timezone / midnight — "today" is the calendar day in Israel (incl. the DST eve)', () => {
+test('C: timezone / midnight — "today" is the calendar day in Israel (incl. the DST eve)', () => {
   for (const c of FIXTURE.israelToday) assert.equal(CA.israelToday(new Date(c.utc)), c.today, c.utc);
 });
 
-test('D: sorted by date («ועדה היום» on top), with name, date, label, days remaining; past never alerted', () => {
-  const m = CA.houseAlerts({ committeeSupported: true, patients: [
-    { name: 'ב', committee: { date: '2026-10-20', label: 'השמה' } },
-    { name: 'א', committee: { date: '2026-10-15', label: '' } },
-    { name: 'ג', committee: { date: '2026-10-14', label: '' } },
-    { name: 'ד', committee: null },
-  ] }, 'ramot', TODAY);
-  assert.deepEqual(m.alerts.map((a) => [a.name, a.kind, a.whenText, a.label, a.index]), [['א', 'today', 'היום', '', 1], ['ב', 'week', 'בעוד 5 ימים', 'השמה', 0]]);
+test('C: sorted by date; name = patient else type; label = type (with a patient) + time; unavailable → the reason', () => {
+  const m = CA.houseAlerts(DM([ITEMS[1], ITEMS[0], { id: 'old', date: '2026-10-14', type: 'עבר', patientName: '' }]), 'ramot', TODAY);
+  assert.deepEqual(m.alerts.map((a) => [a.name, a.kind, a.whenText, a.label, a.id]),
+    [['דנה <img src=x>', 'today', 'היום', 'ועדת השמה · 10:00', 'c1'], ['ועדה רפואית', 'week', 'בעוד 5 ימים', '', 'c2']]);
   assert.equal(m.count, 2);
-  assert.equal(CA.houseAlerts({ patients: [{ name: 'א', committee: { date: TODAY } }] }, 'ramot', TODAY).supported, false, 'older backend');
+  const off = CA.houseAlerts({ committees: { available: false, reason: 'unauthorized' } }, 'ramot', TODAY);
+  assert.deepEqual([off.supported, off.unavailableText], [false, 'הוועדות מאפליקציית הרכזים עוד לא מחוברות']);
+  assert.equal(CA.houseAlerts({ patients: [{ name: 'א', committee: { date: TODAY } }] }, 'ramot', TODAY).supported, false, 'the old per-patient shape is ignored');
 });
 
-test('D: house isolation + admin filter', () => {
-  const ramot = CA.houseAlerts({ committeeSupported: true, patients: [{ name: 'א', committee: { date: '2026-10-16' } }] }, 'ramot', TODAY);
-  const efroni = CA.houseAlerts({ committeeSupported: true, patients: [{ name: 'ב', committee: { date: '2026-10-15' } }] }, 'efroni', TODAY);
+test('C: house isolation + admin filter', () => {
+  const ramot = CA.houseAlerts(DM([{ id: 'r', date: '2026-10-16', type: 'א' }]), 'ramot', TODAY);
+  const efroni = CA.houseAlerts(DM([{ id: 'e', date: '2026-10-15', type: 'ב' }]), 'efroni', TODAY);
   assert.deepEqual(ramot.alerts.map((a) => a.house), ['ramot']);
   assert.deepEqual(CA.mergeAlerts([ramot, efroni], '').alerts.map((a) => a.name), ['ב', 'א']);
   assert.deepEqual(CA.mergeAlerts([ramot, efroni], 'ramot').alerts.map((a) => a.name), ['א']);
@@ -351,29 +153,25 @@ function fakeDoc() {
 }
 const all = (n, pred, out = []) => { if (pred(n)) out.push(n); n.children.forEach((c) => all(c, pred, out)); return out; };
 
-test('D: text-only card — a hostile name / label is text; tags, one-tap «שינוי», admin house names + filter', () => {
+test('C: text-only card — hostile text stays text; tags; «לוועדות» opens the house sub-tab (no edit); unavailable text', () => {
   const doc = fakeDoc();
-  const model = CA.houseAlerts({ committeeSupported: true, patients: [
-    { name: '<img src=x onerror=alert(1)>', committee: { date: '2026-10-15', label: '<script>x</script>' } },
-    { name: 'ב', committee: { date: '2026-10-18', label: '' } },
-  ] }, 'ramot', TODAY);
+  const model = CA.houseAlerts(DM([{ id: 'h', date: '2026-10-15', time: '', type: '<script>x</script>', patientName: '<img src=x onerror=alert(1)>' }, { id: 'b', date: '2026-10-18', type: 'ב' }]), 'ramot', TODAY);
   const card = CA.renderCard(doc, model);
   const text = card.textContent;
   assert.match(text, /ועדות קרובות \(2\)/);
   assert.match(text, /<img src=x onerror=alert\(1\)>/, 'shown as text');
-  assert.match(text, /ועדה היום/);
-  assert.match(text, /ועדה השבוע/);
   assert.match(text, /ועדה: 15\/10\/26 · <script>x<\/script> · היום/);
   assert.match(text, /ועדה: 18\/10\/26 · בעוד 3 ימים/);
-  const btns = all(card, (n) => 'data-cm-alert-edit' in n.attrs);
-  assert.deepEqual(btns.map((b) => b.attrs['data-cm-alert-edit']), ['ramot|0', 'ramot|1']);
+  assert.deepEqual(all(card, (n) => 'data-cm-alert-open' in n.attrs).map((b) => b.attrs['data-cm-alert-open']), ['ramot', 'ramot']);
+  assert.equal(all(card, (n) => 'data-cm-alert-edit' in n.attrs).length, 0, 'no edit button');
   const admin = CA.renderCard(doc, CA.mergeAlerts([model], ''), { labels: { ramot: 'רמות השבים' }, filter: { value: '', options: [{ value: '', label: 'כל הבתים' }, { value: 'ramot', label: 'רמות השבים' }] } });
   assert.match(admin.textContent, /רמות השבים/);
   assert.equal(all(admin, (n) => 'data-cm-filter' in n.attrs).length, 1);
-  assert.match(CA.renderCard(doc, CA.houseAlerts({ committeeSupported: true, patients: [] }, 'ramot', TODAY)).textContent, /אין ועדות היום וב-7 הימים הקרובים/);
+  assert.match(CA.renderCard(doc, CA.houseAlerts(DM([]), 'ramot', TODAY)).textContent, /אין ועדות היום וב-7 הימים הקרובים/);
+  assert.match(CA.renderCard(doc, CA.houseAlerts({ committees: { available: false, reason: 'unreachable' } }, 'ramot', TODAY)).textContent, /לא הצלחנו לקרוא את הוועדות/);
 });
 
-test('D: badge — count or hidden, its own element beside the discharge badge', () => {
+test('C: badge — count or hidden, its own element beside the discharge badge', () => {
   const doc = fakeDoc();
   const btn = doc.createElement('button');
   CA.setBadge(doc, btn, 2);
@@ -383,26 +181,26 @@ test('D: badge — count or hidden, its own element beside the discharge badge',
   assert.deepEqual([b.textContent, b.hidden], ['', true]);
 });
 
-/* ── E. wiring + bonus ─────────────────────────────────────── */
+/* ── D. wiring + bonus ─────────────────────────────────────── */
 
-test('E: wiring — script loaded before work.js, cards on ראשי (top) and the admin overview, SW ≥ v31 caches it', () => {
+test('D: wiring — «ועדות» sub-tab after «מטופלים»; alerts on «הבית היום» (top) and the admin landing tab; SW v35+', () => {
   const html = pub('index.html');
   assert.ok(html.indexOf('/committee-alerts.js') > 0 && html.indexOf('/committee-alerts.js') < html.indexOf('/work.js'));
   assert.ok(html.indexOf('data-dash-committees') < html.indexOf('data-dash-alerts'), 'above the discharge alerts');
+  assert.ok(html.indexOf('data-sub="patients"') < html.indexOf('data-sub="committees"'));
+  assert.match(html, /<section data-sub-panel="committees" hidden><\/section>/);
   assert.match(html, /id="committeeAlertsAll" class="dis-alerts-all" hidden/);
   const sw = pub('sw.js');
-  assert.ok(Number(/const CACHE = 'ezone-managers-v(\d+)';/.exec(sw)[1]) >= 31, 'SW cache only moves forward');
+  assert.ok(Number(/const CACHE = 'ezone-managers-v(\d+)';/.exec(sw)[1]) >= 35, 'SW cache only moves forward');
   assert.match(sw, /'\/committee-alerts\.js'/);
   const w = pub('work.js');
-  const block = w.slice(w.indexOf('function setCommitteeBusy'), w.indexOf('/* Called by app.js after a house tab is drawn. */'));
-  assert.doesNotMatch(block, /innerHTML|insertAdjacentHTML|console\./, 'text-only, nothing logged');
+  assert.match(w, /var cmt = host\(panel, 'committees'\);\s*if \(cmt\) cmt\.innerHTML = committeesHtml\(d\);/);
+  assert.match(w, /\['patients', 'team', 'therapists', 'committees'\]/, 'the error path covers the sub-tab');
   assert.doesNotMatch(pub('committee-alerts.js').replace(/\/\*[\s\S]*?\*\//g, ''), /innerHTML|console\./);
-  const css = pub('styles.css');
-  assert.match(css, /\.cm-alert-btn \{[^}]*min-height: 44px/);
-  assert.match(css, /\.wk-cm-form input\[type="text"\] \{[^}]*font-size: 16px;[^}]*min-height: 44px/);
+  assert.match(pub('styles.css'), /\.cm-alert-btn \{[^}]*min-height: 44px/);
 });
 
-test('E: bonus untouched — no bonus module reads the committee', () => {
+test('D: bonus untouched — no bonus module reads the committee', () => {
   for (const f of ['lib/bonus-eligibility.js', 'public/bonus-view.js', 'public/app.js']) {
     const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
     assert.ok(!/committee|ועדה/i.test(src), f);
