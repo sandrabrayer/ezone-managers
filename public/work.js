@@ -198,6 +198,62 @@
     var wd = weekdayOf(c.date);
     return (WEEKDAYS[wd] ? 'יום ' + WEEKDAYS[wd] + ' ' : '') + fmtDate(c.date) + (/^\d{2}:\d{2}$/.test(String(c.time || '')) ? ' · ' + c.time : '');
   }
+  /* ── «סיכומי ישיבות» — READ-ONLY (20 Oct 2026, docs/meeting-summaries.md) ──
+   * The coordinators' FINAL team-meeting summaries of THIS house (the server
+   * decides the house), one month at a time. No edit. Every value escaped;
+   * line breaks kept by CSS (white-space: pre-wrap), never by markup. */
+  var SUMMARY_REASON = {
+    not_configured: 'סיכומי הישיבות מאפליקציית הרכזים עוד לא מחוברים.',
+    coordinators_not_configured: 'סיכומי הישיבות מאפליקציית הרכזים עוד לא מחוברים.',
+    unauthorized: 'סיכומי הישיבות מאפליקציית הרכזים עוד לא מחוברים.',
+    unknown_action: 'סיכומי הישיבות יופיעו אחרי עדכון אפליקציית הרכזים.'
+  };
+  var HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+  function monthLabel(ym) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
+    return m ? HE_MONTHS[+m[2] - 1] + ' ' + m[1] : '';
+  }
+  /* The month picker: this month and the 11 before it, newest first. */
+  function summaryMonths(today) {
+    var m = /^(\d{4})-(\d{2})/.exec(String(today || ''));
+    if (!m) return [];
+    var y = +m[1], mo = +m[2] - 1, out = [];
+    for (var i = 0; i < 12; i++) {
+      var yy = y + Math.floor((mo - i) / 12), mm = (((mo - i) % 12) + 12) % 12;
+      out.push(yy + '-' + (mm < 9 ? '0' : '') + (mm + 1));
+    }
+    return out;
+  }
+  /* st: { month, months, res: undefined (loading) | { error } | { summaries } }. */
+  function summariesHtml(st) {
+    var h = '<div class="card work-card wk-summaries"><div class="card-title">סיכומי ישיבות צוות</div>';
+    h += '<div class="wk-note">הסיכומים שהרכזים כותבים בישיבת הצוות (אחרי «סיום ישיבה»). לקריאה בלבד — רק של הבית שלך.</div>';
+    h += '<label class="month-picker wk-ms-month"><span>חודש</span><select data-ms-month aria-label="בחירת חודש לסיכומי ישיבות">' +
+      (st.months || []).map(function (ym) { return '<option value="' + esc(ym) + '"' + (ym === st.month ? ' selected' : '') + '>' + esc(monthLabel(ym)) + '</option>'; }).join('') +
+      '</select></label>';
+    var res = st.res;
+    if (!res) return h + '<div class="wk-empty">טוען…</div></div>';
+    if (res.error) return h + '<div class="wk-empty error">' + esc(res.error) + '</div><button type="button" class="dash-go" data-ms-retry>נסו שוב</button></div>';
+    var s = res.summaries;
+    if (!s || s.available !== true || !Array.isArray(s.items)) {
+      return h + '<div class="wk-empty">' + esc((s && SUMMARY_REASON[s.reason]) || 'לא הצלחנו לקרוא את סיכומי הישיבות מאפליקציית הרכזים. נסו שוב מאוחר יותר.') + '</div></div>';
+    }
+    if (!s.items.length) return h + '<div class="wk-empty">אין סיכומי ישיבות ב' + esc(monthLabel(st.month)) + '</div></div>';
+    h += s.items.map(function (m) {
+      var wd = weekdayOf(m.date);
+      return '<details class="wk-ms"><summary><span class="wk-shift">' + esc((WEEKDAYS[wd] ? 'יום ' + WEEKDAYS[wd] + ' ' : '') + fmtDate(m.date)) +
+        '</span> <span class="wk-name">' + esc(m.title || 'ישיבת צוות') + '</span> <span class="wk-meta">(' + esc(String((m.rows || []).length)) + ' מטופלים)</span></summary>' +
+        (m.attendees ? '<div class="wk-ms-line"><b>משתתפים:</b> ' + esc(m.attendees) + '</div>' : '') +
+        (m.generalNotes ? '<div class="wk-ms-text">' + esc(m.generalNotes) + '</div>' : '') +
+        (m.rows || []).map(function (r) {
+          return '<div class="wk-ms-row"><div class="wk-ms-patient">' + esc(r.patientName) + '</div>' +
+            (r.weeklyUpdate ? '<div class="wk-ms-label">עדכון שבועי</div><div class="wk-ms-text">' + esc(r.weeklyUpdate) + '</div>' : '') +
+            (r.goals ? '<div class="wk-ms-label">מטרות טיפוליות</div><div class="wk-ms-text">' + esc(r.goals) + '</div>' : '') + '</div>';
+        }).join('') + '</details>';
+    }).join('');
+    return h + '</div>';
+  }
+
   /* «ועדות» sub-tab: every upcoming committee of the house, read-only. */
   function committeesHtml(d) {
     var st = committeesState(d);
@@ -653,6 +709,7 @@
     dischargeHtml: dischargeHtml, dischargeCheck: dischargeCheck, DISCHARGE_ERRORS: DISCHARGE_ERRORS,
     dischargeModes: dischargeModes, dischargeStateOf: dischargeStateOf, dischargeToken: dischargeToken, DISCHARGE_DONE: DISCHARGE_DONE,
     committeesHtml: committeesHtml, committeesState: committeesState, committeeWhen: committeeWhen,
+    summariesHtml: summariesHtml, summaryMonths: summaryMonths, monthLabel: monthLabel, SUMMARY_REASON: SUMMARY_REASON,
     COMMITTEE_REASON: COMMITTEE_REASON,
     WORK_ERRORS: WORK_ERRORS, dischargeErrorText: dischargeErrorText, setDischargeBusy: setDischargeBusy,
     teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml, costHtml: costHtml,
@@ -945,6 +1002,32 @@
       b.setAttribute('aria-selected', on ? 'true' : 'false');
     });
     panel.querySelectorAll('[data-sub-panel]').forEach(function (s) { s.hidden = s.getAttribute('data-sub-panel') !== sub; });
+    if (sub === 'summaries') loadSummaries(panel, panel.getAttribute('data-house-key'));
+  }
+
+  /* «סיכומי ישיבות»: fetched only when the sub-tab is opened, per house + month,
+   * kept 5 minutes. A failure is an explicit error with «נסו שוב». */
+  var summaryState = {};   // houseKey → { month, data: { ym: { at, res } } }
+  function paintSummaries(panel, key) {
+    var hostEl = host(panel, 'summaries');
+    var st = summaryState[key];
+    if (!hostEl || !st) return;
+    var c = st.data[st.month];
+    hostEl.innerHTML = summariesHtml({ month: st.month, months: st.months, res: c ? c.res : null });
+  }
+  function loadSummaries(panel, key, force) {
+    if (!panel || !key) return;
+    var today = (cache[key] && cache[key].data && cache[key].data.today) || (root.CommitteeAlerts ? root.CommitteeAlerts.israelToday() : '');
+    var st = summaryState[key] || (summaryState[key] = { month: String(today).slice(0, 7), months: summaryMonths(today), data: {} });
+    var ym = st.month, c = st.data[ym];
+    if (!force && c && (c.res && !c.res.error) && Date.now() - c.at < 300000) { paintSummaries(panel, key); return; }
+    st.data[ym] = { at: Date.now(), res: null };
+    paintSummaries(panel, key);
+    post({ op: 'meetingSummaries', house: key, month: ym }).then(function (r) {
+      st.data[ym] = { at: Date.now(), res: { summaries: r && r.summaries } };
+    }).catch(function (e) {
+      st.data[ym] = { at: Date.now(), res: { error: 'לא הצלחנו לטעון את סיכומי הישיבות כרגע.' } };   // never a raw code
+    }).then(function () { if (st.month === ym) paintSummaries(panel, key); });
   }
 
   function wire(panel, key) {
@@ -953,6 +1036,7 @@
     panel.addEventListener('click', async function (ev) {
       var t = ev.target;
       if (onAlertClick(ev, function (house) { return house === key ? panel : null; })) return;
+      if (t.closest && t.closest('[data-ms-retry]')) { loadSummaries(panel, key, true); return; }
       var cmOpen = t.closest && t.closest('[data-cm-alert-open]');
       if (cmOpen) { if (cmOpen.getAttribute('data-cm-alert-open') === key) showSub(panel, 'committees'); return; }
       var subBtn = t.closest && t.closest('[data-sub]');
@@ -996,6 +1080,14 @@
         await post({ op: 'logUpdate', house: key, log: parts[0], id: parts[1], patch: done ? { followUpDone: true } : { deleted: true } });
       } catch (e) { root.alert('הפעולה נכשלה: ' + (e && e.message ? e.message : '')); }
       refresh(panel, key, true);
+    });
+    panel.addEventListener('change', function (ev) {
+      var sel = ev.target.closest && ev.target.closest('[data-ms-month]');
+      if (!sel) return;
+      var st = summaryState[key];
+      if (!st || st.months.indexOf(sel.value) < 0) return;   // only a month the picker offered
+      st.month = sel.value;
+      loadSummaries(panel, key);
     });
     panel.addEventListener('input', function (ev) {
       var f = ev.target.closest && ev.target.closest('[data-wk-form]');

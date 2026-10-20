@@ -2061,3 +2061,15 @@ body.is-locked { overflow: hidden; }
   .guide-sec { break-inside: avoid; }
 }
 .guide-soon { font-size: 12px; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; vertical-align: middle; }
+
+/* ===== «סיכומי ישיבות» (20 Oct 2026) — docs/meeting-summaries.md ===== */
+[data-sub-panel="summaries"] { --sec: var(--c-violet); }
+.wk-ms-month { margin: 8px 0; }
+.wk-ms-month select { min-height: 44px; font-size: 16px; }
+.wk-ms { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+.wk-ms summary { min-height: 44px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; cursor: pointer; font-size: 16px; }
+.wk-ms-line { margin: 6px 0; font-size: 15px; }
+.wk-ms-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.6; margin: 4px 0 8px; }
+.wk-ms-row { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.wk-ms-patient { font-weight: 700; font-size: 16px; }
+.wk-ms-label { font-size: 13px; color: var(--text-mute); margin-top: 4px; }

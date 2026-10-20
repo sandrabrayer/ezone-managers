@@ -356,6 +356,15 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: «סיכומי ישיבות» — read-only, own house (October 20, 2026)
+
+- A new sub-tab with a month filter. It shows the coordinators' FINAL team-meeting summaries:
+  - participants and the general summary;
+  - per patient, the update and goals.
+- `/api/work` op `meetingSummaries` → Dashboard → coordinators `getMeetingSummariesForManagers`
+  (`MANAGERS_READ_SECRET`).
+- The house is pinned server-side. No edit. SW v36, tests 413. Details: `docs/meeting-summaries.md`.
+
 ## Managers: committees READ-ONLY — the coordinators set them (October 20, 2026)
 
 - The coordinators set committees (coordinators `Committees` sheet, «ניהול ועדות» + WhatsApp to the manager).

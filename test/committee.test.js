@@ -54,7 +54,9 @@ test('A: committeeSet is GONE — 410 committee_read_only for manager and admin,
   }
   assert.equal(calls.length, 0, 'never forwarded to the Dashboard');
   const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  assert.match(src, /const WORK_OPS = new Set\(\['houseData', 'houseCost', 'logAdd', 'logUpdate', 'dischargeSet'\]\);/);
+  const ops = /const WORK_OPS = new Set\(\[([^\]]*)\]\);/.exec(src)[1];
+  assert.doesNotMatch(ops, /committeeSet/, 'committeeSet is not a work op');
+  assert.doesNotMatch(/const WRITE_OPS = new Set\(\[([^\]]*)\]\);/.exec(src)[1], /committeeSet/);
   assert.doesNotMatch(src, /committeeDate|COMMITTEE_LABEL_MAX/, 'no write path left');
 });
 
