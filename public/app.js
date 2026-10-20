@@ -501,6 +501,8 @@ function activateTab(key) {
 }
 
 function wireTabs() {
+  const printBtn = document.getElementById('guidePrint');
+  if (printBtn) printBtn.addEventListener('click', () => { if (window.print) window.print(); });
   document.getElementById('tabs').addEventListener('click', e => {
     const btn = e.target.closest('.tab');
     if (!btn) return;
@@ -2627,7 +2629,7 @@ function applyRole_(u) {
   currentUser = u || null;
   if (!u || u.role === 'admin' || !HOUSE_KEYS.includes(u.house)) return;
   document.querySelectorAll('.tab').forEach(btn => {
-    btn.hidden = btn.dataset.tab !== u.house;
+    btn.hidden = btn.dataset.tab !== u.house && btn.dataset.tab !== 'guide';
   });
   ['panel-overview', 'panel-today'].forEach(id => {
     const el = document.getElementById(id);
@@ -2637,12 +2639,13 @@ function applyRole_(u) {
 }
 
 /* Top-level tabs: «הבית היום» (landing), «בונוס» (network overview), houses. */
-const TOP_TABS_ = ['today', 'overview', ...HOUSE_KEYS];
+const TOP_TABS_ = ['today', 'overview', ...HOUSE_KEYS, 'guide'];
 
-/* The tab a user may open: a manager is always sent to their own house. */
+/* The tab a user may open: a manager is always sent to their own house —
+ * or the static «מדריך», which every role may read (no data in it). */
 function allowedTab_(key) {
   const u = currentUser;
-  if (u && u.role !== 'admin' && HOUSE_KEYS.includes(u.house)) return u.house;
+  if (u && u.role !== 'admin' && HOUSE_KEYS.includes(u.house)) return key === 'guide' ? 'guide' : u.house;
   return key;
 }
 
@@ -2658,6 +2661,7 @@ function boot() {
     applyRole_(u);
     const hash = (location.hash || '').replace('#', '');
     if ((!u || u.role === 'admin') && TOP_TABS_.includes(hash)) activateTab(hash);
+    else if (hash === 'guide') activateTab('guide');
     // Admin: «הבית היום» of every house + the all-houses alerts, on the
     // landing tab (work.js).
     if (u && u.role === 'admin' && window.Work && window.Work.mountAdmin) {

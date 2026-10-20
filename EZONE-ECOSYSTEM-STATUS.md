@@ -356,6 +356,17 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: «מדריך» usage guide (October 20, 2026)
+
+- A static Hebrew RTL «מדריך» tab, open to every role. It covers:
+  - the tabs;
+  - how to read «הבית היום»;
+  - the bonus calculation (October 2026 rules, per-house table) and how to read it;
+  - patients, team, logs, committees, meeting summaries, feedback reminders, login.
+- Sections for features not live yet are marked «בקרוב».
+- The bonus table is checked against `lib/bonus-eligibility.js` in CI.
+- No data, script or endpoint. SW v34, tests 419. Details: `docs/guide.md`.
+
 ## Managers: «הבית היום» landing tab + one «בונוס» tab (October 20, 2026)
 
 - **Why**: the house page headlined the settled previous month («ספטמבר: לא זכאי 432/510») while
