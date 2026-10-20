@@ -3,6 +3,21 @@
 
 ## Unreleased
 
+### Added — half-yearly feedback «משוב» reminders (October 20, 2026)
+
+- **What**: for each employee of the house, the next feedback is due 6 months after the last recorded one, or after the
+  start date. «הבית היום» shows a card with the overdue (red) and due-within-30-days employees. «צוות ומשמרות» lists
+  everyone with «בוצע» + a date.
+- **Logic**: `lib/feedback-due.js` (pure; month ends clamp; no start date → «אין תאריך התחלה», never guessed; inactive
+  employees left out). It is served at `/lib/feedback-due.js` like the bonus module.
+- **Data**: the roster comes from `houseData.team.staff` (the coordinators digest, with `startDate`). Done dates come from
+  `houseData.feedback.rows` (the Dashboard's append-only `ManagersFeedbackLog`). The write is `/api/work` `feedbackDone`:
+  - the house and author come from the session;
+  - shape checks; write rate limit;
+  - the Dashboard re-checks staff membership.
+- Guide §9: «בקרוב» removed (all sections shipped). SW v36 → v37. **Tests 413 → 426**. Details:
+  `docs/feedback-reminders.md`.
+
 ### Added — «סיכומי ישיבות»: the coordinators' meeting summaries, read-only (October 20, 2026)
 
 - **What**: a new house sub-tab «סיכומי ישיבות» with a month filter (12 months). It shows the FINAL team-meeting

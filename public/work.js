@@ -198,6 +198,69 @@
     var wd = weekdayOf(c.date);
     return (WEEKDAYS[wd] ? 'יום ' + WEEKDAYS[wd] + ' ' : '') + fmtDate(c.date) + (/^\d{2}:\d{2}$/.test(String(c.time || '')) ? ' · ' + c.time : '');
   }
+  /* ── half-yearly feedback «משוב» (20 Oct 2026, docs/feedback-reminders.md) ──
+   * Roster = the house staff from the coordinators digest (houseData.team.staff,
+   * with startDate where the staffing-synced roster has one); done dates =
+   * houseData.feedback.rows (append-only FeedbackLog). The date logic is
+   * lib/feedback-due.js (6 months after the last feedback, or after the start
+   * date; month ends clamp; no anchor → «אין תאריך התחלה», never a guess). */
+  var FD = root.FeedbackDue || (typeof require === 'function' ? require('../lib/feedback-due.js') : null);
+  var FEEDBACK_STATUS = { overdue: 'באיחור', soon: 'בקרוב', ok: 'בהמשך', unknown: 'אין תאריך התחלה' };
+  /* null when there is nothing to compute from, else FD.houseFeedback(...). */
+  function feedbackModel(d) {
+    d = d || {};
+    if (!FD || !d.team || !d.team.available || !d.feedback || d.feedback.supported !== true) return null;
+    var today = isRealIso(d.today) ? d.today : '';
+    return FD.houseFeedback(d.team.staff || [], d.feedback.rows || [], today);
+  }
+  function feedbackUnavailableText(d) {
+    if (!d || !d.feedback) return 'תזכורות המשוב יופיעו אחרי עדכון השרת.';
+    return TEAM_REASON[(d.team && d.team.reason) || 'not_configured'] || TEAM_REASON.unreadable;
+  }
+  function feedbackLine(x) {
+    return '<li class="wk-fb-' + esc(x.status) + '"><span class="wk-name">' + esc(x.name) + '</span><span class="wk-meta">' +
+      (x.due ? 'משוב עד ' + esc(fmtDate(x.due)) : '') + (x.status === 'overdue' ? ' · באיחור ' + esc(String(-x.daysLeft)) + ' ימים' : '') +
+      (x.status === 'soon' ? ' · בעוד ' + esc(String(x.daysLeft)) + ' ימים' : '') + '</span></li>';
+  }
+  /* «הבית היום»: due soon (30 days) + overdue (red). */
+  function feedbackCardHtml(d) {
+    var m = feedbackModel(d);
+    var h = '<div class="card dash-card dash-feedback"><div class="card-title">משובים חצי־שנתיים</div>';
+    if (!m) return h + '<div class="wk-empty">' + esc(feedbackUnavailableText(d)) + '</div></div>';
+    var due = m.items.filter(function (x) { return x.status === 'overdue' || x.status === 'soon'; });
+    h += due.length ? '<ul class="wk-list wk-fb-list">' + due.map(feedbackLine).join('') + '</ul>'
+      : '<div class="wk-empty">אין משובים באיחור או ב-30 הימים הקרובים</div>';
+    if (m.unknown) h += '<div class="wk-note">' + esc(plural(m.unknown, 'עובד/ת אחד/ת ללא תאריך התחלה', 'עובדים ללא תאריך התחלה')) + ' — סמנו «בוצע» אחרי המשוב הבא.</div>';
+    return h + '<button type="button" class="dash-go" data-go-sub="team">לכל המשובים ←</button></div>';
+  }
+  /* «צוות ומשמרות»: every employee, with «בוצע» + date (max = today). */
+  function feedbackListHtml(d) {
+    var m = feedbackModel(d);
+    var h = '<div class="card work-card wk-feedback" id="wkFeedback"><div class="card-title">משובים חצי־שנתיים</div>';
+    if (!m) return h + '<div class="wk-empty">' + esc(feedbackUnavailableText(d)) + '</div></div>';
+    h += '<div class="wk-note">משוב כל 6 חודשים: מהמשוב האחרון, או מתחילת העבודה אם עוד לא היה.</div>';
+    if (!m.items.length) return h + '<div class="wk-empty">אין עובדים רשומים בבית</div></div>';
+    h += '<ul class="wk-list wk-fb-all">' + m.items.map(function (x, i) {
+      return '<li class="wk-fb-' + esc(x.status) + '"><span class="wk-name">' + esc(x.name) + '</span><span class="wk-meta">' +
+        esc(FEEDBACK_STATUS[x.status]) + (x.due ? ' · עד ' + esc(fmtDate(x.due)) : '') +
+        (x.lastFeedback ? ' · משוב אחרון ' + esc(fmtDate(x.lastFeedback)) : (x.startDate ? ' · התחיל/ה ' + esc(fmtDate(x.startDate)) : '')) + '</span>' +
+        '<form class="wk-fb-form" data-fb-form="' + i + '" novalidate><input type="hidden" name="employee" value="' + esc(x.name) + '">' +
+        '<label class="wk-dis-label"><span>תאריך המשוב</span><input name="doneAt" type="date" required value="' + esc(m.today) + '" max="' + esc(m.today) + '"></label>' +
+        '<button type="submit" class="wk-dis-btn">בוצע</button><span class="wk-msg" data-fb-msg role="status" aria-live="polite"></span></form></li>';
+    }).join('') + '</ul>';
+    return h + '</div>';
+  }
+  var FEEDBACK_ERRORS = {
+    not_found: 'העובד/ת לא ברשימת העובדים של הבית — רעננו את הדף',
+    bad_date: 'תאריך לא תקין (לא בעתיד)',
+    roster_unavailable: 'רשימת העובדים לא זמינה כרגע — נסו שוב מאוחר יותר',
+    lock_busy: 'השרת עסוק — נסו שוב בעוד רגע'
+  };
+  function feedbackErrorText(err) {
+    var code = err && err.data && typeof err.data.error === 'string' ? err.data.error : '';
+    return FEEDBACK_ERRORS[code] || 'השמירה נכשלה — נסו שוב';
+  }
+
   /* ── «סיכומי ישיבות» — READ-ONLY (20 Oct 2026, docs/meeting-summaries.md) ──
    * The coordinators' FINAL team-meeting summaries of THIS house (the server
    * decides the house), one month at a time. No edit. Every value escaped;
@@ -533,6 +596,7 @@
     var expectedWeek = expected.filter(function (x) { return weekEnd && x.date <= weekEnd; });
 
     var h = todayCardHtml(todayModel(d));
+    h += feedbackCardHtml(d);
 
     h += '<div class="card dash-card dash-month"><div class="card-title">ביקורים וקליטות</div>';
     h += '<div class="dash-tiles">' +
@@ -710,6 +774,7 @@
     dischargeModes: dischargeModes, dischargeStateOf: dischargeStateOf, dischargeToken: dischargeToken, DISCHARGE_DONE: DISCHARGE_DONE,
     committeesHtml: committeesHtml, committeesState: committeesState, committeeWhen: committeeWhen,
     summariesHtml: summariesHtml, summaryMonths: summaryMonths, monthLabel: monthLabel, SUMMARY_REASON: SUMMARY_REASON,
+    feedbackModel: feedbackModel, feedbackCardHtml: feedbackCardHtml, feedbackListHtml: feedbackListHtml, feedbackErrorText: feedbackErrorText,
     COMMITTEE_REASON: COMMITTEE_REASON,
     WORK_ERRORS: WORK_ERRORS, dischargeErrorText: dischargeErrorText, setDischargeBusy: setDischargeBusy,
     teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml, costHtml: costHtml,
@@ -782,7 +847,7 @@
     if (dh) dh.innerHTML = dashboardHtml(d);
     renderHouseAlerts(panel, key, d);
     var tm = host(panel, 'team');
-    if (tm) tm.innerHTML = teamHtml(d);
+    if (tm) tm.innerHTML = teamHtml(d) + feedbackListHtml(d);
     var th = host(panel, 'therapists');
     if (th) th.innerHTML = therapistsHtml(d);
     var cmt = host(panel, 'committees');
@@ -1094,6 +1159,8 @@
       if (f) f.setAttribute('data-wk-dirty', '1');
     });
     panel.addEventListener('submit', async function (ev) {
+      var fbForm = ev.target.closest && ev.target.closest('[data-fb-form]');
+      if (fbForm) { ev.preventDefault(); await saveFeedback(panel, key, fbForm); return; }
       var dform = ev.target.closest && ev.target.closest('[data-dis-form]');
       if (dform) { ev.preventDefault(); await saveDischarge(panel, key, dform); return; }
       var form = ev.target.closest && ev.target.closest('[data-wk-form]');
@@ -1204,6 +1271,30 @@
     if (flash) flash.textContent = DISCHARGE_DONE[m];
   }
 
+  /* «בוצע» for one employee: one request (double taps ignored), the
+   * Dashboard appends to FeedbackLog; then the house data is reloaded. */
+  async function saveFeedback(panel, key, form, deps) {
+    var d = deps || { post: post, refresh: refresh };
+    if (form.getAttribute('data-fb-busy') === '1') return;
+    var msg = form.querySelector('[data-fb-msg]');
+    var employee = String(form.elements.employee.value || '').trim();
+    var doneAt = String(form.elements.doneAt.value || '').trim();
+    var today = String(form.elements.doneAt.getAttribute('max') || '');
+    if (!FD || !FD.validDoneAt(doneAt, today)) { if (msg) msg.textContent = FEEDBACK_ERRORS.bad_date; return; }
+    form.setAttribute('data-fb-busy', '1');
+    Array.prototype.forEach.call(form.querySelectorAll('input, button'), function (el) { el.disabled = true; });
+    if (msg) msg.textContent = 'שומר...';
+    try {
+      await d.post({ op: 'feedbackDone', house: key, employee: employee, doneAt: doneAt });
+    } catch (e) {
+      form.removeAttribute('data-fb-busy');
+      Array.prototype.forEach.call(form.querySelectorAll('input, button'), function (el) { el.disabled = false; });
+      if (msg) msg.textContent = feedbackErrorText(e);
+      return;
+    }
+    await d.refresh(panel, key, true);
+  }
+
   /* Called by app.js after a house tab is drawn. */
   function onHouseRendered(panel, key) {
     if (!panel || !panel.querySelector('[data-subtabs]')) return;
@@ -1213,6 +1304,7 @@
   }
 
   WorkView.saveDischarge = saveDischarge;   // tests drive it with injected post / refresh / cache
+  WorkView.saveFeedback = saveFeedback;
   root.WorkView = WorkView;
   root.Work = { onHouseRendered: onHouseRendered, showSub: showSub, mountAdmin: mountAdmin, renderTodayAll: renderTodayAll, _cache: cache };
   if (typeof module === 'object' && module.exports) module.exports = WorkView;
