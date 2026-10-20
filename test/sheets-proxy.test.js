@@ -202,7 +202,7 @@ test('sheets proxy (mocked upstream)', async (t) => {
   });
 });
 
-test('SW cache bumped to v32 for the read-resilience UI (monotonic from live v31)', () => {
+test('SW cache ≥ v32 since the read-resilience UI (monotonic from live v31)', () => {
   const sw = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'public', 'sw.js'), 'utf8');
-  assert.match(sw, /const CACHE = 'ezone-managers-v32';/);
+  assert.ok(Number(/const CACHE = 'ezone-managers-v(\d+)';/.exec(sw)[1]) >= 32);
 });

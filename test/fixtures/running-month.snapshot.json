@@ -40,7 +40,7 @@
     ]
   },
   "houseTab": {
-    "hero": "<div class=\"big-emoji\">⚠️</div>\n     <div>\n       <div class=\"sb-name\">רמות השבים</div>\n       <div class=\"sb-title\" data-hero-headline>אוגוסט 2026: לא זכאי · המכסה לא הושלמה (441/510)</div>\n       <div class=\"sb-sub\">מנהל/ת: אורן · ממוצע 14.7 מטופלים/יום · 441/510 ימי טיפול</div>\n     </div>",
+    "hero": "",
     "kpis": [
       [
         "entries",

@@ -395,15 +395,109 @@
   function tile(cls, value, label) {
     return '<div class="dash-tile ' + cls + '"><b>' + esc(value) + '</b><span>' + esc(label) + '</span></div>';
   }
+  /* «הבית היום» (20 Oct 2026): what is happening in the house TODAY, from
+   * the same houseData the house tabs use — the date and weekday, patients in
+   * the house, who is on each shift (בוקר / ערב / לילה, every shift listed
+   * even when nobody is assigned), today's therapy sessions by time, and the
+   * open requests (follow-ups due). A missing coordinators feed is an
+   * explicit empty state with dashes, never zeros. No bonus figure. */
+  function timeKey(r) { return /^\d{2}:\d{2}$/.test(String(r && r.time || '')) ? r.time : '99:99'; }
+  function todayModel(d) {
+    d = d || {};
+    var today = isRealIso(d.today) ? d.today : '';
+    var wd = weekdayOf(today);
+    var t = d.team && d.team.available ? d.team : null;
+    var onShift = t ? (t.today || []) : [];
+    var groups = {};
+    onShift.forEach(function (r) { if (SHIFT_ORDER.indexOf(r.shift) >= 0) (groups[r.shift] = groups[r.shift] || []).push(r); });
+    var byId = {};
+    Object.keys(LOGS).forEach(function (k) { ((d.logs && d.logs[k]) || []).forEach(function (r) { byId[k + '|' + r.id] = r; }); });
+    var requests = ((d.followUps) || []).filter(function (f) { return f && LOGS[f.log]; }).map(function (f) {
+      var r = byId[f.log + '|' + f.id] || {};
+      return { kind: LOG_LABEL[f.log] || '', head: LOGS[f.log].head(r) || '', date: f.date || '', overdue: !!(today && f.date && f.date < today) };
+    });
+    return {
+      today: today, weekday: WEEKDAYS[wd] || '',
+      patients: (d.patients || []).length,
+      teamAvailable: !!t,
+      teamReason: t ? '' : (TEAM_REASON[(d.team && d.team.reason) || 'not_configured'] || TEAM_REASON.unreadable),
+      stale: !!(t && t.stale), updatedAt: t ? t.updatedAt : '',
+      onShiftCount: onShift.length,
+      shifts: SHIFT_ORDER.map(function (s) { return { shift: s, names: (groups[s] || []).map(function (r) { return r.guideName; }), draft: (groups[s] || []).some(function (r) { return r.draft; }) }; }),
+      sessions: t ? (t.therapistWeek || []).filter(function (r) { return r.dayOfWeek === wd; }).slice().sort(function (a, b) {
+        var ka = timeKey(a), kb = timeKey(b); return ka < kb ? -1 : ka > kb ? 1 : 0;
+      }) : [],
+      requests: requests
+    };
+  }
+  function todayShiftsHtml(m) {
+    return '<ul class="wk-list wk-shifts">' + m.shifts.map(function (g) {
+      return '<li' + (g.names.length ? '' : ' class="wk-shift-empty"') + '><span class="wk-shift">' + esc(g.shift) + '</span><span class="wk-name">' +
+        (g.names.length ? g.names.map(esc).join(', ') : 'אין שיבוץ') + '</span>' +
+        (g.draft ? '<span class="wk-meta">טיוטה</span>' : '') + '</li>';
+    }).join('') + '</ul>';
+  }
+  function todaySessionsHtml(m) {
+    return m.sessions.length
+      ? '<ul class="wk-list wk-shifts">' + m.sessions.map(function (r) {
+        return '<li><span class="wk-shift">' + esc(r.time || 'ללא שעה') + '</span><span class="wk-name">' + esc(r.therapistName) +
+          '</span><span class="wk-meta">עם ' + esc(r.patientName) + '</span></li>';
+      }).join('') + '</ul>'
+      : '<div class="wk-empty">אין טיפולים משובצים להיום</div>';
+  }
+  function todayRequestsHtml(m) {
+    return m.requests.length
+      ? '<ul class="wk-list">' + m.requests.map(function (r) {
+        return '<li' + (r.overdue ? ' class="wk-soon"' : '') + '><span class="wk-name">' + esc(r.kind) + (r.head ? ' · ' + esc(r.head) : '') +
+          '</span><span class="wk-meta">' + esc(fmtDate(r.date)) + (r.overdue ? ' · באיחור' : '') + '</span></li>';
+      }).join('') + '</ul>'
+      : '<div class="wk-empty">אין בקשות פתוחות</div>';
+  }
+  function todayCardHtml(m) {
+    var h = '<div class="card dash-card dash-today"><div class="card-title">הבית היום — יום ' + esc(m.weekday) + ' ' + esc(fmtDate(m.today)) + '</div>';
+    h += '<div class="dash-tiles">' +
+      tile('t-teal', m.patients, 'מטופלים בבית') +
+      tile('t-blue', m.teamAvailable ? m.onShiftCount : '—', 'במשמרת היום') +
+      tile('t-violet', m.teamAvailable ? m.sessions.length : '—', 'טיפולים היום') +
+      tile('t-amber', m.requests.length, 'תזכורות פתוחות') + '</div>';
+    if (!m.teamAvailable) {
+      h += '<div class="wk-empty">' + esc(m.teamReason) + '</div>';
+    } else {
+      if (m.stale) h += staleNote({ stale: true, updatedAt: m.updatedAt });
+      h += '<div class="card-subtitle">במשמרת היום</div>' + todayShiftsHtml(m);
+      h += '<div class="card-subtitle">טיפולים היום</div>' + todaySessionsHtml(m);
+    }
+    h += '<div class="card-subtitle">בקשות פתוחות</div>' + todayRequestsHtml(m);
+    return h + '</div>';
+  }
+  /* Admin landing tab: one «הבית היום» card per house, from the cached
+   * houseData (loaded by mountAdmin). A house still loading / failed says so. */
+  function todayAllHtml(rows, labels) {
+    labels = labels || {};
+    return (rows || []).map(function (row) {
+      var name = esc(labels[row.key] || row.key);
+      if (!row.data) {
+        return '<div class="card dash-card today-house"><div class="card-title">' + name + '</div><div class="wk-empty' + (row.error ? ' error' : '') + '">' +
+          (row.error ? 'שגיאה בטעינת נתוני הבית' : 'טוען…') + '</div></div>';
+      }
+      var m = todayModel(row.data);
+      var h = '<div class="card dash-card today-house"><div class="card-title"><span>' + name + '</span><span class="wk-meta">יום ' + esc(m.weekday) + ' ' + esc(fmtDate(m.today)) + '</span></div>';
+      h += '<div class="dash-tiles">' +
+        tile('t-teal', m.patients, 'מטופלים בבית') +
+        tile('t-blue', m.teamAvailable ? m.onShiftCount : '—', 'במשמרת היום') +
+        tile('t-violet', m.teamAvailable ? m.sessions.length : '—', 'טיפולים היום') +
+        tile('t-amber', m.requests.length, 'תזכורות פתוחות') + '</div>';
+      h += m.teamAvailable ? todayShiftsHtml(m) : '<div class="wk-empty">' + esc(m.teamReason) + '</div>';
+      h += '<button type="button" class="dash-go" data-today-open="' + esc(row.key) + '">לבית ←</button>';
+      return h + '</div>';
+    }).join('');
+  }
+
   function dashboardHtml(d) {
     d = d || {};
     var today = d.today || '';
     var wd = weekdayOf(today);
-    var t = d.team && d.team.available ? d.team : null;
-    var pats = d.patients || [], visits = d.visits || [], adm = d.admissions || [], outs = d.outpatients || [];
-    var due = ((d.followUps) || []).filter(function (f) { return LOGS[f.log]; });
-    var onShift = t ? (t.today || []) : [];
-    var sessions = t ? (t.therapistWeek || []).filter(function (r) { return r.dayOfWeek === wd; }) : [];
+    var visits = d.visits || [], adm = d.admissions || [];
     var weekStart = wd >= 0 ? addDaysIso(today, -wd) : '';
     var weekEnd = weekStart ? addDaysIso(weekStart, 6) : '';
     var weekVisits = visits.filter(function (v) { return weekStart && v.date >= weekStart && v.date <= weekEnd; });
@@ -414,26 +508,7 @@
     var expected = (d.expectedAdmissions || []).filter(function (x) { return x && x.date && x.date >= today; });
     var expectedWeek = expected.filter(function (x) { return weekEnd && x.date <= weekEnd; });
 
-    var h = '<div class="card dash-card dash-today"><div class="card-title">היום בבית — יום ' + esc(WEEKDAYS[wd] || '') + ' ' + esc(fmtDate(today)) + '</div>';
-    h += '<div class="dash-tiles">' +
-      tile('t-teal', pats.length, 'מטופלים בבית') +
-      tile('t-blue', t ? onShift.length : '—', 'במשמרת היום') +
-      tile('t-violet', t ? sessions.length : '—', 'טיפולים היום') +
-      tile('t-amber', due.length, 'תזכורות פתוחות') + '</div>';
-    if (!t) {
-      h += '<div class="wk-empty">' + esc(TEAM_REASON[(d.team && d.team.reason) || 'not_configured'] || TEAM_REASON.unreadable) + '</div>';
-    } else {
-      h += '<div class="card-subtitle">במשמרת היום</div>' + (onShift.length
-        ? '<ul class="wk-list wk-shifts">' + shiftLines(onShift) + '</ul>'
-        : '<div class="wk-empty">אין שיבוץ להיום</div>');
-      h += '<div class="card-subtitle">טיפולים היום</div>' + (sessions.length
-        ? '<ul class="wk-list wk-shifts">' + sessions.map(function (r) {
-          return '<li><span class="wk-shift">' + esc(r.time || 'ללא שעה') + '</span><span class="wk-name">' + esc(r.therapistName) +
-            '</span><span class="wk-meta">עם ' + esc(r.patientName) + '</span></li>';
-        }).join('') + '</ul>'
-        : '<div class="wk-empty">אין טיפולים משובצים להיום</div>');
-    }
-    h += '</div>';
+    var h = todayCardHtml(todayModel(d));
 
     h += '<div class="card dash-card dash-month"><div class="card-title">ביקורים וקליטות</div>';
     h += '<div class="dash-tiles">' +
@@ -613,6 +688,7 @@
     COMMITTEE_ERRORS: COMMITTEE_ERRORS, COMMITTEE_LABEL_MAX: COMMITTEE_LABEL_MAX, COMMITTEE_PAST_WARNING: COMMITTEE_PAST_WARNING,
     WORK_ERRORS: WORK_ERRORS, dischargeErrorText: dischargeErrorText, setDischargeBusy: setDischargeBusy,
     teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml, costHtml: costHtml,
+    todayModel: todayModel, todayCardHtml: todayCardHtml, todayAllHtml: todayAllHtml, SHIFT_ORDER: SHIFT_ORDER,
     logListHtml: logListHtml, logPanelHtml: logPanelHtml, followUpsHtml: followUpsHtml, entryFromForm: entryFromForm };
 
   /* ── DOM wiring (browser only) ──────────────────────────── */
@@ -809,7 +885,14 @@
     return true;
   }
 
-  var admin = { el: null, keys: [], labels: {}, filter: '', cmEl: null, cmFilter: '' };
+  var admin = { el: null, keys: [], labels: {}, filter: '', cmEl: null, cmFilter: '', todayEl: null, failed: {} };
+  /* Admin landing tab «הבית היום»: one card per house (cached houseData). */
+  function renderTodayAll() {
+    if (!admin.todayEl) return;
+    admin.todayEl.innerHTML = todayAllHtml(admin.keys.map(function (k) {
+      return { key: k, data: cache[k] ? cache[k].data : null, error: !cache[k] && !!admin.failed[k] };
+    }), admin.labels);
+  }
   /* Admin overview: «ועדות קרובות — כל הבתים» with its own house filter. */
   function renderAdminCommittees() {
     var CA = root.CommitteeAlerts;
@@ -824,6 +907,7 @@
   }
   function renderAdminAlerts() {
     renderAdminCommittees();
+    renderTodayAll();
     var DA = root.DischargeAlerts;
     if (!DA || !admin.el || !root.document) return;
     var today = DA.israelToday();
@@ -837,10 +921,22 @@
   /* Admin overview: load every house's houseData (cached 60 s, shared with the
    * house tabs) and show the merged alerts. The server refuses this for a
    * manager anyway — houseData is pinned to their own house. */
-  function mountAdmin(el, keys, labels) {
+  function mountAdmin(el, keys, labels, todayEl) {
     var u = me();
     if (!el || !u || u.role !== 'admin') return;
     admin.el = el; admin.keys = (keys || []).slice(); admin.labels = labels || {};
+    if (todayEl && todayEl.getAttribute('data-wired') !== '1') {
+      admin.todayEl = todayEl;
+      todayEl.setAttribute('data-wired', '1');
+      todayEl.addEventListener('click', function (ev) {
+        var b = ev.target.closest && ev.target.closest('[data-today-open]');
+        if (!b) return;
+        var house = b.getAttribute('data-today-open');
+        if (admin.keys.indexOf(house) < 0) return;
+        var tab = root.document.querySelector('.tab[data-tab="' + house + '"]');
+        if (tab) tab.click();
+      });
+    }
     var cmEl = root.document && root.document.getElementById('committeeAlertsAll');
     if (cmEl && cmEl.getAttribute('data-wired') !== '1') {
       admin.cmEl = cmEl;
@@ -894,8 +990,10 @@
       });
     }
     renderAdminAlerts();
-    Promise.all(admin.keys.map(function (k) { return load(k, false).catch(function () { return null; }); }))
-      .then(renderAdminAlerts);
+    Promise.all(admin.keys.map(function (k) {
+      return load(k, false).then(function (d) { delete admin.failed[k]; return d; })
+        .catch(function () { admin.failed[k] = true; return null; });
+    })).then(renderAdminAlerts);
   }
 
   function showSub(panel, sub) {
@@ -1207,6 +1305,6 @@
   WorkView.saveCommittee = saveCommittee;
   WorkView.setCommitteeBusy = setCommitteeBusy;
   root.WorkView = WorkView;
-  root.Work = { onHouseRendered: onHouseRendered, showSub: showSub, mountAdmin: mountAdmin, _cache: cache };
+  root.Work = { onHouseRendered: onHouseRendered, showSub: showSub, mountAdmin: mountAdmin, renderTodayAll: renderTodayAll, _cache: cache };
   if (typeof module === 'object' && module.exports) module.exports = WorkView;
 }(typeof self !== 'undefined' ? self : this));

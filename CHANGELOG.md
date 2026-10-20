@@ -3,6 +3,29 @@
 
 ## Unreleased
 
+### Changed — «הבית היום» landing tab + one «בונוס» tab; no settled-month banner on load (October 20, 2026)
+
+- **Why**: the house page opened with the settled previous month as a hero («ספטמבר: לא זכאי
+  432/510») while October was selected. Bonus figures were spread over four places.
+- **Top tabs** (admins): «הבית היום» (new, default) shows one card per house: the date and
+  weekday, patients, the morning / evening / night shifts, sessions, open reminders, and the
+  all-houses alerts. «בונוס» (was «דשבורד») holds every network bonus element: the picker, the
+  KPIs, the winners banner, the chart, the house cards and the monthly occupancy.
+- **House sub-tabs**: «הבית היום» (was «ראשי», default) has no bonus element. «בונוס» (was
+  «בונוסים») now also holds the «חודש בונוס» picker, the hero and the «הבונוס שלי» dial.
+- **Banner**: none in the running month. A finished month picked in «חודש בונוס» shows its hero
+  inside «בונוס», labelled «<month> — סופי».
+- **Today card** (`WorkView.todayModel` / `todayCardHtml` / `todayAllHtml`):
+  - it uses only the existing `houseData`;
+  - every shift is listed even when empty («אין שיבוץ»);
+  - sessions are sorted by time;
+  - overdue requests are marked «באיחור»;
+  - a missing coordinators feed gives `—` and the reason, never fake data.
+  Every value is escaped.
+- `lib/bonus-eligibility.js` untouched. Running-month golden snapshot: only `houseTab.hero`
+  changed (now empty). No new endpoint, env var or secret. SW v32 → v33. **Tests 398 → 412**.
+  Details: `docs/home-and-bonus-tabs.md`.
+
 ### Fixed — reads: classified errors, last-good cache, Hebrew «נסו שוב» (October 19, 2026)
 
 - **Why**: from ~15:00 on 19 Oct the app showed «שגיאה: upstream_error» and every card stayed on

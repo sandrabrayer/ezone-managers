@@ -74,22 +74,29 @@ static mount; see `docs/bonus-month-labelling.md`.
 
 ## Access and work tabs (13 Oct 2026)
 
+**Tabs (20 Oct 2026, `docs/home-and-bonus-tabs.md`)**: the app opens on «הבית היום».
+Admins see one card per house there. A house manager sees their own house's «הבית היום»
+sub-tab. Every bonus element (the picker, hero, dial, plan, KPIs, chart, history, winners
+banner and house cards) lives in a «בונוס» tab. No settled-month banner shows on load; a finished
+month appears only when it is picked in «חודש בונוס».
+
 Username + personal code per person (`docs/access.md`): a house manager sees only their
-house; Sandra and Ron see all. Each house has sub-tabs — בונוסים, מטופלים
+house; Sandra and Ron see all. Each house has sub-tabs — הבית היום, בונוס, מטופלים
 (patients, outpatients, visits and admissions this month), שיחות משפחה,
 שיחות עם עובדים (private), אירועים חריגים — with follow-up reminders.
 
 Dashboard (14 Oct 2026):
-- Each house opens on «ראשי», which shows:
-  - a bonus dial (`BonusView.bonusGaugeView`) with a «מה אם?» calculator
-    (`BonusView.bonusCalcView`);
+- Each house opens on «הבית היום» (was «ראשי»), which shows:
+  - the «הבית היום» card (date + weekday, patients, בוקר / ערב / לילה, sessions, open
+    requests);
   - expected admissions this week and over the next 14 days;
   - the house manpower cost (stage 3, op `houseCost` → Dashboard → staffing feed, house totals
     only);
-  - today in the house (on shift, therapy sessions, reminders);
   - visits and admissions this week and month;
   - the latest unusual events.
 - «שיחות משפחה» was removed.
+- The bonus dial (`BonusView.bonusGaugeView`) and its «מה אם?» calculator
+  (`BonusView.bonusCalcView`) moved to «בונוס» on 20 Oct 2026.
 
 Expected discharge date (15 Oct 2026): each patient on «מטופלים בבית» shows
 «שחרור משוער: dd/m/yy» (or «הגדרת תאריך שחרור») with a native date picker.
@@ -101,12 +108,12 @@ Details: `docs/expected-discharge.md`.
 
 Committee date «ועדה» (15 Oct 2026): a second line per patient on «מטופלים בבית»,
 «ועדה: dd/m/yy · <label>», with set / change / clear. The Dashboard stores it append-only. Alerts
-«ועדה היום» / «ועדה השבוע» (7 days) appear on «ראשי» with a badge, plus an admin all-houses card.
+«ועדה היום» / «ועדה השבוע» (7 days) appear on «הבית היום» with a badge, plus an admin all-houses card.
 Details: `docs/committee.md`.
 
-Discharge alerts (15 Oct 2026): «ראשי» shows «שחרור קרוב» for expected dates in the next 14 days
+Discharge alerts (15 Oct 2026): «הבית היום» shows «שחרור קרוב» for expected dates in the next 14 days
 and a red «דורש עדכון» for passed dates, plus a badge; admins get an all-houses card with a house
-filter on the overview. From the manager's own dates only, in-app only. Details:
+filter on the «הבית היום» tab. From the manager's own dates only, in-app only. Details:
 `docs/discharge-alerts.md`.
 
 Temporary exit and return (15 Oct 2026): a return within 7 days keeps the stay (first

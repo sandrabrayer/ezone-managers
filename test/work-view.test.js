@@ -162,7 +162,7 @@ test('family calls are gone from the app (no log definition)', () => {
 test('dashboard: today in the house — patients, on shift, today\'s therapy sessions, open reminders', () => {
   const d = Object.assign({}, DATA, { today: '2026-10-13', team: TEAM }); // 13/10/26 is a Tuesday (2)
   const h = W.dashboardHtml(d);
-  assert.match(h, /היום בבית — יום שלישי 13\/10\/26/);
+  assert.match(h, /הבית היום — יום שלישי 13\/10\/26/);
   assert.match(h, /<b>2<\/b><span>מטופלים בבית/);
   assert.match(h, /<b>3<\/b><span>במשמרת היום/);
   assert.match(h, /<b>1<\/b><span>טיפולים היום[\s\S]*<b>1<\/b><span>תזכורות פתוחות/);
