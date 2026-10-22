@@ -259,7 +259,8 @@
           <h2>7. ועדות</h2>
           <ul>
             <li>את הוועדות קובעים <b>הרכזים</b> באפליקציה שלהם: תאריך, שעה, סוג, משתתפים ובית.</li>
-            <li>כאן רואים את הוועדות הקרובות של הבית, לקריאה בלבד: בלשונית «ועדות» כולן, וב«הבית היום» — «ועדה היום» ו«ועדה השבוע».</li>
+            <li>כאן רואים את הוועדות הקרובות של הבית, לקריאה בלבד: בלשונית «ועדות» כולן (עם סטטוס והערות; ועדה שבוטלה מסומנת בקו), וב«הבית היום» — התראה «ועדה היום», «ועדה מחר» ו«ועדה בעוד יומיים», ומתחתן «בהמשך השבוע».</li>
+            <li>ועדה שבוטלה לא מופיעה בהתראות.</li>
             <li>אחרי שהרכז/ת שומר/ת ועדה, אפשר לשלוח לך הודעת וואטסאפ עם הפרטים.</li>
             <li>טעות בוועדה? פונים לרכז/ת.</li>
           </ul>
@@ -271,6 +272,8 @@
             <li>סיכומי הישיבות שהרכזים כותבים מופיעים כאן לקריאה בלבד — רק של הבית שלך.</li>
             <li>בלשונית «סיכומי ישיבות» בוחרים חודש. כל ישיבה נפתחת בלחיצה: משתתפים, סיכום כללי, ולכל מטופל/ת — עדכון שבועי ומטרות.</li>
             <li>מופיעות רק ישיבות שהרכז/ת סיים/ה («סיום ישיבה»). ישיבה בעבודה עוד לא מופיעה.</li>
+            <li><b>עדכון משמרת</b> — בלשונית «עדכון משמרת» רואים מה המשמרות כתבו זו לזו באפליקציית הרכזים, שבוע אחד בכל פעם («שבוע קודם» / «השבוע»), עם סינון לפי משמרת. לקריאה בלבד — רק של הבית שלך. עדכון שנכתב מאוחר יותר מסומן «הוזן בדיעבד».</li>
+            <li>«לא הצלחנו לטעון…» + «נסו שוב» — תקלה בקריאה. זה לא אומר שאין עדכונים.</li>
           </ul>
         </section>
 
@@ -314,6 +317,7 @@
         <button type="button" class="subtab" data-sub="patients" role="tab" aria-selected="false">מטופלים</button>
         <button type="button" class="subtab" data-sub="committees" role="tab" aria-selected="false">ועדות</button>
         <button type="button" class="subtab" data-sub="summaries" role="tab" aria-selected="false">סיכומי ישיבות</button>
+        <button type="button" class="subtab" data-sub="shiftUpdates" role="tab" aria-selected="false">עדכון משמרת</button>
         <button type="button" class="subtab" data-sub="team" role="tab" aria-selected="false">צוות ומשמרות</button>
         <button type="button" class="subtab" data-sub="therapists" role="tab" aria-selected="false">מטפלים</button>
         <button type="button" class="subtab" data-sub="staffTalks" role="tab" aria-selected="false">שיחות עם עובדים</button>
@@ -338,6 +342,7 @@
       <section data-sub-panel="committees" hidden></section>
       <!-- «סיכומי ישיבות» (20 Oct 2026): READ-ONLY, own house, month filter (work.js summariesHtml). -->
       <section data-sub-panel="summaries" hidden></section>
+      <section data-sub-panel="shiftUpdates" hidden></section>
       <section data-sub-panel="team" hidden></section>
       <section data-sub-panel="therapists" hidden></section>
       <section data-sub-panel="staffTalks" hidden></section>

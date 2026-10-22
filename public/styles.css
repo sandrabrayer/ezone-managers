@@ -2088,3 +2088,9 @@ body.is-locked { overflow: hidden; }
 .wk-fb-form input[type="date"] { min-height: 44px; font-size: 16px; }
 .wk-fb-form .wk-dis-btn { min-height: 44px; }
 
+/* «עדכון משמרת» (22 Oct 2026, docs/shift-updates.md) — read-only week view. */
+.wk-su-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.wk-su-bar .dash-go, .wk-su-bar select { min-height: 44px; font-size: 16px; }
+.wk-su-day { margin: 14px 0 6px; font-weight: 700; font-size: 16px; color: var(--text); }
+.wk-su-row { padding: 8px 10px; margin-bottom: 6px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); overflow-wrap: anywhere; }
+.wk-su-late { display: inline-block; margin-inline-start: 8px; font-size: 14px; color: var(--text-mute); }

@@ -288,6 +288,66 @@
     }
     return out;
   }
+  /* ── «עדכון משמרת» — READ-ONLY (22 Oct 2026, docs/shift-updates.md) ──
+   * The coordinators' shift-handover log of THIS house (the server decides the
+   * house), one week at a time (the 7 days ending `upTo`), newest first, with a
+   * shift filter. Fetched only when the sub-tab is opened; never stored on the
+   * device. A failed read is an explicit error with «נסו שוב» — never an empty week. */
+  var SU_SHIFTS = ['בוקר', 'אחר צהריים', 'לילה'];
+  var SU_REASON = {
+    not_configured: 'עדכוני המשמרת מאפליקציית הרכזים עוד לא מחוברים.',
+    unauthorized: 'עדכוני המשמרת מאפליקציית הרכזים עוד לא מחוברים.'
+  };
+  var SU_UNREADABLE = 'לא הצלחנו לטעון את עדכוני המשמרת כרגע.';
+  function addDaysIso(iso, n) {
+    var p = String(iso).split('-').map(Number);
+    return new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)).toISOString().slice(0, 10);
+  }
+  function israelDayOf(t) {
+    var d = new Date(String(t || ''));
+    if (isNaN(d.getTime())) return '';
+    try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); } catch (e) { return ''; }
+  }
+  function israelTimeOf(t) {
+    var d = new Date(String(t || ''));
+    if (isNaN(d.getTime())) return '';
+    try { return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', hour12: false }).format(d); } catch (e) { return ''; }
+  }
+  /* st: { upTo, today, shift, res: null (loading) | { error, code? } | { updates, from, upTo } }. */
+  function shiftUpdatesHtml(st) {
+    var h = '<div class="card work-card wk-shift-updates"><div class="card-title">עדכון משמרת</div>';
+    h += '<div class="wk-note">מה שהמשמרות כותבות זו לזו באפליקציית הרכזים — שבוע אחד בכל פעם. לקריאה בלבד — רק של הבית שלך.</div>';
+    var isThisWeek = st.upTo >= st.today;
+    h += '<div class="wk-su-bar"><button type="button" class="dash-go" data-su-nav="prev">שבוע קודם</button>' +
+      '<button type="button" class="dash-go" data-su-nav="this"' + (isThisWeek ? ' aria-pressed="true"' : '') + '>השבוע</button>' +
+      '<button type="button" class="dash-go" data-su-nav="next"' + (isThisWeek ? ' disabled' : '') + '>שבוע הבא</button>' +
+      '<label class="month-picker"><span>משמרת</span><select data-su-shift aria-label="סינון לפי משמרת"><option value="">כל המשמרות</option>' +
+      SU_SHIFTS.map(function (x) { return '<option value="' + esc(x) + '"' + (x === st.shift ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') +
+      '</select></label></div>';
+    var res = st.res;
+    if (!res) return h + '<div class="wk-empty">טוען…</div></div>';
+    if (res.error) {
+      return h + '<div class="wk-empty error" role="alert">' + esc(SU_REASON[res.code] || SU_UNREADABLE) + ' זה לא אומר שאין עדכונים.</div>' +
+        '<button type="button" class="dash-go" data-su-retry>נסו שוב</button></div>';
+    }
+    h += '<div class="wk-meta">' + esc(fmtDate(res.from) + ' – ' + fmtDate(res.upTo)) + '</div>';
+    var rows = (res.updates || []).filter(function (u) { return !st.shift || u.shift === st.shift; });
+    if (!rows.length) return h + '<div class="wk-empty">אין עדכוני משמרת בשבוע הזה' + (st.shift ? ' במשמרת ' + esc(st.shift) : '') + '</div></div>';
+    var lastDate = '';
+    h += rows.map(function (u) {
+      var head = '';
+      if (u.date !== lastDate) {
+        lastDate = u.date;
+        var wd = weekdayOf(u.date);
+        head = '<div class="wk-su-day">' + esc((WEEKDAYS[wd] ? 'יום ' + WEEKDAYS[wd] + ' ' : '') + fmtDate(u.date)) + '</div>';
+      }
+      var late = u.backdated ? '<span class="wk-su-late">הוזן בדיעבד · ' + esc(fmtDate(israelDayOf(u.createdAt)) + ' ' + israelTimeOf(u.createdAt)) + '</span>' : '';
+      return head + '<div class="wk-su-row"><span class="wk-shift">' + esc(u.shift) + '</span> <span class="wk-name">' + esc(u.author) + '</span>' + late +
+        '<div class="wk-ms-text">' + esc(u.note) + '</div></div>';
+    }).join('');
+    return h + '</div>';
+  }
+
   /* st: { month, months, res: undefined (loading) | { error } | { summaries } }. */
   function summariesHtml(st) {
     var h = '<div class="card work-card wk-summaries"><div class="card-title">סיכומי ישיבות צוות</div>';
@@ -781,6 +841,7 @@
     dischargeModes: dischargeModes, dischargeStateOf: dischargeStateOf, dischargeToken: dischargeToken, DISCHARGE_DONE: DISCHARGE_DONE,
     committeesHtml: committeesHtml, committeesState: committeesState, committeeWhen: committeeWhen,
     summariesHtml: summariesHtml, summaryMonths: summaryMonths, monthLabel: monthLabel, SUMMARY_REASON: SUMMARY_REASON,
+    shiftUpdatesHtml: shiftUpdatesHtml, SU_REASON: SU_REASON,
     feedbackModel: feedbackModel, feedbackCardHtml: feedbackCardHtml, feedbackListHtml: feedbackListHtml, feedbackErrorText: feedbackErrorText,
     COMMITTEE_REASON: COMMITTEE_REASON,
     WORK_ERRORS: WORK_ERRORS, dischargeErrorText: dischargeErrorText, setDischargeBusy: setDischargeBusy,
@@ -1075,6 +1136,32 @@
     });
     panel.querySelectorAll('[data-sub-panel]').forEach(function (s) { s.hidden = s.getAttribute('data-sub-panel') !== sub; });
     if (sub === 'summaries') loadSummaries(panel, panel.getAttribute('data-house-key'));
+    if (sub === 'shiftUpdates') loadShiftUpdates(panel, panel.getAttribute('data-house-key'));
+  }
+
+  /* «עדכון משמרת»: per house + week, kept 2 minutes in memory only. */
+  var suState = {};   // houseKey → { upTo, today, shift, data: { upTo: { at, res } } }
+  function paintShiftUpdates(panel, key) {
+    var hostEl = host(panel, 'shiftUpdates');
+    var st = suState[key];
+    if (!hostEl || !st) return;
+    var c = st.data[st.upTo];
+    hostEl.innerHTML = shiftUpdatesHtml({ upTo: st.upTo, today: st.today, shift: st.shift, res: c ? c.res : null });
+  }
+  function loadShiftUpdates(panel, key, force) {
+    if (!panel || !key) return;
+    var today = (root.CommitteeAlerts ? root.CommitteeAlerts.israelToday() : '') || (cache[key] && cache[key].data && cache[key].data.today) || '';
+    var st = suState[key] || (suState[key] = { upTo: today, today: today, shift: '', data: {} });
+    st.today = today || st.today;
+    var upTo = st.upTo, c = st.data[upTo];
+    if (!force && c && c.res && !c.res.error && Date.now() - c.at < 120000) { paintShiftUpdates(panel, key); return; }
+    st.data[upTo] = { at: Date.now(), res: null };
+    paintShiftUpdates(panel, key);
+    post({ op: 'shiftUpdates', house: key, upTo: upTo }).then(function (r) {
+      st.data[upTo] = { at: Date.now(), res: { updates: Array.isArray(r.updates) ? r.updates : [], from: r.from, upTo: r.upTo } };
+    }).catch(function (e) {
+      st.data[upTo] = { at: Date.now(), res: { error: true, code: e && e.data && e.data.error } };   // never a raw code on screen
+    }).then(function () { if (st.upTo === upTo) paintShiftUpdates(panel, key); });
   }
 
   /* «סיכומי ישיבות»: fetched only when the sub-tab is opened, per house + month,
@@ -1109,6 +1196,16 @@
       var t = ev.target;
       if (onAlertClick(ev, function (house) { return house === key ? panel : null; })) return;
       if (t.closest && t.closest('[data-ms-retry]')) { loadSummaries(panel, key, true); return; }
+      if (t.closest && t.closest('[data-su-retry]')) { loadShiftUpdates(panel, key, true); return; }
+      var suNav = t.closest && t.closest('[data-su-nav]');
+      if (suNav && suState[key]) {
+        var sst = suState[key], dir = suNav.getAttribute('data-su-nav');
+        if (dir === 'this') sst.upTo = sst.today;
+        else if (dir === 'prev') sst.upTo = addDaysIso(sst.upTo, -7);
+        else if (dir === 'next' && sst.upTo < sst.today) { var nx = addDaysIso(sst.upTo, 7); sst.upTo = nx > sst.today ? sst.today : nx; }
+        loadShiftUpdates(panel, key);
+        return;
+      }
       var cmOpen = t.closest && t.closest('[data-cm-alert-open]');
       if (cmOpen) { if (cmOpen.getAttribute('data-cm-alert-open') === key) showSub(panel, 'committees'); return; }
       var subBtn = t.closest && t.closest('[data-sub]');
@@ -1154,6 +1251,12 @@
       refresh(panel, key, true);
     });
     panel.addEventListener('change', function (ev) {
+      var suSel = ev.target.closest && ev.target.closest('[data-su-shift]');
+      if (suSel && suState[key]) {
+        suState[key].shift = SU_SHIFTS.indexOf(suSel.value) >= 0 ? suSel.value : '';   // only a listed shift
+        paintShiftUpdates(panel, key);
+        return;
+      }
       var sel = ev.target.closest && ev.target.closest('[data-ms-month]');
       if (!sel) return;
       var st = summaryState[key];

@@ -116,6 +116,9 @@ plus an admin all-houses card. Since 22 Oct 2026 they come straight from the coo
 (`COORDINATORS_FEED_URL` + `COORDINATORS_FEED_SECRET`, `docs/coordinators-feed.md`; the Dashboard is the
 fallback). `/api/work` `committeeSet` → 410. Details: `docs/committee.md`.
 
+«עדכון משמרת» (READ-ONLY, 22 Oct 2026): the coordinators' shift-handover log of the manager's own house,
+one week at a time with a shift filter, from the coordinators feed only. Details: `docs/shift-updates.md`.
+
 Discharge alerts (15 Oct 2026): «הבית היום» shows «שחרור קרוב» for expected dates in the next 14 days
 and a red «דורש עדכון» for passed dates, plus a badge; admins get an all-houses card with a house
 filter on the «הבית היום» tab. From the manager's own dates only, in-app only. Details:

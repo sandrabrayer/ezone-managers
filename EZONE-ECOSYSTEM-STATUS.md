@@ -359,6 +359,12 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: «עדכון משמרת» + summaries from the coordinators feed (October 22, 2026)
+
+- New house sub-tab «עדכון משמרת»: the coordinators' shift updates of the manager's own house, one week
+  at a time, read-only, from `POST /api/managers-feed` (`kind: 'shiftUpdates'`). Details: `docs/shift-updates.md`.
+- «סיכומי ישיבות» read the coordinators feed first; the Dashboard path is the fallback.
+
 ## Managers: committees from the coordinators feed + 2-day alerts (October 22, 2026)
 
 - The Managers server reads committees straight from the coordinators server (`POST /api/managers-feed`,
