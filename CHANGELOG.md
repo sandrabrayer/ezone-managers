@@ -3,6 +3,14 @@
 
 ## Unreleased
 
+### Docs — CLAUDE.md «Repo footer» rule (October 22, 2026)
+
+- **What**: new CLAUDE.md §11: every Claude reply to Sandra ends with
+  `📁 Repo: sandrabrayer/ezone-managers · Branch: <current branch>` (real branch from `git branch --show-current`;
+  `(not pushed)` when not on GitHub yet; each repo listed in a multi-repo session).
+- **Why**: Sandra works in the Claude app/web, where the terminal status line (repo/branch) is not shown.
+- Docs + test only: no code, no SW bump. New guard `test/claude-md.test.js`. **Tests 426 → 428**.
+
 ### Docs — ecosystem addendum for all eight Projects (October 20, 2026)
 
 - `docs/ecosystem-addendum-2026-10-20.md` lists the five changes of 20 Oct 2026 across Managers / Coordinators / Dashboard,
