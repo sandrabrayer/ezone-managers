@@ -110,3 +110,12 @@ fallbacks in `HOUSE_LABELS` (`public/app.js`) and `HOUSE_BONUS`
 (`lib/bonus-eligibility.js`) must match the status doc roster table;
 `test/house-coverage.test.js` and `test/ecosystem-status-doc.test.js` fail
 CI on drift. Efroni's backend id is `arfoni`; the frontend key is `efroni`.
+
+## 11. Repo footer
+**Repo footer.** End EVERY reply to Sandra with one footer line naming the
+repo and branch you are working in, so she always sees where the work is
+happening:
+`📁 Repo: sandrabrayer/ezone-managers · Branch: <current branch>`
+Use the real current branch (`git branch --show-current`); add
+`(not pushed)` when it does not exist on GitHub yet. In a multi-repo
+session, list each repo touched in that reply.
