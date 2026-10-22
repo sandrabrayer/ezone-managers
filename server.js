@@ -24,6 +24,7 @@ const path = require('path');
 
 const access = require('./lib/access');
 const { createReadiness } = require('./lib/readiness');
+const { createCoordFeed } = require('./lib/coord-feed');
 
 const PORT = Number(process.env.PORT) || 3000;
 const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL || '';
@@ -339,6 +340,32 @@ app.get('/api/sheets', requireUser, async (req, res) => {
 
 // ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
 const WORK_OPS = new Set(['houseData', 'houseCost', 'logAdd', 'logUpdate', 'dischargeSet', 'meetingSummaries', 'feedbackDone']);
+// Direct read-only feed from the Coordinators app (22 Oct 2026, docs/coordinators-feed.md):
+// committees (with status + notes) merged into houseData, meeting summaries (Dashboard as the
+// fallback) and «עדכון משמרת» (feed only). OFF — never called — until both variables are set.
+const coordFeed = createCoordFeed(process.env);
+const LOCAL_WORK_OPS = new Set(['shiftUpdates']);   // answered from the coordinators feed only
+function logFeed(kind, house, outcome, count, ms) {
+  console.log(`[feed] kind=${kind} house=${house} outcome=${outcome}${count != null ? ' count=' + count : ''} ms=${ms}`);
+}
+async function feedRead(kind, house, params) {
+  const t0 = Date.now();
+  const r = await coordFeed.read(kind, house, params);
+  const n = r.ok ? (r.data.committees || r.data.meetings || r.data.updates || []).length : null;
+  if (coordFeed.configured) logFeed(kind, house, r.ok ? 'ok' : r.error, n, Date.now() - t0);
+  return r;
+}
+/* houseData.committees from the coordinators feed when it answers; else the Dashboard's copy
+ * stays (fallback); a configured feed that failed with NO Dashboard copy → an honest reason. */
+function mergeCommittees(data, feed) {
+  if (!data || typeof data !== 'object' || data.ok === false || !feed) return data;
+  if (feed.ok) {
+    data.committees = { available: true, today: feed.data.today, items: feed.data.committees, source: 'coordinators' };
+  } else if (feed.error !== 'not_configured' && !(data.committees && data.committees.available === true)) {
+    data.committees = { available: false, reason: feed.error === 'unauthorized' ? 'unauthorized' : 'feed_down' };
+  }
+  return data;
+}
 // Committees are READ-ONLY here since 20 Oct 2026 (docs/committee.md): the coordinators set them in
 // their app; the managers see them in houseData.committees. The old write op is GONE (410), refused
 // before anything is forwarded — never reaches the Dashboard.
@@ -368,16 +395,29 @@ app.post('/api/work', requireUser, async (req, res) => {
   if (RETIRED_WORK_OPS.has(op)) {
     return res.status(410).json({ error: 'committee_read_only', message: 'את הוועדות קובעים הרכזים באפליקציית הרכזים.' });
   }
-  if (!WORK_OPS.has(op)) return res.status(400).json({ error: 'unknown_op' });
+  if (!WORK_OPS.has(op) && !LOCAL_WORK_OPS.has(op)) return res.status(400).json({ error: 'unknown_op' });
   // The house is the manager's own; an admin names one.
   const house = u.role === 'admin' ? String(b.house || '') : u.house;
   if (!access.canSeeHouse(u, house) || !access.HOUSE_KEYS.includes(house)) {
     return res.status(403).json({ error: 'forbidden' });
   }
+  // «עדכון משמרת» (22 Oct 2026): READ-ONLY, the manager's own house, from the coordinators feed.
+  if (op === 'shiftUpdates') {
+    if (b.upTo != null && b.upTo !== '' && !ISO_DATE_RE.test(String(b.upTo))) return res.status(400).json({ error: 'bad_date' });
+    const r = await feedRead('shiftUpdates', house, { upTo: b.upTo ? String(b.upTo) : '' });
+    return res.status(200).json(r.ok ? { ok: true, house, from: r.data.from, upTo: r.data.upTo, updates: r.data.updates } : { ok: false, error: r.error });
+  }
   const body = { action: 'managersWork', secret: WORK_SECRET, op, house, role: u.role, actor: u.name, actorId: u.id };
   if ((op === 'houseData' || op === 'houseCost' || op === 'meetingSummaries') && YM_RE.test(String(b.month || ''))) body.month = String(b.month);
   // «סיכומי ישיבות» (20 Oct 2026, docs/meeting-summaries.md): READ-ONLY; a bad month is refused here.
   if (op === 'meetingSummaries' && b.month != null && b.month !== '' && !YM_RE.test(String(b.month))) return res.status(400).json({ error: 'bad_month' });
+  // The coordinators feed first (22 Oct 2026); the Dashboard path stays the fallback.
+  if (op === 'meetingSummaries' && coordFeed.configured && body.month) {
+    const r = await feedRead('summaries', house, { month: body.month });
+    if (r.ok) return res.status(200).json({ ok: true, summaries: { available: true, items: r.data.meetings, source: 'coordinators' } });
+  }
+  // houseData: the committees come from the coordinators feed, read in parallel with the Dashboard.
+  const committeesP = op === 'houseData' && coordFeed.configured ? feedRead('committees', house) : null;
   if (WRITE_OPS.has(op) && !allowWrites(clientIp(req))) {
     return res.status(429).json({ error: 'יותר מדי עדכונים. נסו שוב מאוחר יותר.' });
   }
@@ -441,6 +481,7 @@ app.post('/api/work', requireUser, async (req, res) => {
       // above); the browser only gets the code.
       if (code === 'exception' || code === 'unknown') return res.status(200).json({ ok: false, error: code === 'unknown' ? 'upstream_bad_response' : 'exception' });
     }
+    if (committeesP) mergeCommittees(data, await committeesP);
     res.status(data && data.ok === false && data.error === 'unauthorized' ? 503 : 200).json(data);
   } catch (err) {
     const f = workFailure(err);
@@ -463,4 +504,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, _rateLimiters: { allowSheets, allowLogin, allowWrites }, _sheetsCache: sheetsCache };
+module.exports = { app, _rateLimiters: { allowSheets, allowLogin, allowWrites }, _sheetsCache: sheetsCache, _coordFeed: coordFeed, _mergeCommittees: mergeCommittees };

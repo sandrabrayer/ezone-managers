@@ -3,6 +3,19 @@
 
 ## Unreleased
 
+### Added — committees from the coordinators feed; status + notes; 2-day alerts (October 22, 2026)
+
+- **What**: `houseData.committees` comes straight from the coordinators server (`lib/coord-feed.js`, server-side
+  only), with `status` and `notes`. The Dashboard copy is the fallback. Alerts are today … +2 («ועדה היום» /
+  «ועדה מחר» / «ועדה בעוד יומיים», the badge); +3 … +7 sit under «בהמשך השבוע». A cancelled committee never alerts.
+- **Why**: the coordinators now record status (cancel) and notes, which the Dashboard hop drops; the managers get
+  the same 2-day lead as the רכז/ת.
+- **Security**: new Railway variables `COORDINATORS_FEED_URL` (https only) + `COORDINATORS_FEED_SECRET` (32+,
+  Bearer header, never in the browser). Fail-closed: unset / invalid → no request. The house is decided from the
+  session; answers re-checked (house echo, known keys, bounded strings). Logs: kind / house / outcome / count.
+- **Docs**: `docs/coordinators-feed.md` (new), `docs/committee.md`, README, ecosystem status. SW v38.
+- **Tests**: `test/coord-feed.test.js` (new, 9); `committee.test.js` updated (count = alerts). **Tests 428 → 437**.
+
 ### Docs — CLAUDE.md «Repo footer» rule (October 22, 2026)
 
 - **What**: new CLAUDE.md §11: every Claude reply to Sandra ends with

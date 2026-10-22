@@ -118,7 +118,8 @@ test('C: sorted by date; name = patient else type; label = type (with a patient)
   const m = CA.houseAlerts(DM([ITEMS[1], ITEMS[0], { id: 'old', date: '2026-10-14', type: 'עבר', patientName: '' }]), 'ramot', TODAY);
   assert.deepEqual(m.alerts.map((a) => [a.name, a.kind, a.whenText, a.label, a.id]),
     [['דנה <img src=x>', 'today', 'היום', 'ועדת השמה · 10:00', 'c1'], ['ועדה רפואית', 'week', 'בעוד 5 ימים', '', 'c2']]);
-  assert.equal(m.count, 2);
+  assert.equal(m.count, 1, 'the badge counts today .. +2 only (22 Oct 2026)');
+  assert.equal(m.weekCount, 2);
   const off = CA.houseAlerts({ committees: { available: false, reason: 'unauthorized' } }, 'ramot', TODAY);
   assert.deepEqual([off.supported, off.unavailableText], [false, 'הוועדות מאפליקציית הרכזים עוד לא מחוברות']);
   assert.equal(CA.houseAlerts({ patients: [{ name: 'א', committee: { date: TODAY } }] }, 'ramot', TODAY).supported, false, 'the old per-patient shape is ignored');
@@ -160,7 +161,8 @@ test('C: text-only card — hostile text stays text; tags; «לוועדות» op
   const model = CA.houseAlerts(DM([{ id: 'h', date: '2026-10-15', time: '', type: '<script>x</script>', patientName: '<img src=x onerror=alert(1)>' }, { id: 'b', date: '2026-10-18', type: 'ב' }]), 'ramot', TODAY);
   const card = CA.renderCard(doc, model);
   const text = card.textContent;
-  assert.match(text, /ועדות קרובות \(2\)/);
+  assert.match(text, /ועדות קרובות \(1\)/, 'the count = the alerts (today .. +2)');
+  assert.match(text, /בהמשך השבוע \(1\)/);
   assert.match(text, /<img src=x onerror=alert\(1\)>/, 'shown as text');
   assert.match(text, /ועדה: 15\/10\/26 · <script>x<\/script> · היום/);
   assert.match(text, /ועדה: 18\/10\/26 · בעוד 3 ימים/);
@@ -178,7 +180,7 @@ test('C: badge — count or hidden, its own element beside the discharge badge',
   const btn = doc.createElement('button');
   CA.setBadge(doc, btn, 2);
   const b = btn.querySelector('[data-cm-badge]');
-  assert.deepEqual([b.textContent, b.hidden, b.getAttribute('aria-label')], ['2', false, '2 ועדות השבוע']);
+  assert.deepEqual([b.textContent, b.hidden, b.getAttribute('aria-label')], ['2', false, '2 ועדות קרובות']);
   CA.setBadge(doc, btn, 0);
   assert.deepEqual([b.textContent, b.hidden], ['', true]);
 });

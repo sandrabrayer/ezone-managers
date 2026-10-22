@@ -359,6 +359,14 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: committees from the coordinators feed + 2-day alerts (October 22, 2026)
+
+- The Managers server reads committees straight from the coordinators server (`POST /api/managers-feed`,
+  Bearer `COORDINATORS_FEED_SECRET` = coordinators `MANAGERS_FEED_SECRET`; `COORDINATORS_FEED_URL`).
+  Fail-closed: unset → the Dashboard path stays the source. Details: `docs/coordinators-feed.md`.
+- Status (מתוכננת / התקיימה / בוטלה) + notes; a cancelled committee never alerts.
+- Alerts today … +2 (same as the coordinators); +3 … +7 listed under «בהמשך השבוע».
+
 ## Managers: half-yearly feedback «משוב» reminders (October 20, 2026)
 
 - The next due date is 6 months after the last feedback, or after the start date (`lib/feedback-due.js`;
