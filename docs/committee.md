@@ -4,6 +4,22 @@
 > (date, time, type, participants, patient, house). Managers only VIEW them. The 15 Oct
 > per-patient editor below is history: its write op is refused and its sheet is never written again.
 
+## 22 Oct 2026 — direct coordinators feed, status + notes, 2-day alerts
+
+- **Source**: `houseData.committees` now comes from the **coordinators feed** (`docs/coordinators-feed.md`),
+  read server-side in parallel with the Dashboard (`source: 'coordinators'`). The Dashboard copy is the
+  fallback when the feed is off or fails; with neither → «לא הצלחנו לקרוא את הוועדות מאפליקציית הרכזים».
+- **Status + notes**: each committee carries `status` (`scheduled` · `held` «התקיימה» · `cancelled`
+  «בוטלה») and `notes`. The «ועדות» sub-tab shows today and later, the status when it is not «מתוכננת»,
+  the notes, and a cancelled one struck through.
+- **Alerts = today … +2** (the same lead time as the coordinators): «ועדה היום» (red), «ועדה מחר» and
+  «ועדה בעוד יומיים» (amber). Only these count on the badge («N ועדות קרובות»).
+- **«בהמשך השבוע»**: the rest of the shared 7-day window (+3 … +7) is listed under the alerts on the same
+  «הבית היום» card — this is the managers' «this week in the house» committees list.
+- **A cancelled committee never alerts** and is not listed on the card.
+- The shared 7-day fixture with the Dashboard (`COMMITTEE_LEAD_DAYS = 7`, sha256-pinned) is unchanged:
+  it still decides which committees the card lists; `ALERT_DAYS = 2` decides which of them alert.
+
 ## What the manager sees
 
 - **«הבית היום»**: the «ועדות קרובות» card is always drawn. It shows «ועדה היום» (red) and «ועדה השבוע» (today +1 … +7, amber), with

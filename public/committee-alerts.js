@@ -16,12 +16,20 @@
  *     never alerted).
  * "Today" is the calendar day in Asia/Jerusalem, whatever the device clock.
  *
+ * ALERT vs WEEK (22 Oct 2026, docs/committee.md): the card lists every committee
+ * of the shared 7-day window, but only today .. today+ALERT_DAYS (2) are ALERTS
+ * («ועדה היום» red, «ועדה מחר» / «ועדה בעוד יומיים» amber) and count on the badge —
+ * the same lead time the coordinators get. today+3 .. +7 sit under «בהמשך השבוע».
+ * A CANCELLED committee (status from the coordinators feed) never appears here.
+ *
  * Rendering is TEXT-ONLY: DOM nodes + textContent, never innerHTML with data.
  * Nothing here logs. Display-only — no bonus code reads it. In-app only. */
 (function (root) {
   'use strict';
 
   var COMMITTEE_LEAD_DAYS = 7;
+  var ALERT_DAYS = 2;
+  var ALERT_TEXT = ['ועדה היום', 'ועדה מחר', 'ועדה בעוד יומיים'];
   var TIME_ZONE = 'Asia/Jerusalem';
   var ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -78,9 +86,11 @@
   var UNREADABLE = 'לא הצלחנו לקרוא את הוועדות מאפליקציית הרכזים';
   function str(v) { return String(v == null ? '' : v); }
 
-  /* ONE house's payload → { house, supported, unavailableText, alerts, count }; alerts sorted by
-   * date, then name. Each alert: { house, id, name, date, dateText, label, days, kind, whenText }:
-   * name = the patient, else the committee type; label = the type (with a patient) and the time. */
+  /* ONE house's payload → { house, supported, unavailableText, alerts, count, weekCount }; alerts
+   * (the whole 7-day window) sorted by date, then name. Each alert: { house, id, name, date, dateText,
+   * label, days, kind, whenText, urgent, tag }: name = the patient, else the committee type; label =
+   * the type (with a patient) and the time; urgent = within ALERT_DAYS. count = the URGENT ones (the
+   * badge); weekCount = all of them. A cancelled committee is skipped. */
   function houseAlerts(data, house, today) {
     var d = data || {};
     var cm = d.committees;
@@ -92,19 +102,23 @@
     var t = isRealIso(today) ? today : israelToday();
     cm.items.forEach(function (it) {
       if (!it || typeof it !== 'object') return;
+      if (str(it.status) === 'cancelled') return;
       var c = classify(it.date, t);
       if (!c) return;
       var pat = str(it.patientName).trim(), type = str(it.type).trim(), time = /^\d{2}:\d{2}$/.test(str(it.time)) ? str(it.time) : '';
       out.alerts.push({
         house: out.house, id: str(it.id), name: pat || type || 'ועדה',
         date: it.date, dateText: fmtDate(it.date), label: [pat ? type : '', time].filter(Boolean).join(' · '),
-        days: c.days, kind: c.kind, whenText: c.whenText
+        days: c.days, kind: c.kind, whenText: c.whenText,
+        urgent: c.days <= ALERT_DAYS, tag: c.days <= ALERT_DAYS ? ALERT_TEXT[c.days] : 'ועדה השבוע'
       });
     });
     out.alerts.sort(byDateThenName);
-    out.count = out.alerts.length;
+    out.count = urgentCount(out.alerts);
+    out.weekCount = out.alerts.length;
     return out;
   }
+  function urgentCount(list) { return list.filter(function (a) { return a.urgent; }).length; }
 
   /* Admin: several houses merged; `filter` = a house key or '' (all). */
   function mergeAlerts(list, filter) {
@@ -116,7 +130,8 @@
       out.alerts = out.alerts.concat(h.alerts);
     });
     out.alerts.sort(byDateThenName);
-    out.count = out.alerts.length;
+    out.count = urgentCount(out.alerts);
+    out.weekCount = out.alerts.length;
     return out;
   }
 
@@ -129,11 +144,11 @@
   }
 
   function alertRow(doc, a, labels) {
-    var li = node(doc, 'li', 'cm-alert ' + (a.kind === 'today' ? 'is-today' : 'is-week'));
+    var li = node(doc, 'li', 'cm-alert ' + (a.kind === 'today' ? 'is-today' : (a.urgent ? 'is-soon' : 'is-week')));
     var main = node(doc, 'div', 'cm-alert-main');
     main.appendChild(node(doc, 'span', 'cm-alert-name', a.name));
     if (labels) main.appendChild(node(doc, 'span', 'cm-alert-house', labels[a.house] || a.house));
-    main.appendChild(node(doc, 'span', 'cm-alert-tag', a.kind === 'today' ? 'ועדה היום' : 'ועדה השבוע'));
+    main.appendChild(node(doc, 'span', 'cm-alert-tag', a.tag || (a.kind === 'today' ? 'ועדה היום' : 'ועדה השבוע')));
     li.appendChild(main);
     li.appendChild(node(doc, 'div', 'cm-alert-meta', 'ועדה: ' + a.dateText + (a.label ? ' · ' + a.label : '') + ' · ' + a.whenText));
     var btn = node(doc, 'button', 'cm-alert-btn', 'לוועדות');
@@ -178,9 +193,22 @@
       card.appendChild(node(doc, 'div', 'wk-empty', 'אין ועדות היום וב-' + COMMITTEE_LEAD_DAYS + ' הימים הקרובים'));
       return card;
     }
-    var ul = node(doc, 'ul', 'cm-alert-list');
-    model.alerts.forEach(function (a) { ul.appendChild(alertRow(doc, a, opts.labels)); });
-    card.appendChild(ul);
+    var urgent = model.alerts.filter(function (a) { return a.urgent; });
+    var later = model.alerts.filter(function (a) { return !a.urgent; });
+    if (!urgent.length) card.appendChild(node(doc, 'div', 'wk-empty', 'אין ועדות היום וביומיים הקרובים'));
+    else {
+      var ul = node(doc, 'ul', 'cm-alert-list');
+      urgent.forEach(function (a) { ul.appendChild(alertRow(doc, a, opts.labels)); });
+      card.appendChild(ul);
+    }
+    if (later.length) {
+      var h = node(doc, 'div', 'cm-week-head', 'בהמשך השבוע (' + later.length + ')');
+      h.setAttribute('data-cm-week', '');
+      card.appendChild(h);
+      var ul2 = node(doc, 'ul', 'cm-alert-list cm-week-list');
+      later.forEach(function (a) { ul2.appendChild(alertRow(doc, a, opts.labels)); });
+      card.appendChild(ul2);
+    }
     return card;
   }
 
@@ -195,12 +223,12 @@
     }
     b.textContent = count > 0 ? String(count) : '';
     b.hidden = !(count > 0);
-    if (count > 0) b.setAttribute('aria-label', count === 1 ? 'ועדה אחת השבוע' : count + ' ועדות השבוע');
+    if (count > 0) b.setAttribute('aria-label', count === 1 ? 'ועדה קרובה אחת' : count + ' ועדות קרובות');
     else b.removeAttribute('aria-label');
   }
 
   var CommitteeAlerts = {
-    COMMITTEE_LEAD_DAYS: COMMITTEE_LEAD_DAYS, TIME_ZONE: TIME_ZONE,
+    COMMITTEE_LEAD_DAYS: COMMITTEE_LEAD_DAYS, ALERT_DAYS: ALERT_DAYS, ALERT_TEXT: ALERT_TEXT, TIME_ZONE: TIME_ZONE,
     isRealIso: isRealIso, israelToday: israelToday, dayDiff: dayDiff, fmtDate: fmtDate, whenText: whenText, classify: classify,
     houseAlerts: houseAlerts, mergeAlerts: mergeAlerts, renderCard: renderCard, setBadge: setBadge, UNAVAILABLE: UNAVAILABLE
   };

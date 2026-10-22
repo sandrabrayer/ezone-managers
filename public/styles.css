@@ -1999,6 +1999,12 @@ body.is-locked { overflow: hidden; }
 .cm-alert-house { font-size: 14px; color: var(--text-mute); }
 .cm-alert-tag { font-size: 14px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(251, 191, 36, 0.25); color: #FDE68A; }
 .cm-alert.is-today .cm-alert-tag { background: rgba(239, 68, 68, 0.35); color: #FECACA; }
+/* 22 Oct 2026: only today .. +2 are alerts; +3 .. +7 sit under «בהמשך השבוע», quieter. */
+.cm-week-head { margin: 12px 0 6px; font-size: 15px; font-weight: 700; color: var(--text-mute); }
+.cm-alert.is-week { opacity: .85; }
+.cm-alert.is-week .cm-alert-tag { background: transparent; border: 1px solid rgba(251, 191, 36, 0.45); }
+.wk-committees .is-cancelled .wk-name, .wk-committees .is-cancelled .wk-shift { text-decoration: line-through; opacity: .7; }
+.wk-cm-status { font-size: 14px; font-weight: 700; margin-inline-start: 6px; }
 .cm-alert-meta { flex: 1 1 auto; font-size: 16px; color: var(--text); overflow-wrap: anywhere; }
 .cm-alert-btn {
   font: inherit; font-size: 16px; min-height: 44px; min-width: 44px; padding: 8px 14px;
@@ -2081,3 +2087,4 @@ body.is-locked { overflow: hidden; }
 .wk-fb-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 6px; width: 100%; }
 .wk-fb-form input[type="date"] { min-height: 44px; font-size: 16px; }
 .wk-fb-form .wk-dis-btn { min-height: 44px; }
+

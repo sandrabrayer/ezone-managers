@@ -187,6 +187,7 @@
     coordinators_not_configured: 'הוועדות מאפליקציית הרכזים עוד לא מחוברות.',
     unauthorized: 'הוועדות מאפליקציית הרכזים עוד לא מחוברות.'
   };
+  var COMMITTEE_STATUS = { scheduled: 'מתוכננת', held: 'התקיימה', cancelled: 'בוטלה' };
   var COMMITTEE_UNREADABLE = 'לא הצלחנו לקרוא את הוועדות מאפליקציית הרכזים. נסו שוב מאוחר יותר.';
   function committeesState(d) {
     var c = d && d.committees;
@@ -320,14 +321,20 @@
   /* «ועדות» sub-tab: every upcoming committee of the house, read-only. */
   function committeesHtml(d) {
     var st = committeesState(d);
-    var h = '<div class="card work-card wk-committees"><div class="card-title">ועדות קרובות' + (st.ok ? ' (' + st.items.length + ')' : '') + '</div>';
+    // 22 Oct 2026: the coordinators feed also carries recent past rows (for the week view) and a
+    // status + notes. This sub-tab lists today and later; a cancelled one is shown struck through.
+    var items = st.ok ? st.items.filter(function (c) { return c && isRealIso(c.date) && (!st.today || c.date >= st.today); }) : [];
+    var h = '<div class="card work-card wk-committees"><div class="card-title">ועדות קרובות' + (st.ok ? ' (' + items.length + ')' : '') + '</div>';
     h += '<div class="wk-note">את הוועדות קובעים הרכזים באפליקציית הרכזים. כאן — לקריאה בלבד.</div>';
     if (!st.ok) return h + '<div class="wk-empty">' + esc(st.text) + '</div></div>';
-    if (!st.items.length) return h + '<div class="wk-empty">אין ועדות קרובות</div></div>';
-    h += '<ul class="wk-list">' + st.items.map(function (c) {
-      return '<li><span class="wk-shift">' + esc(committeeWhen(c)) + '</span><span class="wk-name">' + esc(c.type) +
+    if (!items.length) return h + '<div class="wk-empty">אין ועדות קרובות</div></div>';
+    h += '<ul class="wk-list">' + items.map(function (c) {
+      var status = COMMITTEE_STATUS[c.status] ? c.status : 'scheduled';
+      return '<li' + (status === 'cancelled' ? ' class="is-cancelled"' : '') + '><span class="wk-shift">' + esc(committeeWhen(c)) + '</span><span class="wk-name">' + esc(c.type) +
         (c.patientName ? ' · ' + esc(c.patientName) : '') + '</span>' +
-        (c.participants ? '<span class="wk-meta">משתתפים: ' + esc(c.participants) + '</span>' : '') + '</li>';
+        (status !== 'scheduled' ? '<span class="wk-cm-status">' + esc(COMMITTEE_STATUS[status]) + '</span>' : '') +
+        (c.participants ? '<span class="wk-meta">משתתפים: ' + esc(c.participants) + '</span>' : '') +
+        (c.notes ? '<span class="wk-meta">הערות: ' + esc(c.notes) + '</span>' : '') + '</li>';
     }).join('') + '</ul>';
     return h + '</div>';
   }
