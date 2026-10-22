@@ -3,6 +3,19 @@
 
 ## Unreleased
 
+### Added — «עדכון משמרת» sub-tab; summaries from the coordinators feed (October 22, 2026)
+
+- **What**: a new house sub-tab «עדכון משמרת» — the coordinators' shift updates of the manager's own house, one week
+  at a time («שבוע קודם» / «השבוע» / «שבוע הבא»), a shift filter, grouped by day, «הוזן בדיעבד». «סיכומי ישיבות»
+  read the coordinators feed first (the Dashboard path is the fallback).
+- **Why**: Sandra asked for the רכזים' team-meeting summaries and shift updates to flow to the house managers, own
+  house only.
+- **Security**: read-only; the house is server-decided; nothing on the device (guard test); escaped text; a failed
+  read is an error + «נסו שוב», never an empty week. No new variable (uses the PR 3 feed variables).
+- **Docs**: `docs/shift-updates.md` (new), `docs/meeting-summaries.md`, `docs/coordinators-feed.md`, README, ecosystem
+  status, the in-app guide. SW v39.
+- **Tests**: `test/shift-updates.test.js` (new, 4) + 2 in `coord-feed.test.js`. **Tests 437 → 443**.
+
 ### Added — committees from the coordinators feed; status + notes; 2-day alerts (October 22, 2026)
 
 - **What**: `houseData.committees` comes straight from the coordinators server (`lib/coord-feed.js`, server-side

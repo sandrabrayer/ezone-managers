@@ -21,6 +21,12 @@ House tab → sub-tab **«סיכומי ישיבות»** (after «ועדות»):
   - «יופיעו אחרי עדכון אפליקציית הרכזים» (an older coordinators deploy);
   - a read error, with «נסו שוב». A raw code is never shown.
 
+## Source (22 Oct 2026)
+
+The summaries now come **first from the coordinators feed** (`docs/coordinators-feed.md`,
+`kind: 'summaries'`, final meetings only, one house + month). If the feed is off or fails, the
+Dashboard path below answers as before.
+
 ## Data path
 
 coordinators `TeamMeetings` + `TeamMeetingRows` → coordinators Apps Script

@@ -52,4 +52,4 @@ optional).
 ## Tests
 
 `test/coord-feed.test.js` (config, request, guards, merge for every house incl. pardes, house pinning,
-fallbacks, alert window).
+fallbacks, alert window) and `test/shift-updates.test.js` (the «עדכון משמרת» sub-tab).

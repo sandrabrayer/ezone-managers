@@ -167,3 +167,36 @@ test('D: the sub-tab lists today and later only, the status when not «מתוכ�
   assert.match(h, /<li class="is-cancelled">.*רפואית.*בוטלה/);
   assert.doesNotMatch(h, /מתוכננת/, 'the default status is not repeated on every row');
 });
+
+/* ── E. «עדכון משמרת» + «סיכומי ישיבות» through the configured feed ── */
+
+test('E: shiftUpdates — every house via the admin, the manager pinned; summaries come from the feed (Dashboard untouched)', async (t) => {
+  const reply2 = (b) => {
+    if (b.kind === 'shiftUpdates') return reply(200, { ok: true, house: b.house, from: '2026-10-16', upTo: b.upTo || TODAY,
+      updates: [{ id: 'h', date: TODAY, shift: 'בוקר', author: 'א', note: 'n', createdAt: '', backdated: false, extra: 'x' }] });
+    if (b.kind === 'summaries') return reply(200, { ok: true, house: b.house, month: b.month, meetings: [{ id: 'm', date: '2026-10-12', title: 't', rows: [] }] });
+    return FEED(b);
+  };
+  const { server, seen, send } = await boot(t, reply2, undefined);
+  const admin = await auth.login(server, auth.ADMIN_CODE);
+  for (const house of ['raanana', 'ramot', 'efroni', 'rehab', 'pardes']) {
+    const d = JSON.parse((await send(admin, { op: 'shiftUpdates', house, upTo: '2026-10-20' })).text);
+    assert.deepEqual([d.ok, d.house, d.updates.length], [true, house, 1], house);
+    assert.equal(d.updates[0].extra, undefined, 'unknown keys never pass');
+  }
+  const oran = await auth.login(server, auth.ORAN_CODE);
+  seen.feed.length = 0;
+  await send(oran, { op: 'shiftUpdates', house: 'pardes' });
+  assert.deepEqual(seen.feed.map((f) => [f.body.kind, f.body.house]), [['shiftUpdates', 'ramot']]);
+  seen.dash.length = 0;
+  const s = JSON.parse((await send(oran, { op: 'meetingSummaries', month: '2026-10' })).text);
+  assert.deepEqual([s.summaries.source, s.summaries.items.length], ['coordinators', 1]);
+  assert.equal(seen.dash.length, 0, 'the Dashboard is not asked when the feed answers');
+});
+
+test('E: summaries — the feed fails → the Dashboard path answers (fallback)', async (t) => {
+  const { server, seen, send } = await boot(t, () => reply(502, {}), undefined);
+  const oran = await auth.login(server, auth.ORAN_CODE);
+  await send(oran, { op: 'meetingSummaries', month: '2026-10' });
+  assert.equal(seen.dash.filter((b) => b.op === 'meetingSummaries').length, 1);
+});
