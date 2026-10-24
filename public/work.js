@@ -858,6 +858,12 @@
     var data = null;
     try { data = await r.json(); } catch (e) { data = null; }
     if (r.status === 401 && root.Auth) root.Auth.showLogin();
+    // X-Cache: STALE = a saved copy was shown at once and the server refreshes it (24 Oct 2026).
+    var xc = r.headers && typeof r.headers.get === 'function' ? r.headers.get('X-Cache') : null;
+    if (r.ok && data && typeof data === 'object' && xc === 'STALE') {
+      try { Object.defineProperty(data, '__stale', { value: true }); } catch (e) { /* frozen — ignore */ }
+      if (r.headers.get('X-Cache-Refresh') === 'failed') setFootStatus('מוצגים נתונים שמורים — העדכון לא הושלם');
+    }
     if (!r.ok || !data || data.ok === false) {
       var err = new Error((data && (data.message || data.error)) || ('HTTP ' + r.status));
       err.data = data;
@@ -875,9 +881,30 @@
     if (loading[key]) return loading[key];
     loading[key] = post({ op: 'houseData', house: key }).then(function (d) {
       cache[key] = { at: Date.now(), data: d };
+      if (d && d.__stale) followStale(key);
       return d;
     }).finally(function () { delete loading[key]; });
     return loading[key];
+  }
+
+  function setFootStatus(text) {
+    var el = root.document && root.document.getElementById('footStatus');
+    if (el) el.textContent = text;
+  }
+  /* The server showed a saved copy and is refreshing it: ONE follow-up per house that joins that
+   * refresh (swr:'wait'), then redraws quietly. A failure keeps the copy on screen. */
+  var following = {};
+  function followStale(key) {
+    if (following[key] || !root.document) return;
+    following[key] = true;
+    setFootStatus('מתעדכן…');
+    post({ op: 'houseData', house: key, swr: 'wait' }).then(function (fresh) {
+      if (fresh && fresh.__stale) return;   // refresh failed — keep the saved copy
+      cache[key] = { at: Date.now(), data: fresh };
+      var panel = root.document.getElementById('panel-' + key);
+      if (panel) renderAll(panel, key, fresh);
+      setFootStatus('עודכן');
+    }).catch(function () { /* keep what is on screen */ }).finally(function () { delete following[key]; });
   }
 
   var costCache = {};

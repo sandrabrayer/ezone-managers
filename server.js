@@ -22,6 +22,7 @@
 const express = require('express');
 const path = require('path');
 
+const { createReadCache } = require('./lib/read-cache');
 const access = require('./lib/access');
 const { createReadiness } = require('./lib/readiness');
 const { createCoordFeed } = require('./lib/coord-feed');
@@ -269,6 +270,27 @@ function sheetsCacheGet(key) {
   if (Date.now() - hit.at > SHEETS_CACHE_MAX_AGE_MS) { sheetsCache.delete(key); return null; }
   return hit;
 }
+/* Fast reads (24 Oct 2026, docs/read-cache.md): copies up to 60 s old are served with no upstream
+ * call; up to 24 h old they are served AT ONCE while ONE background refresh runs (concurrent
+ * identical reads share one Apps Script call). The key always holds role + person + house, so a
+ * copy never crosses a person or a house. A write drops that house's copies. In memory only. */
+const READ_FRESH_MS = 60 * 1000;
+const READ_STALE_MAX_MS = 24 * 3600 * 1000;
+const readCache = createReadCache({
+  freshMs: READ_FRESH_MS, staleMaxMs: READ_STALE_MAX_MS, maxEntries: 200,
+  // A failed background refresh: one safe line (class, status, time) — never a body or a name.
+  onRefreshError: (_key, err) => {
+    const f = (err && err.fail) || { status: 502, error: 'upstream_unreachable' };
+    console.error(`[read-cache] refresh failed class=${f.error} status=${f.status} ms=${(err && err.ms) || 0}`);
+  }
+});
+/* A thrown loader failure: carries the classified failure (and the time) to the handler. */
+function upstreamError(fail, ms) { const e = new Error('upstream'); e.fail = fail; e.ms = ms; return e; }
+function setCacheHeaders(res, r) {
+  res.set('X-Cache', r.state);
+  if (r.state === 'STALE') res.set('X-Data-Cached-At', new Date(r.at).toISOString());
+  if (r.refreshFailed) res.set('X-Cache-Refresh', 'failed');
+}
 /* One safe line per failed read: action, class, status, time — never a body,
  * a name, the endpoint or the secret. */
 function logSheets(action, cls, status, ms, served) {
@@ -318,24 +340,38 @@ app.get('/api/sheets', requireUser, async (req, res) => {
     return res.status(f.status).json({ error: f.error });
   };
 
+  // One upstream read; throws a classified failure and stores nothing on error. The 72 h
+  // last-good copy (docs/sheets-resilience.md) is still written on success as the failure fallback.
+  const loader = async () => {
+    const started = Date.now();
+    let upstream, text;
+    try {
+      upstream = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST', redirect: 'follow', signal: AbortSignal.timeout(SHEETS_TIMEOUT_MS),
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(body)
+      });
+      text = await upstream.text();
+    } catch (err) {
+      throw upstreamError(workFailure(err), Date.now() - started);
+    }
+    let data;
+    try { data = JSON.parse(text); } catch { throw upstreamError(nonJsonFailure(text), Date.now() - started); }
+    const f = sheetsReplyFailure(upstream.status, data);
+    if (f) throw upstreamError(f, Date.now() - started);
+    sheetsCachePut(key, text, data);
+    return { text, data };
+  };
   const started = Date.now();
-  let upstream, text;
+  let r;
   try {
-    upstream = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST', redirect: 'follow', signal: AbortSignal.timeout(SHEETS_TIMEOUT_MS),
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(body)
-    });
-    text = await upstream.text();
+    // `swr=wait` (the browser's follow-up after a STALE answer) joins the background refresh.
+    r = await readCache.read(key, loader, { wait: req.query.swr === 'wait', tag: { house: String(body.house || '') } });
   } catch (err) {
-    return fail(workFailure(err), Date.now() - started);
+    return fail((err && err.fail) || workFailure(err), (err && err.ms) || Date.now() - started);
   }
-  let data;
-  try { data = JSON.parse(text); } catch { return fail(nonJsonFailure(text), Date.now() - started); }
-  const f = sheetsReplyFailure(upstream.status, data);
-  if (f) return fail(f, Date.now() - started);
-  sheetsCachePut(key, text, data);
-  return send(text, data, 'live');
+  setCacheHeaders(res, r);
+  return send(r.value.text, r.value.data, 'live');
 });
 
 // ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
@@ -416,8 +452,6 @@ app.post('/api/work', requireUser, async (req, res) => {
     const r = await feedRead('summaries', house, { month: body.month });
     if (r.ok) return res.status(200).json({ ok: true, summaries: { available: true, items: r.data.meetings, source: 'coordinators' } });
   }
-  // houseData: the committees come from the coordinators feed, read in parallel with the Dashboard.
-  const committeesP = op === 'houseData' && coordFeed.configured ? feedRead('committees', house) : null;
   if (WRITE_OPS.has(op) && !allowWrites(clientIp(req))) {
     return res.status(429).json({ error: 'יותר מדי עדכונים. נסו שוב מאוחר יותר.' });
   }
@@ -458,35 +492,64 @@ app.post('/api/work', requireUser, async (req, res) => {
     const p = b.patch && typeof b.patch === 'object' ? b.patch : {};
     body.patch = JSON.stringify({ followUpDone: p.followUpDone === true, deleted: p.deleted === true });
   }
-  const started = Date.now();
+  // One Dashboard call → { status, json, cacheable }. Never throws. Only a clean ok reply is cacheable.
+  const callDashboard = async () => {
+    // houseData: the committees come from the coordinators feed, read in parallel with the Dashboard.
+    const committeesP = op === 'houseData' && coordFeed.configured ? feedRead('committees', house) : null;
+    const started = Date.now();
+    try {
+      const upstream = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        signal: AbortSignal.timeout(WRITE_OPS.has(op) ? WORK_WRITE_TIMEOUT_MS : WORK_READ_TIMEOUT_MS),
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const text = await upstream.text();
+      let data;
+      try { data = JSON.parse(text); } catch {
+        const f = nonJsonFailure(text);
+        logWork(op, `failure=${f.error} upstreamStatus=${upstream.status} bytes=${text.length}`, f.status, Date.now() - started);
+        return { status: f.status, json: { ok: false, error: f.error }, cacheable: false };
+      }
+      if (data && data.ok === false) {
+        const code = typeof data.error === 'string' && UPSTREAM_CODE_RE.test(data.error) ? data.error : 'unknown';
+        logWork(op, `upstreamError=${code}`, code === 'unauthorized' ? 503 : 200, Date.now() - started);
+        // An Apps Script exception message is technical (server log class
+        // above); the browser only gets the code.
+        if (code === 'exception' || code === 'unknown') return { status: 200, json: { ok: false, error: code === 'unknown' ? 'upstream_bad_response' : 'exception' }, cacheable: false };
+      }
+      if (committeesP) mergeCommittees(data, await committeesP);
+      const failed = data && data.ok === false;
+      return { status: failed && data.error === 'unauthorized' ? 503 : 200, json: data, cacheable: !failed };
+    } catch (err) {
+      const f = workFailure(err);
+      logWork(op, `failure=${f.error}`, f.status, Date.now() - started);
+      return { status: f.status, json: { ok: false, error: f.error }, cacheable: false };
+    }
+  };
+
+  // Writes always go live, then drop THIS house's copies (and the overview's) so the next read is fresh.
+  if (WRITE_OPS.has(op)) {
+    const out = await callDashboard();
+    if (out.status === 200 && !(out.json && out.json.ok === false)) readCache.invalidate((tag) => tag && (tag.house === house || tag.house === ''));
+    return res.status(out.status).json(out.json);
+  }
+  // Reads: fast path with stale-while-revalidate. The key holds op + house + month + role + person.
+  const rkey = JSON.stringify(['work', op, house, body.month || '', u.role, u.id]);
+  const rloader = async () => {
+    const out = await callDashboard();
+    if (!out.cacheable) { const e = new Error('reply'); e.reply = out; throw e; }
+    return out;
+  };
   try {
-    const upstream = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      redirect: 'follow',
-      signal: AbortSignal.timeout(WRITE_OPS.has(op) ? WORK_WRITE_TIMEOUT_MS : WORK_READ_TIMEOUT_MS),
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const text = await upstream.text();
-    let data;
-    try { data = JSON.parse(text); } catch {
-      const f = nonJsonFailure(text);
-      logWork(op, `failure=${f.error} upstreamStatus=${upstream.status} bytes=${text.length}`, f.status, Date.now() - started);
-      return res.status(f.status).json({ ok: false, error: f.error });
-    }
-    if (data && data.ok === false) {
-      const code = typeof data.error === 'string' && UPSTREAM_CODE_RE.test(data.error) ? data.error : 'unknown';
-      logWork(op, `upstreamError=${code}`, code === 'unauthorized' ? 503 : 200, Date.now() - started);
-      // An Apps Script exception message is technical (server log class
-      // above); the browser only gets the code.
-      if (code === 'exception' || code === 'unknown') return res.status(200).json({ ok: false, error: code === 'unknown' ? 'upstream_bad_response' : 'exception' });
-    }
-    if (committeesP) mergeCommittees(data, await committeesP);
-    res.status(data && data.ok === false && data.error === 'unauthorized' ? 503 : 200).json(data);
+    const r = await readCache.read(rkey, rloader, { wait: b.swr === 'wait', tag: { house } });
+    setCacheHeaders(res, r);
+    return res.status(r.value.status).json(r.value.json);
   } catch (err) {
+    if (err && err.reply) return res.status(err.reply.status).json(err.reply.json);
     const f = workFailure(err);
-    logWork(op, `failure=${f.error}`, f.status, Date.now() - started);
-    res.status(f.status).json({ ok: false, error: f.error });
+    return res.status(f.status).json({ ok: false, error: f.error });
   }
 });
 
@@ -504,4 +567,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, _rateLimiters: { allowSheets, allowLogin, allowWrites }, _sheetsCache: sheetsCache, _coordFeed: coordFeed, _mergeCommittees: mergeCommittees };
+module.exports = { app, _readCache: readCache, _rateLimiters: { allowSheets, allowLogin, allowWrites }, _sheetsCache: sheetsCache, _coordFeed: coordFeed, _mergeCommittees: mergeCommittees };

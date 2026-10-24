@@ -3,6 +3,22 @@
 
 ## Unreleased
 
+### Added — fast reads: saved copies, one shared call, quiet refresh (October 24, 2026)
+
+- **What**: `/api/sheets` and the `/api/work` reads (`houseData`, `houseCost`, `meetingSummaries`) now use a
+  stale-while-revalidate cache (`lib/read-cache.js`): ≤ 60 s → served with no Dashboard call; ≤ 24 h → served at once
+  while ONE background refresh runs; concurrent identical reads share one call. A write drops that house's copies.
+  The browser shows «מתעדכן…» and reloads quietly (≤ 3 per minute); `houseData` follows a stale answer once.
+- **Why**: both apps were slow. Every managers read hit a cold Apps Script run (1–3 s+); the coordinators app already
+  had this fix, the managers app did not. See `docs/read-cache.md`.
+- **Security**: keys hold role + person + house + op + month (no copy crosses a person or a house; tested);
+  errors are never cached; validation and access checks run before the cache; nothing new is exposed or logged;
+  `swr` is never forwarded to the Dashboard. No new endpoint, env var, secret or dependency.
+  `npm audit`: 1 high + 1 moderate → 0 (express floor `^4.22.3`, body-parser, qs).
+- **Docs**: `docs/read-cache.md` (new), `docs/sheets-resilience.md` (cross-reference), ecosystem status. SW v40.
+- **Tests**: `read-cache.test.js` (10), `read-cache-server.test.js` (12), `stale-repaint.test.js` (5); existing tests
+  clear the cache between a good read and a forced failure. **Tests 443 → 470**.
+
 ### Added — «עדכון משמרת» sub-tab; summaries from the coordinators feed (October 22, 2026)
 
 - **What**: a new house sub-tab «עדכון משמרת» — the coordinators' shift updates of the manager's own house, one week

@@ -15,7 +15,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, _rateLimiters } = require('../server');
+const { app, _rateLimiters, _readCache } = require('../server');
 
 /* Every call here is made as an ADMIN (sees all houses — the raw feed). */
 let COOKIE = '';
@@ -29,7 +29,7 @@ test('sheets proxy (mocked upstream)', async (t) => {
   await new Promise((r) => server.once('listening', r));
   t.after(() => server.close());
 
-  t.beforeEach(() => { _rateLimiters.allowSheets.clear(); });
+  t.beforeEach(() => { _rateLimiters.allowSheets.clear(); _readCache.clear(); });
   COOKIE = await auth.login(server, auth.ADMIN_CODE);
 
   let lastFetchUrl = null;
@@ -136,6 +136,7 @@ test('sheets proxy (mocked upstream)', async (t) => {
       mockUpstream('{"houses":[{"key":"ramot","patientsNow":12}]}');
       const good = await request(server, '/api/sheets?action=managersHouse&house=ramot');
       assert.equal(good.status, 200);
+      _readCache.clear();   // the fast copy would answer; this test is about the failure fallback
       arm();
       const r = await request(server, '/api/sheets?action=managersHouse&house=ramot');
       assert.equal(r.status, 200);
@@ -150,6 +151,7 @@ test('sheets proxy (mocked upstream)', async (t) => {
   await t.test('cache is per request: another house / month has no copy', async () => {
     mockUpstream('{"houses":[]}');
     await request(server, '/api/sheets?action=managersHouse&house=ramot');
+    _readCache.clear();
     global.fetch = async () => { throw timeoutErr(); };
     assert.equal((await request(server, '/api/sheets?action=managersHouse&house=efroni')).status, 504);
     assert.equal((await request(server, '/api/sheets?action=managersHouse&house=ramot&month=2026-08')).status, 504);
@@ -158,6 +160,7 @@ test('sheets proxy (mocked upstream)', async (t) => {
   await t.test('a failed reply never overwrites the good copy', async () => {
     mockUpstream('{"houses":[{"key":"ramot"}]}');
     await request(server, '/api/sheets?action=managersOverview');
+    _readCache.clear();
     mockUpstream('{"ok":false,"error":"exception"}');
     await request(server, '/api/sheets?action=managersOverview');
     global.fetch = async () => { throw timeoutErr(); };
@@ -169,6 +172,7 @@ test('sheets proxy (mocked upstream)', async (t) => {
     mockUpstream('{"houses":[]}');
     await request(server, '/api/sheets?action=managersOverview');
     for (const v of sheetsCache.values()) v.at -= 73 * 3600 * 1000;
+    _readCache.clear();
     global.fetch = async () => { throw timeoutErr(); };
     assert.equal((await request(server, '/api/sheets?action=managersOverview')).status, 504);
   });
@@ -184,6 +188,7 @@ test('sheets proxy (mocked upstream)', async (t) => {
     const hanan = await auth.login(server, auth.HANAN_CODE);
     mockUpstream(JSON.stringify({ houses: [{ key: 'ramot', patientsNow: 12 }, { key: 'arfoni', patientsNow: 9 }], totals: { activePatients: 21 } }));
     await auth.request(server, '/api/sheets?action=managersOverview', { headers: { Cookie: oran } });
+    _readCache.clear();
     global.fetch = async () => { throw timeoutErr(); };
     const r = await auth.request(server, '/api/sheets?action=managersOverview', { headers: { Cookie: oran } });
     assert.equal(r.status, 200);

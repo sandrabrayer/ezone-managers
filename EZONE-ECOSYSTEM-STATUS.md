@@ -359,6 +359,16 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: fast reads — saved copies + one shared call (October 24, 2026)
+
+- `/api/sheets` and the `/api/work` reads (`houseData`, `houseCost`, `meetingSummaries`) are served from an in-memory
+  stale-while-revalidate cache: `X-Cache: HIT` (≤ 60 s, no Dashboard call), `STALE` (≤ 24 h, served at once + ONE
+  background refresh), `REFRESHED` (`swr=wait`), `MISS`. Keys hold role + person + house + op + month; a write drops
+  that house's copies; errors are never cached. The browser shows «מתעדכן…» and reloads quietly (≤ 3 per minute).
+- Cause: the managers server called Apps Script live on every read; plus ~240 ms of Railway round trip per request
+  (region fixed by Sandra on 24 Oct 2026 — verify both services are in a European region).
+- No new endpoint / variable / secret. SW v40. Details: `docs/read-cache.md`.
+
 ## Managers: «עדכון משמרת» + summaries from the coordinators feed (October 22, 2026)
 
 - New house sub-tab «עדכון משמרת»: the coordinators' shift updates of the manager's own house, one week

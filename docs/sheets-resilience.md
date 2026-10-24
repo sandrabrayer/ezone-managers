@@ -86,3 +86,5 @@ as `upstream_app_error`, not HTML.
 Four Apps Script deploys ran back to back around 15:00. A failed deploy or lost authorization
 would show as `upstream_auth` / `upstream_bad_response`. A slow cold start would show as
 `upstream_timeout`. The new log line tells which one it is.
+
+> 24 Oct 2026: reads are now also served from a fast stale-while-revalidate cache in front of this fallback — see `docs/read-cache.md`. The 72 h last-good copy above still answers a FAILED read.

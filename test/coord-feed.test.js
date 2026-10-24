@@ -16,7 +16,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createCoordFeed, parseConfig } = require('../lib/coord-feed');
 const CA = require('../public/committee-alerts.js');
-const { app, _rateLimiters, _coordFeed } = require('../server');
+const { app, _rateLimiters, _coordFeed, _readCache } = require('../server');
 
 const SECRET = process.env.COORDINATORS_FEED_SECRET;
 const TODAY = '2026-10-22';
@@ -89,7 +89,7 @@ async function boot(t, feedReply, dashCommittees) {
   const server = app.listen(0, '127.0.0.1');
   await new Promise((r) => server.once('listening', r));
   t.after(() => server.close());
-  _rateLimiters.allowSheets.clear(); _rateLimiters.allowLogin.clear(); _rateLimiters.allowWrites.clear();
+  _rateLimiters.allowSheets.clear(); _rateLimiters.allowLogin.clear(); _rateLimiters.allowWrites.clear(); _readCache.clear();
   const send = (cookie, body) => auth.request(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body });
   return { server, seen, send };
 }
