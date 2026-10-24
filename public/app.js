@@ -348,7 +348,24 @@ async function fetchJson(url) {
   const hdr = (k) => (r.headers && typeof r.headers.get === 'function' ? r.headers.get(k) : null);
   if (hdr('X-Data-Source') === 'cache') noteStale_(url, hdr('X-Data-Cached-At'));
   else noteFresh_(url);
+  noteServerStale_(hdr('X-Cache'));
   return data;
+}
+
+/* ---- «מתעדכן…» — the server answered from a saved copy and refreshes it (24 Oct 2026) ----
+ * X-Cache: STALE = a copy older than a minute was shown at once while ONE refresh runs on the
+ * server. After a few seconds the screen is reloaded quietly (the copy is then fresh). At most 3
+ * such reloads per minute, so a refresh that keeps failing can never loop; the saved copy stays
+ * on screen either way (never an empty board). */
+let staleRepaints_ = 0, staleWindowAt_ = 0, staleTimer_ = null;
+function noteServerStale_(xcache) {
+  if (xcache !== 'STALE') return;
+  setStatus('מתעדכן…');
+  const t = Date.now();
+  if (t - staleWindowAt_ > 60000) { staleWindowAt_ = t; staleRepaints_ = 0; }
+  if (staleTimer_ || staleRepaints_ >= 3) return;
+  staleRepaints_++;
+  staleTimer_ = setTimeout(() => { staleTimer_ = null; retryReads_(); }, 4000);
 }
 
 /* ---- «מוצגים נתונים שמורים» notice ----
