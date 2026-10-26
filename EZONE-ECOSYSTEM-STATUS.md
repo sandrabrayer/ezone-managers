@@ -359,6 +359,15 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: month visit counters ignore look-ahead visits (October 26, 2026)
+
+- Dashboard `houseData.visits` items may carry an optional boolean `inSelectedMonth`; it is `false` only on
+  next-month look-ahead rows (today .. today+14). Managers: «ביקורים החודש» and the «ביקורים וקליטות החודש» card
+  count only `inSelectedMonth !== false`; «ביקורים השבוע» and «ביקורים קרובים» use ALL visits.
+- Strict: only the boolean `false` excludes; field absent (Dashboard not yet deployed) = behaviour unchanged, so the
+  two repos can deploy in either order. Helper `WorkView.visitsInSelectedMonth` (`public/work.js`).
+- No new endpoint / variable / secret. SW v41, tests 478. Details: `CHANGELOG-visits-in-selected-month.md`.
+
 ## Managers: fast reads — saved copies + one shared call (October 24, 2026)
 
 - `/api/sheets` and the `/api/work` reads (`houseData`, `houseCost`, `meetingSummaries`) are served from an in-memory

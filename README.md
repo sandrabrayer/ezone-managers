@@ -95,7 +95,9 @@ Dashboard (14 Oct 2026):
   - expected admissions this week and over the next 14 days;
   - the house manpower cost (stage 3, op `houseCost` → Dashboard → staffing feed, house totals
     only);
-  - visits and admissions this week and month;
+  - visits and admissions this week and month (the month counters skip next-month
+    look-ahead visits, `inSelectedMonth: false`; the week and upcoming views keep them —
+    `CHANGELOG-visits-in-selected-month.md`);
   - the latest unusual events.
 - «שיחות משפחה» was removed.
 - The bonus dial (`BonusView.bonusGaugeView`) and its «מה אם?» calculator
