@@ -29,6 +29,11 @@ scoping is unchanged (`docs/access.md`).
 | **בונוס** (was «בונוסים») | Every bonus block: the «חודש בונוס» picker, the hero, the «הבונוס שלי» dial and «מה אם?», «הבונוסים החודש», the KPIs, the treatment-days bar and daily chart, entries and exits, «היסטוריית תפוסה», the house's «תפוסה חודשית». |
 | מטופלים · צוות ומשמרות · מטפלים · שיחות עם עובדים · אירועים חריגים | Unchanged. |
 
+**Visit counters (26 Oct 2026).** «ביקורים החודש» (הבית היום) and «ביקורים וקליטות החודש» (מטופלים) count only
+visits with `inSelectedMonth !== false`; «ביקורים השבוע» and «ביקורים קרובים» use all visits, next-month look-ahead
+rows included. Only the boolean `false` excludes a row; an absent field changes nothing
+(`WorkView.visitsInSelectedMonth`, `CHANGELOG-visits-in-selected-month.md`).
+
 ### The settled-month banner
 
 - **Running month**: the hero is empty and `hidden`. It is not drawn at the top

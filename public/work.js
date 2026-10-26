@@ -399,8 +399,15 @@
     return h + '</div>';
   }
 
+  /* The visits that belong to the selected month (26 Oct 2026). The Dashboard marks next-month look-ahead
+     rows (today .. today+14) with inSelectedMonth: false; only that exact boolean drops a row, so an absent
+     field (older backend) or any other value keeps today's behaviour. Week / upcoming views use ALL visits. */
+  function visitsInSelectedMonth(visits) {
+    return (Array.isArray(visits) ? visits : []).filter(function (v) { return !(v && v.inSelectedMonth === false); });
+  }
+
   function patientsHtml(d) {
-    var pats = d.patients || [], outs = d.outpatients || [], visits = d.visits || [], adm = d.admissions || [];
+    var pats = d.patients || [], outs = d.outpatients || [], visits = visitsInSelectedMonth(d.visits), adm = d.admissions || [];
     var dis = d.expectedDischargeSupported === true;
     var modes = dischargeModes(d);
     var h = '';
@@ -651,7 +658,7 @@
     d = d || {};
     var today = d.today || '';
     var wd = weekdayOf(today);
-    var visits = d.visits || [], adm = d.admissions || [];
+    var visits = d.visits || [], monthVisits = visitsInSelectedMonth(visits), adm = d.admissions || [];
     var weekStart = wd >= 0 ? addDaysIso(today, -wd) : '';
     var weekEnd = weekStart ? addDaysIso(weekStart, 6) : '';
     var weekVisits = visits.filter(function (v) { return weekStart && v.date >= weekStart && v.date <= weekEnd; });
@@ -669,7 +676,7 @@
     h += '<div class="dash-tiles">' +
       tile('t-pink', weekVisits.length, 'ביקורים השבוע') +
       tile('t-green', d.expectedAdmissions ? expectedWeek.length : '—', 'קליטות צפויות השבוע') +
-      tile('t-blue', visits.length, 'ביקורים החודש') +
+      tile('t-blue', monthVisits.length, 'ביקורים החודש') +
       tile('t-violet', adm.length, 'נקלטו החודש') + '</div>';
     h += '<div class="card-subtitle">קליטות צפויות (שבועיים קרובים)</div>' + (!d.expectedAdmissions
       ? '<div class="wk-empty">הנתון יופיע אחרי עדכון השרת</div>'
@@ -846,6 +853,7 @@
     COMMITTEE_REASON: COMMITTEE_REASON,
     WORK_ERRORS: WORK_ERRORS, dischargeErrorText: dischargeErrorText, setDischargeBusy: setDischargeBusy,
     teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml, costHtml: costHtml,
+    visitsInSelectedMonth: visitsInSelectedMonth,
     todayModel: todayModel, todayCardHtml: todayCardHtml, todayAllHtml: todayAllHtml, SHIFT_ORDER: SHIFT_ORDER,
     logListHtml: logListHtml, logPanelHtml: logPanelHtml, followUpsHtml: followUpsHtml, entryFromForm: entryFromForm };
 

@@ -3,6 +3,17 @@
 
 ## Unreleased
 
+### Fixed — month visit counters ignore next-month look-ahead visits (October 26, 2026)
+
+- **What**: «ביקורים החודש» (הבית היום) and the «ביקורים וקליטות החודש» card (מטופלים) count and list only visits
+  with `inSelectedMonth !== false`; «ביקורים השבוע» and «ביקורים קרובים» keep ALL visits. One pure helper,
+  `WorkView.visitsInSelectedMonth`; only the boolean `false` drops a row, so an absent field behaves exactly as before.
+- **Why**: the Dashboard `visits` feed carries next-month look-ahead rows (today .. today+14), which inflated the
+  month counters. The Dashboard is adding the optional `inSelectedMonth` flag (`false` on look-ahead rows only).
+- **Security**: display-only; every value still escaped. No new endpoint, env var or secret. SW v41.
+- **Docs**: `CHANGELOG-visits-in-selected-month.md`, `docs/home-and-bonus-tabs.md`, README, ecosystem status.
+- **Tests**: `visits-in-selected-month.test.js` (8). **Tests 470 → 478**.
+
 ### Added — fast reads: saved copies, one shared call, quiet refresh (October 24, 2026)
 
 - **What**: `/api/sheets` and the `/api/work` reads (`houseData`, `houseCost`, `meetingSummaries`) now use a
