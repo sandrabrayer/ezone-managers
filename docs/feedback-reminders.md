@@ -15,7 +15,31 @@ records when it was done.
   - `ok`: later;
   - `unknown`: no start date and no feedback yet («אין תאריך התחלה», never a guessed date).
 - **Inactive employees are left out** (`active === false`). The digest already carries only active staff.
-  Duplicate names are merged, the first one wins. A feedback date in the future or invalid is ignored.
+  Same-name people remain separate. Repeated rows with the same stable worker ID
+  are merged; name-only feedback is attributed only to one unambiguous legacy
+  roster person without an ID. A feedback date in the future or invalid is ignored.
+
+## Identity boundary — E-ZONE One draft (November 1, 2026)
+
+The pure model accepts roster `workerId` / `employeeId` / `id` and log
+`employeeId` / `workerId`. A log row's own `id` is never an employee ID.
+ID-specific feedback follows the person across a display-name change. Legacy
+feedback is not assigned to either of two same-name people or to an ID-bearing
+person without a verified mapping.
+
+**Not a completed identity migration:** the reviewed Coordinators digest and
+Dashboard feedback write still carry names only. The UI therefore keeps
+ambiguous rows visible with an identification notice and no name-only save
+form. Explicit IDs submitted to the proxy are refused with
+`identity_contract_required`, never stripped and forwarded as a name.
+Unambiguous legacy names keep their existing save path. The UI notice is not
+a substitute for backend identity validation.
+
+Completion requires an append-only worker ID through the Staffing roster,
+Coordinators `ManagersStaff`, Dashboard `mwTeam_` and `ManagersFeedbackLog`,
+plus a capability check and house-scoped ID validation on `feedbackDone`.
+Historical ambiguous rows require verified mapping; no automatic name-based
+migration, live mapping or sheet change is performed in this draft.
 
 ## Where
 

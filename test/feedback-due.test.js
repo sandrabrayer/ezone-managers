@@ -44,7 +44,7 @@ test('lastFeedbackBy: the latest real, non-future date per (trimmed) name', () =
   assert.deepEqual(m, { 'נועה': '2026-06-01' });
 });
 
-test('houseFeedback: inactive left out, duplicates merged, sorted overdue → soon → ok → unknown, with counts', () => {
+test('houseFeedback: inactive left out, same-name people retained, sorted overdue → soon → ok → unknown', () => {
   const roster = [
     { name: 'בתאריך', startDate: '2026-01-01' },                    // due 2026-07-01 → overdue
     { name: 'קרוב', startDate: '2026-05-05' },                      // due 2026-11-05 → soon
@@ -52,12 +52,29 @@ test('houseFeedback: inactive left out, duplicates merged, sorted overdue → so
     { name: 'בלי תאריך' },                                          // unknown
     { name: 'עזב', startDate: '2025-01-01', active: false },
     { name: 'עזב2', startDate: '2025-01-01', active: 'false' },
-    { name: 'קרוב', startDate: '2020-01-01' },                      // duplicate name → ignored
+    { name: 'קרוב', startDate: '2020-01-01' },                      // duplicate name → visible, ambiguous
     { name: 'משוב', startDate: '2025-01-01' }                       // feedback 2026-08-01 → due 2027-02-01 → ok
   ];
   const r = F.houseFeedback(roster, [{ employee: 'משוב', doneAt: '2026-08-01' }], TODAY);
-  assert.deepEqual(r.items.map((x) => [x.name, x.status]), [['בתאריך', 'overdue'], ['קרוב', 'soon'], ['משוב', 'ok'], ['רחוק', 'ok'], ['בלי תאריך', 'unknown']]);
-  assert.deepEqual([r.overdue, r.soon, r.unknown, r.today], [1, 1, 1, TODAY]);
+  assert.deepEqual(r.items.map((x) => [x.name, x.status]), [['קרוב', 'overdue'], ['בתאריך', 'overdue'], ['קרוב', 'soon'], ['משוב', 'ok'], ['רחוק', 'ok'], ['בלי תאריך', 'unknown']]);
+  assert.deepEqual([r.overdue, r.soon, r.unknown, r.today], [2, 1, 1, TODAY]);
+  assert.ok(r.items.filter(x => x.name === 'קרוב').every(x => x.identityAmbiguous));
+});
+
+test('distinct stable employee IDs retain same-name people and never share legacy feedback', () => {
+  const roster = [{ id: 'w1', name: 'Same', startDate: '2026-01-01' }, { id: 'w2', name: 'Same', startDate: '2026-02-01' }];
+  const r = F.houseFeedback(roster, [{ employee: 'Same', doneAt: '2026-10-01' }, { employeeId: 'w1', employee: 'Old name', doneAt: '2026-09-01' }], TODAY);
+  assert.equal(r.items.length, 2);
+  assert.equal(r.items.find(x => x.employeeId === 'w1').lastFeedback, '2026-09-01');
+  assert.equal(r.items.find(x => x.employeeId === 'w2').lastFeedback, '');
+});
+test('duplicate rows for one stable ID collapse; a feedback row ID is not an employee ID', () => {
+  const r = F.houseFeedback([{ workerId: 'w1', name: 'Only' }, { workerId: 'w1', name: 'Only' }],
+    [{ id: 'log-1', employee: 'Only', doneAt: '2026-09-01' }], TODAY);
+  assert.equal(r.items.length, 1);
+  assert.equal(r.items[0].lastFeedback, '', 'a stable identity cannot inherit an unverified name-only record');
+  const legacy = F.houseFeedback([{ name: 'Only' }], [{ id: 'log-1', employee: 'Only', doneAt: '2026-09-01' }], TODAY);
+  assert.equal(legacy.items[0].lastFeedback, '2026-09-01', 'unique legacy names retain their existing behavior');
 });
 
 test('validDoneAt: a real date, not in the future, not before 2000', () => {

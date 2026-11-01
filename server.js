@@ -140,7 +140,7 @@ function requireUser(req, res, next) {
   req.user = u;
   next();
 }
-const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, house: u.house || null });
+const publicUser = (u) => Object.assign({ id: u.id, name: u.name, role: u.role, house: u.house || null }, u.readOnly === true ? { readOnly: true } : {});
 
 // ---- static: public assets only (they hold no data; data needs a login) ----
 app.use(express.static(path.join(__dirname, 'public')));
@@ -412,6 +412,9 @@ const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // Writes get their own, tighter bucket on top of the shared one.
 const allowWrites = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 });
 const WRITE_OPS = new Set(['logAdd', 'logUpdate', 'dischargeSet', 'feedbackDone']);
+// Explicit read allowlist: a future operation cannot accidentally grant an
+// executive read-only account a new mutation. The browser cannot override this.
+const READ_ONLY_WORK_OPS = new Set(['houseData', 'houseCost', 'meetingSummaries', 'shiftUpdates']);
 const DISCHARGE_MODES = new Set(['set', 'clear', 'none']);
 // A write may wait up to 5 s for the Dashboard's script lock on top of its
 // reads, so it gets a longer budget than a read (docs/expected-discharge.md).
@@ -432,6 +435,7 @@ app.post('/api/work', requireUser, async (req, res) => {
     return res.status(410).json({ error: 'committee_read_only', message: 'את הוועדות קובעים הרכזים באפליקציית הרכזים.' });
   }
   if (!WORK_OPS.has(op) && !LOCAL_WORK_OPS.has(op)) return res.status(400).json({ error: 'unknown_op' });
+  if (u.readOnly === true && !READ_ONLY_WORK_OPS.has(op)) return res.status(403).json({ error: 'read_only' });
   // The house is the manager's own; an admin names one.
   const house = u.role === 'admin' ? String(b.house || '') : u.house;
   if (!access.canSeeHouse(u, house) || !access.HOUSE_KEYS.includes(house)) {
@@ -474,6 +478,9 @@ app.post('/api/work', requireUser, async (req, res) => {
     if (mode !== 'set') body.mode = mode;
   }
   if (op === 'feedbackDone') {
+    // The deployed backend contract is name-only. Never discard an explicit
+    // identity and silently record its feedback against someone else's name.
+    if (b.employeeId != null || b.workerId != null) return res.status(409).json({ error: 'identity_contract_required' });
     // Half-yearly feedback «משוב» (20 Oct 2026, docs/feedback-reminders.md). Shape check
     // only; the Dashboard re-validates (employee on THIS house's staff, not a future date)
     // and appends to the append-only ManagersFeedbackLog with the server-decided author.

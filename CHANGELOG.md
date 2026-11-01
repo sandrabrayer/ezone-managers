@@ -3,6 +3,13 @@
 
 ## Unreleased
 
+### Fixed — E-ZONE One read capability and feedback identity safeguards (November 1, 2026; draft)
+
+- Optional strict-boolean `readOnly` on an existing access row preserves its viewing scope and refuses business mutations at the server. The UI removes write controls. No account configuration changed.
+- Keep same-name employees separate; use stable IDs when provided to the reminder model, and never assign ambiguous name-only history. Ambiguous/ID-bearing rows cannot use the current name-only save form; explicit IDs are refused by the proxy until the shared ID contract is implemented.
+- End-to-end identity migration remains open, documented in `docs/feedback-reminders.md`; no historical mapping is guessed. Bonus rules and calculations unchanged. SW v42.
+- Six added regression tests: read-only HTTP/forged requests, configuration/session behavior, read-only UI, ambiguous names and stable-ID matching (478 → 484 tests).
+
 ### Fixed — month visit counters ignore next-month look-ahead visits (October 26, 2026)
 
 - **What**: «ביקורים החודש» (הבית היום) and the «ביקורים וקליטות החודש» card (מטופלים) count and list only visits

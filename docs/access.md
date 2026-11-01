@@ -1,5 +1,19 @@
 # Access — a personal code per person (13 Oct 2026)
 
+## Optional read-only accounts — E-ZONE One draft (November 1, 2026)
+
+An existing `MANAGER_ACCESS` row may explicitly include `readOnly: true`.
+Its role still determines visibility: an admin sees all five houses and a
+house manager sees only their assigned house. The server permits only the
+named read operations and refuses every business write before forwarding.
+The browser hides write forms and edit controls. Missing/false keeps existing
+behavior; a non-boolean value fails configuration validation.
+
+The session resolves the current configured account on every request, so a
+previously issued cookie cannot retain write access after this field changes.
+No production account or permission is changed by this draft. Enabling the
+field for any real person remains a separate configuration decision.
+
 **Replaces the open-app model of 12 Sep 2026.** The Managers app became a work
 tool holding private staff conversations, unusual events
 and (stage 3) manpower costs, so Sandra decided: every person logs in with
