@@ -261,3 +261,10 @@ Procfile + `railway.json` included — push to Railway and it runs `node server.
 Railway's `RAILWAY_GIT_COMMIT_SHA` (`"unknown"` when unset), so a deploy can be
 confirmed by comparing it with the merge SHA. `GET /healthz` is the Railway
 health check.
+
+## E-ZONE One audit follow-up (draft)
+
+Optional read-only account capability is documented in `docs/access.md`.
+Feedback identity safeguards and the remaining cross-system ID contract are
+documented in `docs/feedback-reminders.md`. No production configuration or
+historical identity mapping is changed by this draft.

@@ -1,5 +1,13 @@
 # E-ZONE Ecosystem Status — updated September 10, 2026
 
+## Managers E-ZONE One draft — November 1, 2026 (not deployed)
+
+Optional `readOnly: true` preserves configured viewing scope while the server
+refuses business writes. Feedback keeps same-name people separate and does not
+assign ambiguous legacy feedback. End-to-end worker IDs remain a documented
+Staffing → Coordinators → Dashboard contract dependency; no live migration or
+access configuration is included. See `docs/access.md` and `docs/feedback-reminders.md`.
+
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 
