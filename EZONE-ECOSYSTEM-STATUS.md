@@ -1,5 +1,8 @@
 # E-ZONE Ecosystem Status — updated September 10, 2026
 
+> **November 3, 2026 DRAFT-only performance addendum:** Managers background-tab overview polling is suppressed (one fetch at start, at most every 60 s while visible, one catch-up on return, no overlapping scheduled fetches). Source branch \`codex/mgr-background-poll-20261103\`, isolated from the existing Managers read-only identity PR #65. Six tests target the browser scheduler plus PWA monotonicity (v43, ahead of concurrent PR #65 v42). No merge, deployment, clinical/financial data or role change. The E-ZONE One ten-app audit/CRM release tracks remain owned by Dashboard #331; this does **not** establish live end-to-end or measured speed gains.
+
+
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 

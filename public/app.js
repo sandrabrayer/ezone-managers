@@ -2625,14 +2625,31 @@ function renderExits(ul, list) { renderActivityLog(ul, list); }
    Boot
    ============================================================ */
 
+/* Do not keep polling Dashboard from hidden/background tabs. A resumed tab
+ * fetches at most once per minute, and a slow request is never overlapped by
+ * the timer or a visibility event. Manual refresh and writes are unchanged. */
+const OVERVIEW_POLL_MS_ = 60_000;
 let dataStarted = false;
+let lastOverviewPollAt_ = -OVERVIEW_POLL_MS_;
+let overviewPollInFlight_ = false;
+function pollOverview_() {
+  if (document.hidden === true || overviewPollInFlight_) return;
+  const now = Date.now();
+  if (now - lastOverviewPollAt_ < OVERVIEW_POLL_MS_) return;
+  lastOverviewPollAt_ = now;
+  overviewPollInFlight_ = true;
+  Promise.resolve().then(loadOverview)
+    .catch(err => console.error('overview refresh failed', err))
+    .finally(() => { overviewPollInFlight_ = false; });
+}
 function startData() {
   if (dataStarted) return;
   dataStarted = true;
-  loadOverview();
+  pollOverview_();
   // Settled months only — fetched ONCE per page, never on the 60s refresh.
   ensureOccupancy_();
-  setInterval(loadOverview, 60_000);
+  setInterval(pollOverview_, OVERVIEW_POLL_MS_);
+  document.addEventListener('visibilitychange', pollOverview_);
 }
 
 /* Who is logged in (null until /api/me answered). A house manager sees only
