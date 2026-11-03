@@ -41,6 +41,12 @@ async function flush() {
   for (let i = 0; i < 8; i++) await Promise.resolve();
 }
 
+test('PWA shell is newer than concurrent Managers access draft v42', () => {
+  const sw = fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8');
+  const match = /const CACHE = 'ezone-managers-v(\d+)';/.exec(sw);
+  assert.ok(match && Number(match[1]) >= 43, 'v43+ required to prevent stale browser shell after PR #65');
+});
+
 test('one initial load, one occupancy load and one minute timer despite duplicate starts', async () => {
   const { ctx, state } = fixture();
   ctx.startData();
