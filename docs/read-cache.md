@@ -35,7 +35,7 @@ much more), and several people opening the same screen made several runs. The co
 
 ## Browser
 
-- **Background-tab overview polling (3 Nov 2026, DRAFT):** the 60-second Managers overview poll is skipped while the browser tab is hidden. Once the tab becomes visible, it refreshes only if at least 60 seconds have passed since its last scheduled fetch. Multiple timer/visibility events cannot cause simultaneous poll requests; deliberate user actions and source write invalidation remain unchanged. Five VM tests in \`test/overview-poll.test.js\` protect these behaviors. Do not infer live speedup until this draft is explicitly released and measured.
+- **Background-tab overview polling (3 Nov 2026, DRAFT):** the 60-second Managers overview poll is skipped while the browser tab is hidden. Once the tab becomes visible, it refreshes only if at least 60 seconds have passed since its last scheduled fetch. Multiple timer/visibility events cannot cause simultaneous poll requests; deliberate user actions and source write invalidation remain unchanged. Six VM tests in \`test/overview-poll.test.js\` protect these behaviors and the concurrent PWA version gate. Do not infer live speedup until this draft is explicitly released and measured.
 
 - `/api/sheets` reads: on `X-Cache: STALE` the footer says «מתעדכן…» and the screen reloads quietly after 4 s
   (the copy is fresh by then). At most 3 reloads per minute, so a refresh that keeps failing cannot loop.
