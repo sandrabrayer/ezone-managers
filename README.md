@@ -22,6 +22,8 @@ endpoint with authenticated JSON POST requests. The work tabs additionally use
 `POST /api/work` → `managersWork` for house data, adding notes and updating follow-ups.
 The server supplies the secret, role, house and stable actor ID from the session.
 
+**Overview refresh behavior (3 Nov 2026, DRAFT):** the overview is fetched at startup and at most once per 60 seconds **while the tab is visible**. A tab returning from the background automatically catches up if its data is due for a refresh. An in-flight overview read is never duplicated by a timer or visibility event. Manager note writes, manual refresh and backend cache invalidation are unaffected. See [fast read behavior](docs/read-cache.md) and the synthetic \`test/overview-poll.test.js\` regression suite.
+
 **Read failures (19 Oct 2026)**: `/api/sheets` answers a classified code
 (`upstream_timeout` 504, `upstream_unreachable`, `upstream_auth`, `upstream_bad_response`,
 `upstream_app_error`, `upstream_unavailable` 503) and logs one safe
