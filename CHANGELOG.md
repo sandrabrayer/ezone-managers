@@ -8,7 +8,7 @@
 - The overview's 60-second periodic fetch now runs only when the page is visible, and a returning tab refreshes immediately **only if** its last poll is at least 60 seconds old. Slow requests cannot overlap with another tick or visibility event.
 - This reduces redundant upstream reads from inactive browser tabs without changing manual refresh, house writes, the role scope, server cache or the Apps Script API.
 - Evidence motivating the narrow fix: Railway Managers logged 9,491 HTTP requests (0 HTTP 5xx) in the measured 24-hour window. This is total service traffic, not all attributed to polling; any reduction must be measured after an authorized deployment.
-- Five synthetic VM tests exercise the actual scheduler in \`test/overview-poll.test.js\`. SW v42; no production deployment or credential changes.
+- Six synthetic VM tests (including SW-version collision guard) exercise the actual scheduler in \`test/overview-poll.test.js\`. SW v43; no production deployment or credential changes.
 
 
 ### Fixed — month visit counters ignore next-month look-ahead visits (October 26, 2026)
