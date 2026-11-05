@@ -3,6 +3,23 @@
 
 ## Unreleased
 
+### Added — settled bonuses feed for the staffing app (November 5, 2026)
+
+- **What**: `GET /api/feeds/staffing/bonuses?month=YYYY-MM` — the month's settled manager bonus per house
+  (occupancy + referral + intake meetings + the quarterly in a window's last month), computed with the
+  canonical `lib/bonus-eligibility.js` from the raw `managersOverview` rows (`lib/staffing-feed.js`), the same
+  calls as «היסטוריית בונוסים». Staffing house ids (`asher`, `ramot`, `ofroni`, `rehab`, `pardes`); a house with
+  no figures is `missing: true`, never a zero.
+- **Why**: Sandra, Nov 5, 2026 — the staffing app pulls the monthly bonuses from the managers and coordinators apps
+  for the month-end payroll control (approved endpoint + variable).
+- **Security**: server-to-server only; its own secret `STAFFING_FEED_SECRET` (header `X-Feed-Secret`, 24+ chars,
+  constant-time compare), **fail-closed** — unset or wrong → 401 and nothing is read upstream; month validated;
+  its own rate limit; upstream read as actor `staffing-feed` with the work secret; no amounts in logs;
+  upstream failure → 502, never a guessed 0. No frontend change (no SW bump).
+- **Railway**: new variable `STAFFING_FEED_SECRET` (= staffing's `MANAGERS_FEED_SECRET`). Inactive until set.
+- **Docs**: README (env + endpoint), this entry.
+- **Tests**: `test/staffing-feed.test.js` (9). **Tests 477 → 486**.
+
 ### Fixed — month visit counters ignore next-month look-ahead visits (October 26, 2026)
 
 - **What**: «ביקורים החודש» (הבית היום) and the «ביקורים וקליטות החודש» card (מטופלים) count and list only visits

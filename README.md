@@ -30,6 +30,8 @@ made the same read successfully in the last 72 h, the server returns that copy w
 `X-Data-Source: cache`, and the app shows «מוצגים נתונים שמורים». With no copy, the app shows a
 Hebrew error with «נסו שוב». See `docs/sheets-resilience.md`.
 
+**Staffing feed (Nov 5, 2026):** `GET /api/feeds/staffing/bonuses?month=YYYY-MM` with header `X-Feed-Secret` = `STAFFING_FEED_SECRET` (Railway variable, 24+ chars; the staffing app holds the same value as `MANAGERS_FEED_SECRET`). Returns `{ ok, month, houses:[{ house, key, manager, occupancy, referral, intake, quarterly, total, missing }], generatedAt }` — settled amounts computed with `lib/bonus-eligibility.js` (`lib/staffing-feed.js`). Fail-closed: unset or wrong secret → 401, nothing read upstream.
+
 The endpoint URL is configured via the `APPS_SCRIPT_URL` env var. It is **required** — there is no hardcoded fallback, and the server refuses to start if it is not set.
 
 ## Access — a personal code per person (13 Oct 2026)
