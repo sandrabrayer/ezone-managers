@@ -26,6 +26,8 @@ const { createReadCache } = require('./lib/read-cache');
 const access = require('./lib/access');
 const { createReadiness } = require('./lib/readiness');
 const { createCoordFeed } = require('./lib/coord-feed');
+const StaffingFeed = require('./lib/staffing-feed');
+const BonusEligibility = require('./lib/bonus-eligibility');
 
 const PORT = Number(process.env.PORT) || 3000;
 const APPS_SCRIPT_URL = process.env.APPS_SCRIPT_URL || '';
@@ -554,6 +556,75 @@ app.post('/api/work', requireUser, async (req, res) => {
 });
 
 // ---- 404 for unknown /api routes (before SPA fallback) ----
+// ---- staffing feed: settled manager bonuses for one month (Nov 5, 2026) ----
+// Sandra: the staffing app pulls the monthly bonus figures from here for the
+// month-end payroll control. Server-to-server only: its own secret
+// (STAFFING_FEED_SECRET, header X-Feed-Secret), constant-time compare,
+// FAIL-CLOSED — unset or wrong → 401, nothing is read upstream. The amounts
+// are computed with lib/bonus-eligibility.js from the raw overview rows,
+// exactly as the «היסטוריית בונוסים» view does (lib/staffing-feed.js).
+const STAFFING_FEED_SECRET = process.env.STAFFING_FEED_SECRET || '';
+const allowFeed = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 120 });
+function feedAuthorized(req) {
+  const given = String(req.get('X-Feed-Secret') || '');
+  if (!STAFFING_FEED_SECRET || STAFFING_FEED_SECRET.length < 24 || !given) return false;
+  const a = Buffer.from(given), b = Buffer.from(STAFFING_FEED_SECRET);
+  if (a.length !== b.length) { require('crypto').timingSafeEqual(a, a); return false; }
+  return require('crypto').timingSafeEqual(a, b);
+}
+/* One month's managersOverview rows, read as the feed (admin scope, actor
+ * named so the Dashboard's log says who asked). Throws the classified failure. */
+async function overviewRowsForFeed(ym) {
+  const body = { action: 'managersOverview', month: ym, secret: WORK_SECRET, role: 'admin', actor: 'staffing-feed', actorId: 'staffing-feed' };
+  const key = sheetsCacheKey(body, { role: 'admin', id: 'staffing-feed' });
+  const loader = async () => {
+    const started = Date.now();
+    let upstream, text;
+    try {
+      upstream = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST', redirect: 'follow', signal: AbortSignal.timeout(SHEETS_TIMEOUT_MS),
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(body)
+      });
+      text = await upstream.text();
+    } catch (err) { throw upstreamError(workFailure(err), Date.now() - started); }
+    let data;
+    try { data = JSON.parse(text); } catch { throw upstreamError(nonJsonFailure(text), Date.now() - started); }
+    const f = sheetsReplyFailure(upstream.status, data);
+    if (f) throw upstreamError(f, Date.now() - started);
+    return { text, data };
+  };
+  const r = await readCache.read(key, loader, { wait: false, tag: { house: '' } });
+  return Array.isArray(r.value.data.houses) ? r.value.data.houses : [];
+}
+app.get('/api/feeds/staffing/bonuses', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (!allowFeed(clientIp(req))) return res.status(429).json({ ok: false, error: 'rate_limited' });
+  if (!feedAuthorized(req)) return res.status(401).json({ ok: false, error: 'unauthorized' });
+  const ym = typeof req.query.month === 'string' ? req.query.month : '';
+  if (!StaffingFeed.isMonth(ym)) return res.status(400).json({ ok: false, error: 'bad_month' });
+  const t0 = Date.now();
+  try {
+    const rows = await overviewRowsForFeed(ym);
+    const win = BonusEligibility.quarterWindowFor(ym);
+    const windowRows = {};
+    // The other two months are read only when a quarterly can be earned at
+    // all: the window's last month, in a rule set where quarterly is on.
+    if (Array.isArray(win) && win.length === 3 && win[2] === ym && BonusEligibility.quarterlyStatus(win, {}).enabled) {
+      for (const m of win) if (m !== ym) {
+        try { windowRows[m] = await overviewRowsForFeed(m); } catch (e) { windowRows[m] = null; }
+      }
+    }
+    const out = StaffingFeed.settledBonusesForMonth(ym, rows, windowRows);
+    console.log(`[feed] kind=staffing-bonuses month=${ym} houses=${out.houses.length} ms=${Date.now() - t0}`);   // no amounts in logs
+    return res.json({ ok: true, month: out.month, houses: out.houses, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    const f = (err && err.fail) || workFailure(err);
+    console.error(`[feed] kind=staffing-bonuses month=${ym} class=${f.error} status=${f.status} ms=${Date.now() - t0}`);
+    return res.status(502).json({ ok: false, error: 'upstream_unavailable' });
+  }
+});
+
 app.use('/api', (_req, res) => res.status(404).json({ error: 'not found' }));
 
 // ---- SPA fallback ----
