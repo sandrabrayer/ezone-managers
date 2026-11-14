@@ -1,5 +1,13 @@
 # E-ZONE Ecosystem Status — updated September 10, 2026
 
+> **November 14, 2026 — Managers CRM redesign** (`docs/crm-redesign.md`).
+> - **Look and tabs:** light theme, one colour per tab, «בונוס» last.
+> - **New:** a patient card and an employee card; «תקציב כוח אדם» with every worker's month cost; staff-talk
+>   threads; «מה היה בוועדה»; the quarterly budget-adherence bonus (amount not set yet).
+> - **Needs:** E-Zone-Dashboard `managersWork` (`houseStaffCost`, the `staffTalks` thread columns, the
+>   `committeeNotes` log) and ezone-staffing `getHouseWorkerCostsForManagers` (same `MANAGERS_COST_READ_SECRET`).
+>   No new secret, variable or endpoint. SW v42.
+
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 

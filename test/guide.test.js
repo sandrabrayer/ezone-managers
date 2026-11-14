@@ -13,12 +13,14 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const html = read('public/index.html');
 const guide = /<section class="panel" id="panel-guide"[\s\S]*?<\/section>\s*<\/div>\s*<\/section>/.exec(html)[0];
 
-const SECTIONS = ['g-tabs', 'g-today', 'g-bonus', 'g-patients', 'g-team', 'g-logs', 'g-committees', 'g-summaries', 'g-feedback', 'g-access'];
+const SECTIONS = ['g-tabs', 'g-today', 'g-bonus', 'g-patients', 'g-team', 'g-logs', 'g-committees', 'g-summaries', 'g-feedback', 'g-access', 'g-budget'];
 
-test('guide: a «מדריך» top tab after the houses; the page is RTL Hebrew', () => {
+test('guide: a «מדריך» tab after the houses (opened from the top-bar button, 14 Nov 2026); the page is RTL Hebrew', () => {
   const nav = /<nav class="tabs"[\s\S]*?<\/nav>/.exec(html)[0];
   const tabs = [...nav.matchAll(/data-tab="(\w+)"[^>]*>([^<]+)</g)].map((m) => [m[1], m[2]]);
-  assert.deepEqual(tabs[tabs.length - 1], ['guide', 'מדריך']);
+  assert.ok(tabs.some((t) => t[0] === 'guide' && t[1] === 'מדריך'));
+  assert.ok(tabs.findIndex((t) => t[0] === 'guide') > tabs.findIndex((t) => t[0] === 'pardes'));
+  assert.match(html, /data-tab-link="guide"[^>]*>📖 מדריך</);
   assert.match(html, /<html lang="he" dir="rtl">/);
 });
 

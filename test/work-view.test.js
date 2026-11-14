@@ -156,7 +156,7 @@ test('staff-talk form offers the house staff as suggestions (escaped)', () => {
 /* ---- Dashboard (14 Oct 2026) ---- */
 test('family calls are gone from the app (no log definition)', () => {
   assert.equal(W.LOGS.familyCalls, undefined);
-  assert.deepEqual(Object.keys(W.LOGS), ['staffTalks', 'events']);
+  assert.deepEqual(Object.keys(W.LOGS), ['staffTalks', 'events', 'committeeNotes']);
 });
 
 test('dashboard: today in the house — patients, on shift, today\'s therapy sessions, open reminders', () => {

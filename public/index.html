@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#2D0A14" />
+  <meta name="theme-color" content="#FFFFFF" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="מנהלים" />
   <title>איזון — מנהלים</title>
 
@@ -41,6 +41,8 @@
       <span class="brand-name">מנהלים</span>
     </div>
     <div class="top-bar-end">
+      <!-- «מדריך» (moved to the top bar 14 Nov 2026 so «בונוס» is the LAST tab). -->
+      <button type="button" class="guide-btn" data-tab-link="guide" aria-label="מדריך שימוש">📖 מדריך</button>
       <div class="user-chip" id="userChip" hidden>
         <span id="userName"></span>
         <button type="button" class="link-btn" id="logoutBtn">יציאה</button>
@@ -55,16 +57,17 @@
 
   <nav class="tabs" id="tabs" role="tablist" aria-label="ניווט">
     <!-- «הבית היום» is the landing screen (20 Oct 2026); every bonus figure
-         lives in «בונוס» (see docs/home-and-bonus-tabs.md). -->
+         lives in «בונוס» — the LAST tab since 14 Nov 2026 (docs/crm-redesign.md). -->
     <button class="tab is-active" data-tab="today" role="tab" aria-selected="true">הבית היום</button>
-    <button class="tab" data-tab="overview" role="tab" aria-selected="false">בונוס</button>
     <button class="tab" data-tab="raanana" role="tab">רעננה אשר</button>
     <button class="tab" data-tab="ramot" role="tab">רמות השבים</button>
     <button class="tab" data-tab="efroni" role="tab">קיסריה עפרוני</button>
     <button class="tab" data-tab="rehab" role="tab">קיסריה ריהאב</button>
     <button class="tab" data-tab="pardes" role="tab">רעננה הפרדס</button>
-    <!-- «מדריך» (20 Oct 2026): static usage guide, open to every role. -->
-    <button class="tab" data-tab="guide" role="tab" aria-selected="false">מדריך</button>
+    <!-- «מדריך» (20 Oct 2026): static usage guide, open to every role. Opened
+         from the top-bar button; the tab stays for links and the #guide hash. -->
+    <button class="tab tab-guide" data-tab="guide" role="tab" aria-selected="false">מדריך</button>
+    <button class="tab tab-bonus" data-tab="overview" role="tab" aria-selected="false">בונוס</button>
   </nav>
 
   <main class="screen" id="screen">
@@ -171,18 +174,23 @@
             <li><a href="#g-summaries">סיכומי ישיבות</a></li>
             <li><a href="#g-feedback">תזכורות משוב חצי־שנתי</a></li>
             <li><a href="#g-access">כניסה ופרטיות</a></li>
+            <li><a href="#g-budget">תקציב כוח אדם ובונוס עמידה בתקציב</a></li>
           </ol>
         </nav>
 
         <section class="card guide-sec" id="g-tabs">
           <h2>1. הלשוניות באפליקציה</h2>
+          <p>כל לשונית בצבע משלה. הסדר: היום, האנשים, הכסף, הרישומים — והבונוס בסוף.</p>
           <ul>
             <li><b>הבית היום</b> — המסך הראשון. מה קורה בבית היום.</li>
-            <li><b>בונוס</b> — כל מה שקשור לבונוס: החודש הנוכחי, חודשים קודמים, תפוסה.</li>
-            <li><b>מטופלים</b> — מי בבית, תאריך שחרור משוער, ביקורים וקליטות.</li>
-            <li><b>צוות ומשמרות</b> ו<b>מטפלים</b> — מאפליקציית הרכזים, לקריאה בלבד.</li>
+            <li><b>מטופלים</b> — מי בבית, מי המטפל/ת, תאריך כניסה, שחרור משוער והוועדה הבאה. «כרטיס מטופל/ת» פותח את כל הפרטים בלשוניות.</li>
+            <li><b>צוות ומשמרות</b> ו<b>מטפלים</b> — מאפליקציית הרכזים, לקריאה בלבד. «כרטיס» ליד כל עובד/ת.</li>
+            <li><b>תקציב כוח אדם</b> — עלות החודש מול התקציב, העובדים ועלות השכר של כל אחד, והמבט הרבעוני.</li>
+            <li><b>ועדות</b> — הוועדות שהרכזים קבעו, ו«מה היה בוועדה».</li>
             <li><b>שיחות עם עובדים</b> ו<b>אירועים חריגים</b> — הרישומים שלך.</li>
-            <li><b>מדריך</b> — המסך הזה.</li>
+            <li><b>סיכומי ישיבות</b> ו<b>עדכון משמרת</b> — מאפליקציית הרכזים, לקריאה בלבד.</li>
+            <li><b>בונוס</b> — בסוף: כל מה שקשור לבונוס, כולל בונוס עמידה בתקציב.</li>
+            <li><b>📖 מדריך</b> — בראש המסך. המסך הזה.</li>
           </ul>
           <p class="guide-note">מנהל/ת בית רואה רק את הבית שלו/ה. סנדרה ורון רואים את כל הבתים.</p>
         </section>
@@ -207,6 +215,7 @@
             <li><b>תפוסה מלאה — 3,000 ₪ בסך הכול</b>: ממוצע שמגיע לקיבולת הבית.</li>
             <li><b>פגישת קליטה — 250 ₪</b>: לכל פגישת קליטה שקיימת שהסתיימה בכניסה של 30 יום ומעלה, כשהמטופל/ת הוא/היא השביעי/ת ומעלה בבית. נספר בחודש הכניסה.</li>
             <li><b>המשך טיפול יום — 300 ₪ פעם אחת</b>: לכל מטופל/ת מהבית שמתחיל/ה חבילת טיפול יום.</li>
+            <li><b>עמידה בתקציב — רבעוני</b>: עלות כוח האדם של הבית ברבעון לא עוברת את תקציב כוח האדם של הרבעון. נבדק פעם ברבעון (ינואר–מרץ, אפריל–יוני, יולי–ספטמבר, אוקטובר–דצמבר), החל מרבעון 4 2026. הסכום ייקבע על ידי סנדרה. ראו סעיף 11.</li>
           </ul>
           <table class="guide-table">
             <thead><tr><th>בית</th><th>סף (ממוצע ליום)</th><th>יעד ימי טיפול</th><th>תפוסה מלאה</th></tr></thead>
@@ -233,6 +242,7 @@
           <ul>
             <li>לכל מטופל/ת אפשר לקבוע <b>שחרור משוער</b>, לנקות אותו או לסמן «אין צפי לשחרור».</li>
             <li><b>שחרור קרוב</b> מופיע ב«הבית היום» 14 יום לפני התאריך. תאריך שעבר מסומן באדום «דורש עדכון».</li>
+            <li><b>כרטיס מטופל/ת</b> — לשוניות: <b>פרטים</b> (כניסה, ימים בבית, שחרור משוער, מטפל/ת, הוועדה הבאה), <b>טיפול</b> (הטיפולים השבועיים), <b>ועדות</b> (קרובות + מה היה בוועדות) ו<b>אירועים</b>. סוגרים ב-✕ או ב-Esc.</li>
             <li>כל שינוי נשמר עם מי ומתי. לא מוחקים היסטוריה.</li>
           </ul>
         </section>
@@ -249,7 +259,8 @@
         <section class="card guide-sec" id="g-logs">
           <h2>6. שיחות עם עובדים, אירועים ותזכורות</h2>
           <ul>
-            <li><b>שיחות עם עובדים</b> — נראות רק לך, לסנדרה ולרון.</li>
+            <li><b>שיחות עם עובדים</b> — נראות רק לך, לסנדרה ולרון. כל שיחה פותחת «תיק»: אפשר להוסיף <b>שיחת המשך</b> (שנייה, שלישית…) ולסיים ב<b>תוצאה</b> — שיפור, ללא שינוי, שיחת אזהרה, הועבר למשאבי אנוש, סיום העסקה או נסגר. תיק פתוח מופיע למעלה; תיק עם תוצאה מסומן «נסגר».</li>
+            <li>בכל שיחה רושמים גם <b>מה סוכם</b>.</li>
             <li><b>אירועים חריגים</b> — מה קרה ומה נעשה.</li>
             <li>אפשר לקבוע <b>תאריך מעקב</b>. כשהוא מגיע הוא מופיע ב«בקשות פתוחות». «בוצע» סוגר אותו.</li>
           </ul>
@@ -263,6 +274,7 @@
             <li>ועדה שבוטלה לא מופיעה בהתראות.</li>
             <li>אחרי שהרכז/ת שומר/ת ועדה, אפשר לשלוח לך הודעת וואטסאפ עם הפרטים.</li>
             <li>טעות בוועדה? פונים לרכז/ת.</li>
+            <li><b>מה היה בוועדה</b> — אחרי הוועדה לוחצים «📝 מה היה בוועדה» (ליד הוועדה, ברשימת «ועדות שהתקיימו», או בכרטיס המטופל/ת) ורושמים: משתתפים, החלטה (המשך שהייה, הארכה, שחרור, מעבר לאמבולטורי, אחר), מה היה, וועדה הבאה מומלצת. הסיכומים נשמרים לפי מטופל/ת ונראים לך, לסנדרה ולרון.</li>
           </ul>
         </section>
 
@@ -296,10 +308,33 @@
           </ul>
           <p class="guide-note">שאלה או תקלה — פונים לסנדרה.</p>
         </section>
+
+        <section class="card guide-sec" id="g-budget">
+          <h2>11. תקציב כוח אדם ובונוס עמידה בתקציב</h2>
+          <ul>
+            <li><b>עלות החודש מול התקציב</b> — מאפליקציית כוח האדם. ירוק = בתקציב, כתום = חריגה של עד 5%, אדום = חריגה.</li>
+            <li><b>לפי סעיף תקציב</b> — מדריכים, מטפלים, רכזים, טבחים ועוד: תקציב, עלות והפרש.</li>
+            <li><b>העובדים ועלות השכר</b> — כל עובד/ת בבית, התפקיד והעלות החודשית. «הערכה» = עוד אין דוח שכר לחודש. לחיצה על שם פותחת את כרטיס העובד/ת.</li>
+            <li><b>מבט רבעוני</b> — שלושת חודשי הרבעון, ו«בדרך לבונוס» או «חריגה צפויה».</li>
+            <li>הנתונים האלה נראים רק לך, לסנדרה ולרון. כל מנהל/ת רואה רק את הבית שלו/ה.</li>
+          </ul>
+        </section>
       </div>
     </section>
 
   </main>
+
+  <!-- Patient / employee card («כרטיס») — a side drawer, filled by work.js
+       (text-only from escaped strings). One per page; closed by ✕, Esc or the
+       backdrop. -->
+  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
+    <div class="drawer-head">
+      <h2 id="drawerTitle" class="drawer-title"></h2>
+      <button type="button" class="drawer-close" data-drawer-close aria-label="סגירה">✕</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </aside>
 
   <footer class="foot">
     <span id="footStatus">נטען…</span>
@@ -311,17 +346,22 @@
       <!-- Work tabs (13 Oct 2026). From 20 Oct 2026 «הבית היום» is the
            landing sub-tab and holds NO bonus element; every bonus block
            (picker, hero, dial, plan, KPIs, chart, history) is in «בונוס». -->
+      <!-- CRM tab order (14 Nov 2026, docs/crm-redesign.md): the day, the
+           people (patients, team, therapists), money (manpower budget), the
+           records (committees, staff talks, events, summaries, shift log) and
+           «בונוס» LAST. Each tab has its own colour (styles.css). -->
       <nav class="subtabs" data-subtabs role="tablist" aria-label="תפריט הבית">
-        <button type="button" class="subtab is-active" data-sub="home" role="tab" aria-selected="true">הבית היום</button>
-        <button type="button" class="subtab" data-sub="bonus" role="tab" aria-selected="false">בונוס</button>
-        <button type="button" class="subtab" data-sub="patients" role="tab" aria-selected="false">מטופלים</button>
-        <button type="button" class="subtab" data-sub="committees" role="tab" aria-selected="false">ועדות</button>
-        <button type="button" class="subtab" data-sub="summaries" role="tab" aria-selected="false">סיכומי ישיבות</button>
-        <button type="button" class="subtab" data-sub="shiftUpdates" role="tab" aria-selected="false">עדכון משמרת</button>
-        <button type="button" class="subtab" data-sub="team" role="tab" aria-selected="false">צוות ומשמרות</button>
-        <button type="button" class="subtab" data-sub="therapists" role="tab" aria-selected="false">מטפלים</button>
-        <button type="button" class="subtab" data-sub="staffTalks" role="tab" aria-selected="false">שיחות עם עובדים</button>
-        <button type="button" class="subtab" data-sub="events" role="tab" aria-selected="false">אירועים חריגים</button>
+        <button type="button" class="subtab is-active" data-sub="home" role="tab" aria-selected="true">🏠 הבית היום</button>
+        <button type="button" class="subtab" data-sub="patients" role="tab" aria-selected="false">🧑‍🤝‍🧑 מטופלים</button>
+        <button type="button" class="subtab" data-sub="team" role="tab" aria-selected="false">👥 צוות ומשמרות</button>
+        <button type="button" class="subtab" data-sub="therapists" role="tab" aria-selected="false">🩺 מטפלים</button>
+        <button type="button" class="subtab" data-sub="budget" role="tab" aria-selected="false">💰 תקציב כוח אדם</button>
+        <button type="button" class="subtab" data-sub="committees" role="tab" aria-selected="false">📋 ועדות</button>
+        <button type="button" class="subtab" data-sub="staffTalks" role="tab" aria-selected="false">💬 שיחות עם עובדים</button>
+        <button type="button" class="subtab" data-sub="events" role="tab" aria-selected="false">⚠️ אירועים חריגים</button>
+        <button type="button" class="subtab" data-sub="summaries" role="tab" aria-selected="false">📝 סיכומי ישיבות</button>
+        <button type="button" class="subtab" data-sub="shiftUpdates" role="tab" aria-selected="false">🔄 עדכון משמרת</button>
+        <button type="button" class="subtab" data-sub="bonus" role="tab" aria-selected="false">🏆 בונוס</button>
       </nav>
       <div data-followups></div>
 
@@ -338,6 +378,9 @@
         </div>
       </section>
       <section data-sub-panel="patients" hidden></section>
+      <!-- «תקציב כוח אדם» (14 Nov 2026): the month's cost vs budget, the
+           workers and what each costs, the quarter (work.js budgetHtml). -->
+      <section data-sub-panel="budget" hidden></section>
       <!-- «ועדות» (20 Oct 2026): READ-ONLY — the coordinators set them (work.js committeesHtml). -->
       <section data-sub-panel="committees" hidden></section>
       <!-- «סיכומי ישיבות» (20 Oct 2026): READ-ONLY, own house, month filter (work.js summariesHtml). -->
@@ -380,6 +423,13 @@
           <strong class="gold" data-stat="bonusTotal">—</strong>
         </div>
         <div class="bonus-fallback-note" data-bonus-fallback-note></div>
+      </div>
+
+      <!-- Quarterly manpower-budget bonus (14 Nov 2026) — work.js
+           budgetBonusHtml, math in lib/bonus-eligibility.js budgetBonusQuarter. -->
+      <div class="card dash-card budget-bonus-card" data-budget-bonus>
+        <div class="card-title">בונוס עמידה בתקציב (רבעוני)</div>
+        <div class="wk-empty">טוען…</div>
       </div>
 
       <div class="kpis">
@@ -451,6 +501,7 @@
   <script src="/discharge-alerts.js"></script>
   <script src="/committee-alerts.js"></script>
   <script src="/lib/feedback-due.js"></script>
+  <script src="/crm.js"></script>
   <script src="/work.js"></script>
   <script src="/app.js"></script>
   <!-- External, not inline: the CSP is script-src 'self' with no

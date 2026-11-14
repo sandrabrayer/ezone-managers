@@ -3,6 +3,44 @@
 
 ## Unreleased
 
+### Changed — CRM redesign: light look, colour per tab, cards, manpower budget, talk threads, committee notes, quarterly budget bonus (November 14, 2026)
+
+- **Why**: Sandra, 14 Nov 2026 — the app should look like the newer E-ZONE apps and be much more of a management
+  tool: a manpower budget with each worker's salary cost, the patients with their therapist / admission / expected
+  discharge, full details in CRM tabs in different colours, «בונוס» last, «מה היה בוועדה», a second talk / an outcome
+  for staff talks, and a quarterly budget-adherence bonus.
+- **Look**: light theme (white cards, dark ink, the Managers plum accent), one colour per tab, filled status chips with
+  a word. «בונוס» is the LAST top tab and the LAST house sub-tab; «📖 מדריך» moved to the top bar.
+- **New** (`public/crm.js`, pure view builders; wiring in `work.js`):
+  - **patient card** (פרטים · טיפול · ועדות · אירועים), plus the therapist and the next committee on every row;
+  - **employee card** (פרטים · עלות · שיחות · משוב);
+  - **«תקציב כוח אדם»** sub-tab: month cost vs budget, budget lines, every worker and their month cost, the quarter;
+  - **staff-talk threads**: «+ שיחת המשך», «✓ רישום תוצאה», «מה סוכם»;
+  - **«מה היה בוועדה»**: a form, «📝» on today's and past committees, the history.
+- **Bonus**: `BonusEligibility.budgetBonusQuarter` / `calendarQuarterOf` / `BUDGET_BONUS_RULES`.
+  - Calendar quarters, from Q4 2026; earned when the quarter's cost is ≤ the quarter's budget.
+  - Missing data is never a pass.
+  - The amount is not set yet (`null` → «הסכום ייקבע על ידי סנדרה»).
+  - Monthly rules (`RULE_SETS`) untouched.
+- **Server**: `/api/work` op `houseStaffCost` (Dashboard → staffing `getHouseWorkerCostsForManagers`); log
+  `committeeNotes`. A bad month on a cost read → 400 before upstream. No new endpoint, env var or secret.
+- **Security**:
+  - Salary data is only for the house's manager, Sandra and Ron. It is `no-store`, never in the SW cache and never
+    logged.
+  - Talk threads stay private (enforced by the Dashboard).
+  - Every feed value is escaped. `crm.js` has no `innerHTML`, `fetch` or `console`.
+  - Log save errors show in Hebrew, never as a raw code.
+- **Everything that existed is kept**: the checklist is in `docs/crm-redesign.md`.
+- **Needs**: E-Zone-Dashboard PR (threads, `committeeNotes`, `houseStaffCost`) and ezone-staffing PR (worker-cost
+  feed). Merge those first; this app degrades honestly without them.
+- **Tests**: 487 → 506.
+  - New: `test/crm-view.test.js` (9), `test/budget-bonus.test.js` (7), access tests for `houseStaffCost` /
+    `committeeNotes` (2).
+  - Rewritten: `test/work-colours.test.js`, for the light theme.
+  - Updated: tab-order tests (bonus last), the committee and discharge view tests (new buttons), the guide
+    (+ §11).
+- SW v41 → v42. Docs: `docs/crm-redesign.md`, README, guide, ecosystem status.
+
 ### Added — settled bonuses feed for the staffing app (November 5, 2026)
 
 - **What**: `GET /api/feeds/staffing/bonuses?month=YYYY-MM` — the month's settled manager bonus per house

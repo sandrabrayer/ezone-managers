@@ -1,4 +1,4 @@
-const CACHE = 'ezone-managers-v41';
+const CACHE = 'ezone-managers-v42';
 const SHELL = [
   '/',
   '/index.html',
@@ -8,6 +8,7 @@ const SHELL = [
   '/occupancy-export.js',
   '/auth.js',
   '/work.js',
+  '/crm.js',
   '/discharge-alerts.js',
   '/committee-alerts.js',
   '/sw-register.js',

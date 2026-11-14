@@ -74,6 +74,20 @@ exposed to the browser. The bonus VIEW module (`public/bonus-view.js` — month
 labelling, wording, days-so-far) lives in `public/` and is served by the
 static mount; see `docs/bonus-month-labelling.md`.
 
+## CRM redesign (14 Nov 2026)
+
+Light look like the newer E-ZONE apps, one colour per tab, «בונוס» last. Every house has these sub-tabs:
+הבית היום · מטופלים · צוות ומשמרות · מטפלים · **תקציב כוח אדם** · ועדות · שיחות עם עובדים · אירועים חריגים ·
+סיכומי ישיבות · עדכון משמרת · בונוס. New:
+
+- a patient card and an employee card (CRM tabs);
+- a manpower budget with every worker's month cost (`houseStaffCost`);
+- staff-talk threads (follow-up + outcome);
+- «מה היה בוועדה» (`committeeNotes`);
+- the quarterly budget-adherence bonus (`BonusEligibility.budgetBonusQuarter`).
+
+Details and the kept-features checklist: `docs/crm-redesign.md`.
+
 ## Access and work tabs (13 Oct 2026)
 
 **Tabs (20 Oct 2026, `docs/home-and-bonus-tabs.md`)**: the app opens on «הבית היום».

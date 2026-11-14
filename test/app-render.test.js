@@ -1721,5 +1721,7 @@ test('tabs (20 Oct 2026): a manager lands on their own house — the network «�
   call(s.ctx, 'applyRole_', { role: 'manager', house: 'ramot' });
   assert.equal(s.byId.get('panel-overview').hidden, true);
   assert.equal(s.byId.get('panel-today').hidden, true);
-  assert.equal(vm.runInContext('JSON.stringify(TOP_TABS_.slice(0, 2))', s.ctx), '["today","overview"]', '«הבית היום» first, «בונוס» second');
+  // 14 Nov 2026 (docs/crm-redesign.md): «הבית היום» first, the houses, «בונוס» LAST of the tab row.
+  assert.equal(vm.runInContext('JSON.stringify(TOP_TABS_.slice(0, 2))', s.ctx), '["today","raanana"]', '«הבית היום» first, then the houses');
+  assert.equal(vm.runInContext('JSON.stringify(TOP_TABS_.slice(-2))', s.ctx), '["overview","guide"]', '«בונוס» last; the guide opens from the top bar');
 });

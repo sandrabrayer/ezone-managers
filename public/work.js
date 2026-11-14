@@ -19,18 +19,29 @@
 (function (root) {
   'use strict';
 
+  /* The CRM views (crm.js, 14 Nov 2026): patient / employee cards, talk
+   * threads, committee notes, the manpower budget. */
+  var CV = root.CrmView || (typeof require === 'function' ? require('./crm.js') : null);
+  var BE = root.BonusEligibility || (typeof require === 'function' ? require('../lib/bonus-eligibility.js') : null);
+
   var LOGS = {
     staffTalks: {
       title: 'שיחות אישיות עם עובדים', add: 'רישום שיחה',
-      note: 'השיחות כאן נראות רק לך, לסנדרה ולרון.',
+      note: 'השיחות כאן נראות רק לך, לסנדרה ולרון. לכל שיחה אפשר להוסיף שיחת המשך ולרשום תוצאה.',
+      // Threads (14 Nov 2026): a follow-up / an outcome is saved with the same
+      // log, talkKind + parentId set by the thread form (crm.js talksListHtml).
       fields: [
         { k: 'employeeName', label: 'עובד/ת', type: 'employee', required: true },
         { k: 'talkDate', label: 'תאריך', type: 'date', required: true },
         { k: 'talkTime', label: 'שעה', type: 'time' },
-        { k: 'summary', label: 'עיקרי השיחה', type: 'textarea', max: 1500, required: true }
+        { k: 'summary', label: 'עיקרי השיחה', type: 'textarea', max: 1500, required: true },
+        { k: 'agreedActions', label: 'מה סוכם', type: 'textarea', max: 1000 },
+        { k: 'talkKind', type: 'hidden', value: 'first', max: 20 },
+        { k: 'parentId', type: 'hidden', value: '', max: 64 },
+        { k: 'outcome', label: 'התוצאה', type: 'hidden', value: '', max: 20, requiredWhen: { talkKind: 'outcome' } }
       ],
       head: function (r) { return r.employeeName; },
-      body: function (r) { return [r.summary]; },
+      body: function (r) { return [r.summary, r.agreedActions ? 'מה סוכם: ' + r.agreedActions : '']; },
       when: function (r) { return [r.talkDate, r.talkTime]; }
     },
     events: {
@@ -45,9 +56,26 @@
       head: function (r) { return r.patientName ? 'אירוע — ' + r.patientName : 'אירוע'; },
       body: function (r) { return [r.whatHappened, r.actionTaken ? 'מה נעשה: ' + r.actionTaken : '']; },
       when: function (r) { return [r.eventDate, r.eventTime]; }
+    },
+    // «מה היה בוועדה» (14 Nov 2026). Drawn inside the «ועדות» sub-tab by
+    // crm.js (committeeNotesPanelHtml) — there is no sub-panel of this name.
+    committeeNotes: {
+      title: 'מה היה בוועדה', add: 'שמירת סיכום הוועדה', inCommittees: true,
+      fields: [
+        { k: 'committeeId', type: 'hidden', value: '', max: 64 },
+        { k: 'patientName', label: 'מטופל/ת', type: 'patient', required: true },
+        { k: 'heldDate', label: 'תאריך הוועדה', type: 'date', required: true },
+        { k: 'participants', label: 'משתתפים', type: 'text', max: 300 },
+        { k: 'decision', label: 'החלטה', type: 'hidden', value: '', max: 20 },
+        { k: 'summary', label: 'מה היה בוועדה', type: 'textarea', max: 1500, required: true },
+        { k: 'nextDate', label: 'ועדה הבאה מומלצת', type: 'date' }
+      ],
+      head: function (r) { return 'ועדה — ' + (r.patientName || ''); },
+      body: function (r) { return [r.summary]; },
+      when: function (r) { return [r.heldDate, '']; }
     }
   };
-  var LOG_LABEL = { staffTalks: 'שיחה עם עובד/ת', events: 'אירוע חריג' };
+  var LOG_LABEL = { staffTalks: 'שיחה עם עובד/ת', events: 'אירוע חריג', committeeNotes: 'ועדה' };
   var STAGE_LABELS = { new: 'ליד', visit: 'נקבע ביקור', paid: 'שילם מקדמה', entry: 'נכנס לבית', waitlist: 'רשימת המתנה' };
   var OUTCOME_LABELS = { not_relevant: 'לא רלוונטי', thinking: 'חושבים על זה', entered: 'נכנסים לטיפול', postponed: 'נדחה', cancelled: 'התבטל' };
 
@@ -95,6 +123,7 @@
    * technical class is in the server log only (server.js logWork). */
   var WORK_ERRORS = {
     unknown_op: 'השרת לא עודכן — השמירה עוד לא זמינה. פנו לסנדרה.',
+    unknown_log: 'השרת לא עודכן — השמירה עוד לא זמינה. פנו לסנדרה.',
     unauthorized: 'אין הרשאה לשמור בשרת הנתונים. פנו לסנדרה.',
     upstream_unavailable: 'אין הרשאה לשמור בשרת הנתונים. פנו לסנדרה.',
     upstream_auth: 'אין הרשאה לכתוב בשרת הנתונים (נדרש אישור הרשאות). פנו לסנדרה.',
@@ -394,9 +423,31 @@
         (c.patientName ? ' · ' + esc(c.patientName) : '') + '</span>' +
         (status !== 'scheduled' ? '<span class="wk-cm-status">' + esc(COMMITTEE_STATUS[status]) + '</span>' : '') +
         (c.participants ? '<span class="wk-meta">משתתפים: ' + esc(c.participants) + '</span>' : '') +
-        (c.notes ? '<span class="wk-meta">הערות: ' + esc(c.notes) + '</span>' : '') + '</li>';
+        (c.notes ? '<span class="wk-meta">הערות: ' + esc(c.notes) + '</span>' : '') +
+        (status !== 'cancelled' && c.date <= (st.today || c.date) ? noteBtn(c) : '') + '</li>';
     }).join('') + '</ul>';
     return h + '</div>';
+  }
+  /* «📝 מה היה» on a committee that is today or has passed (14 Nov 2026). */
+  function noteBtn(c) {
+    return '<button type="button" class="wk-link cn-for" data-cn-for="' + esc([c.id || '', c.patientName || '', c.date || ''].join('|')) + '">📝 מה היה בוועדה</button>';
+  }
+  /* Committees that already took place (from the feed's recent past rows) and
+   * have no «מה היה» yet — the manager's to-do. */
+  function pastCommitteesHtml(d) {
+    var st = committeesState(d);
+    if (!st.ok) return '';
+    var notes = (d.logs && d.logs.committeeNotes) || [];
+    var noted = {};
+    notes.forEach(function (n) { if (n.committeeId) noted[n.committeeId] = true; });
+    var past = st.items.filter(function (c) {
+      return c && isRealIso(c.date) && st.today && c.date < st.today && c.status !== 'cancelled' && !(c.id && noted[c.id]);
+    });
+    if (!past.length) return '';
+    return '<div class="card work-card wk-cm-past"><div class="card-title">ועדות שהתקיימו — עוד לא נרשם מה היה (' + past.length + ')</div><ul class="wk-list">' +
+      past.map(function (c) {
+        return '<li><span class="wk-shift">' + esc(committeeWhen(c)) + '</span><span class="wk-name">' + esc(c.type) + (c.patientName ? ' · ' + esc(c.patientName) : '') + '</span>' + noteBtn(c) + '</li>';
+      }).join('') + '</ul></div>';
   }
 
   /* The visits that belong to the selected month (26 Oct 2026). The Dashboard marks next-month look-ahead
@@ -414,7 +465,9 @@
     h += '<div class="card work-card wk-patients"><div class="card-title">מטופלים בבית (' + pats.length + ')</div>';
     h += pats.length ? '<ul class="wk-list' + (dis ? ' wk-pat-list' : '') + '">' + pats.map(function (p, i) {
       return '<li><span class="wk-name">' + esc(p.name) + '</span><span class="wk-meta">מ-' + esc(fmtDate(p.entryDate)) +
-        ' · יום ' + esc(p.days) + (p.status === 'trial' ? ' · ניסיון' : '') + '</span>' + (dis ? dischargeHtml(p, i, modes) : '') + '</li>';
+        ' · יום ' + esc(p.days) + (p.status === 'trial' ? ' · ניסיון' : '') + '</span>' +
+        (dis ? dischargeHtml(p, i, modes) : '') +
+        (CV ? CV.patientRowExtras(d, p) + '<button type="button" class="wk-link pt-open" data-pt-open="' + i + '">כרטיס מטופל/ת ←</button>' : '') + '</li>';
     }).join('') + '</ul>' : '<div class="wk-empty">אין מטופלים רשומים בבית</div>';
     h += '</div>';
     h += '<div class="card work-card wk-out"><div class="card-title">מטופלי חוץ שיצאו מהבית (' + outs.length + ')</div>';
@@ -490,7 +543,8 @@
     var tel = telHref(s.phone);
     return '<li><span class="wk-name">' + esc(s.name) + '</span><span class="wk-meta">' + esc(s.role) +
       (s.onLeave ? ' · בחופשה' : '') + '</span>' +
-      (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') + '</li>';
+      (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') +
+      '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(s.name) + '">כרטיס ←</button></li>';
   }
   function teamHtml(d) {
     var gate = teamGate(d);
@@ -760,6 +814,7 @@
     var pats = (d && d.patients) || [];
     return '<form class="wk-form" data-wk-form="' + logKey + '" novalidate>' + def.fields.map(function (f) {
       var id = 'wk-' + logKey + '-' + f.k;
+      if (f.type === 'hidden') return '<input type="hidden" name="' + f.k + '" value="' + esc(f.value || '') + '">';
       var req = f.required ? ' required' : '';
       var lab = '<label for="' + id + '">' + esc(f.label) + (f.required ? ' *' : '') + '</label>';
       var input;
@@ -773,7 +828,7 @@
         var staff = (d && d.team && d.team.available && d.team.staff) || [];
         input = '<input id="' + id + '" name="' + f.k + '" maxlength="80" list="' + id + '-list" autocomplete="off"' + req + '>' +
           '<datalist id="' + id + '-list">' + staff.map(function (s) { return '<option value="' + esc(s.name) + '">'; }).join('') + '</datalist>';
-      } else input = '<input id="' + id + '" name="' + f.k + '" maxlength="' + f.max + '"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + req + '>';
+      } else input = '<input id="' + id + '" name="' + f.k + '" maxlength="' + (f.max || 80) + '"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + req + '>';
       return '<div class="wk-field wk-f-' + f.type + '">' + lab + input + '</div>';
     }).join('') +
       '<div class="wk-field wk-f-date"><label for="wk-' + logKey + '-fu">תזכורת למעקב (לא חובה)</label>' +
@@ -782,9 +837,11 @@
       '<span class="wk-msg" data-wk-msg></span></div></form>';
   }
 
-  function logListHtml(logKey, rows, me) {
+  function logListHtml(logKey, rows, me, today) {
     var def = LOGS[logKey];
     if (!rows || !rows.length) return '<div class="wk-empty">עדיין אין רישומים</div>';
+    // Staff talks are THREADS (14 Nov 2026): first talk → follow-ups → outcome.
+    if (logKey === 'staffTalks' && CV) return CV.talksListHtml(rows, today);
     return '<ul class="wk-log">' + rows.map(function (r) {
       var w = def.when(r);
       var canEdit = r.canEdit === true;
@@ -811,7 +868,15 @@
     return '<div class="card work-card wk-' + logKey + '"><div class="card-title">' + esc(def.title) + '</div>' +
       (def.note ? '<div class="wk-note">' + esc(def.note) + '</div>' : '') +
       formHtml(logKey, d, d && d.today) + '</div>' +
-      '<div class="card work-card"><div class="card-title">רישומים (' + rows.length + ')</div>' + logListHtml(logKey, rows, me) + '</div>';
+      '<div class="card work-card"><div class="card-title">' + esc(listTitle(logKey, rows)) + '</div>' + logListHtml(logKey, rows, me, d && d.today) + '</div>';
+  }
+  function listTitle(logKey, rows) {
+    if (logKey === 'staffTalks' && CV) {
+      var th = CV.talkThreads(rows || []);
+      var open = th.filter(function (t) { return !t.outcome; }).length;
+      return 'שיחות (' + th.length + (th.length ? ' · ' + open + ' פתוחות' : '') + ')';
+    }
+    return 'רישומים (' + (rows || []).length + ')';
   }
 
   /* Follow-ups due (date ≤ today, not done) — one line each. */
@@ -837,7 +902,10 @@
       var v = String(values[f.k] == null ? '' : values[f.k]).trim();
       v = v.slice(0, f.max || 80);
       out[f.k] = v;
-      if (f.required && !v) missing.push(f.label);
+    });
+    def.fields.forEach(function (f) {
+      var need = f.required || (f.requiredWhen && Object.keys(f.requiredWhen).every(function (k) { return out[k] === f.requiredWhen[k]; }));
+      if (need && !out[f.k]) missing.push(f.label);
     });
     out.followUpDate = String(values.followUpDate || '').trim();
     return { entry: out, missing: missing };
@@ -954,28 +1022,37 @@
     var th = host(panel, 'therapists');
     if (th) th.innerHTML = therapistsHtml(d);
     var cmt = host(panel, 'committees');
-    if (cmt) cmt.innerHTML = committeesHtml(d);
+    // «ועדות»: the read-only list + the committees still to be summarised +
+    // «מה היה בוועדה». A half-typed summary is never wiped by a redraw.
+    if (cmt && !cmt.querySelector('[data-wk-form][data-wk-dirty="1"]')) {
+      cmt.innerHTML = committeesHtml(d) + pastCommitteesHtml(d) + (CV ? CV.committeeNotesPanelHtml(d) : '');
+    }
     if (pendingEdit[key] != null) {
       var pi = pendingEdit[key]; delete pendingEdit[key];
       if (pi === 'list') showSub(panel, 'patients'); else openDischargeEdit(panel, pi);
     }
     renderAdminAlerts();
     Object.keys(LOGS).forEach(function (k) {
+      if (LOGS[k].inCommittees) return;   // drawn inside «ועדות» above
       var h = host(panel, k);
       if (!h) return;
-      // Keep a half-typed form: only the list is redrawn when a form exists.
+      // Keep a half-typed form: only the list is redrawn when the main form
+      // is dirty; nothing is redrawn while a thread form (inside the list) is.
       var form = h.querySelector('[data-wk-form]');
+      var dirtyThread = h.querySelector('[data-thread-form][data-wk-dirty="1"]');
+      if (dirtyThread) return;
       if (form && form.getAttribute('data-wk-dirty') === '1') {
         var list = h.querySelectorAll('.work-card')[1];
-        if (list) list.innerHTML = '<div class="card-title">רישומים (' + ((d.logs[k] || []).length) + ')</div>' + logListHtml(k, d.logs[k], u);
+        if (list) list.innerHTML = '<div class="card-title">' + esc(listTitle(k, d.logs[k])) + '</div>' + logListHtml(k, d.logs[k], u, d.today);
       } else {
         h.innerHTML = logPanelHtml(k, d, u);
       }
     });
+    renderDrawerIfOpen(key, d);
   }
 
   async function refresh(panel, key, force) {
-    var subs = ['patients', 'team', 'therapists', 'committees'].concat(Object.keys(LOGS));
+    var subs = ['patients', 'team', 'therapists', 'committees'].concat(Object.keys(LOGS).filter(function (k) { return !LOGS[k].inCommittees; }));
     try {
       var d = await load(key, force);
       renderAll(panel, key, d);
@@ -1241,6 +1318,31 @@
         loadShiftUpdates(panel, key);
         return;
       }
+      var ptOpen = t.closest && t.closest('[data-pt-open]');
+      if (ptOpen) { openDrawer(key, 'patient', ptOpen.getAttribute('data-pt-open')); return; }
+      var empOpen = t.closest && t.closest('[data-emp-open]');
+      if (empOpen) { openDrawer(key, 'employee', empOpen.getAttribute('data-emp-open')); return; }
+      var thOpen = t.closest && t.closest('[data-thread-open]');
+      var thCancel = t.closest && t.closest('[data-thread-cancel]');
+      if (thOpen || thCancel) {
+        var tk = (thOpen || thCancel).getAttribute(thOpen ? 'data-thread-open' : 'data-thread-cancel');
+        var tid = tk.split('|')[0];
+        panel.querySelectorAll('[data-thread-form]').forEach(function (f) {
+          if (f.getAttribute('data-thread-form').split('|')[0] !== tid) return;
+          f.hidden = !(thOpen && f.getAttribute('data-thread-form') === tk);
+          if (f.hidden) f.removeAttribute('data-wk-dirty');
+        });
+        var shown = thOpen && panel.querySelector('[data-thread-form="' + tk.replace(/"/g, '') + '"]');
+        if (shown && shown.elements.summary) shown.elements.summary.focus();
+        return;
+      }
+      var cnFor = t.closest && t.closest('[data-cn-for]');
+      if (cnFor) {
+        var cp = cnFor.getAttribute('data-cn-for').split('|');
+        prefillCommitteeNote(panel, { id: cp[0], patientName: cp[1], date: cp[2] });
+        return;
+      }
+      if (t.closest && t.closest('[data-budget-retry]')) { loadBudget(panel, key, true); return; }
       var cmOpen = t.closest && t.closest('[data-cm-alert-open]');
       if (cmOpen) { if (cmOpen.getAttribute('data-cm-alert-open') === key) showSub(panel, 'committees'); return; }
       var subBtn = t.closest && t.closest('[data-sub]');
@@ -1312,22 +1414,193 @@
       if (!form) return;
       ev.preventDefault();
       var logKey = form.getAttribute('data-wk-form');
+      if (!LOGS[logKey]) return;
       var values = {};
       Array.prototype.forEach.call(form.elements, function (el) { if (el.name) values[el.name] = el.value; });
       var res = entryFromForm(logKey, values);
       var msg = form.querySelector('[data-wk-msg]');
       if (res.missing.length) { msg.textContent = 'חסר: ' + res.missing.join(', '); return; }
       var btn = form.querySelector('button[type="submit"]');
+      if (btn.disabled) return;   // a second tap while saving
       btn.disabled = true; msg.textContent = 'שומר…';
       try {
         await post({ op: 'logAdd', house: key, log: logKey, entry: res.entry });
         form.removeAttribute('data-wk-dirty');
         await refresh(panel, key, true);
       } catch (e) {
-        msg.textContent = 'השמירה נכשלה: ' + (e && e.message ? e.message : '');
+        msg.textContent = logErrorText(e);
         btn.disabled = false;
       }
     });
+  }
+
+  /* ── the card drawer («כרטיס», 14 Nov 2026) ──────────────
+   * One drawer per page (index.html #drawer). Its content is built by crm.js
+   * from escaped strings; while open it is redrawn on every house refresh so
+   * it never shows a stale card. */
+  var drawer = { open: false, key: '', type: '', arg: '', tab: '' };
+  function drawerEls() {
+    var doc = root.document;
+    return doc ? { d: doc.getElementById('drawer'), b: doc.getElementById('drawerBackdrop'), t: doc.getElementById('drawerTitle'), body: doc.getElementById('drawerBody') } : {};
+  }
+  function drawerHtml(key, type, arg, tab) {
+    var c = cache[key] && cache[key].data;
+    if (!c || !CV) return { title: '', html: '<div class="wk-empty">טוען…</div>' };
+    if (type === 'patient') {
+      var p = (c.patients || [])[Number(arg)];
+      return { title: p ? p.name : 'מטופל/ת', html: CV.patientCardHtml(c, arg, tab) };
+    }
+    var bs = budgetState[key];
+    var fm = feedbackModel(c);
+    var fr = fm ? fm.items.filter(function (x) { return String(x.name).trim() === String(arg).trim(); })[0] : null;
+    var staffCost = bs && bs.staff ? bs.staff : { loading: true };
+    return { title: arg, html: CV.employeeCardHtml(c, arg, staffCost, fr, tab) };
+  }
+  function openDrawer(key, type, arg, tab) {
+    var e = drawerEls();
+    if (!e.d) return;
+    drawer = { open: true, key: key, type: type, arg: String(arg), tab: tab || '' };
+    var x = drawerHtml(key, type, arg, tab);
+    e.t.textContent = x.title;
+    e.body.innerHTML = x.html;
+    e.d.hidden = false;
+    e.b.hidden = false;
+    if (root.document.body) root.document.body.classList.add('drawer-on');
+    var close = e.d.querySelector('[data-drawer-close]');
+    if (close && close.focus) close.focus();
+    if (type === 'employee') { var panel = root.document.getElementById('panel-' + key); if (panel) loadBudget(panel, key); }
+  }
+  function closeDrawer() {
+    var e = drawerEls();
+    drawer.open = false;
+    if (e.d) e.d.hidden = true;
+    if (e.b) e.b.hidden = true;
+    if (root.document && root.document.body) root.document.body.classList.remove('drawer-on');
+  }
+  function renderDrawerIfOpen(key) {
+    if (!drawer.open || drawer.key !== key) return;
+    var e = drawerEls();
+    var active = e.body && e.body.querySelector('.card-tab.is-active');
+    var x = drawerHtml(key, drawer.type, drawer.arg, active ? active.getAttribute('data-card-tab') : drawer.tab);
+    e.t.textContent = x.title;
+    e.body.innerHTML = x.html;
+  }
+  function wireDrawer() {
+    var e = drawerEls();
+    if (!e.d || e.d.getAttribute('data-wired') === '1') return;
+    e.d.setAttribute('data-wired', '1');
+    e.b.addEventListener('click', closeDrawer);
+    root.document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && drawer.open) closeDrawer(); });
+    e.d.addEventListener('click', function (ev) {
+      var t = ev.target;
+      var tabBtn = t.closest && t.closest('[data-card-tab]');
+      if (tabBtn) {
+        var k = tabBtn.getAttribute('data-card-tab');
+        e.d.querySelectorAll('[data-card-tab]').forEach(function (b) { var on = b === tabBtn; b.classList.toggle('is-active', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+        e.d.querySelectorAll('[data-card-panel]').forEach(function (p) { p.hidden = p.getAttribute('data-card-panel') !== k; });
+        drawer.tab = k;
+        return;
+      }
+      var panel = root.document.getElementById('panel-' + drawer.key);
+      var go = t.closest && t.closest('[data-go-sub]');
+      if (go && panel) { closeDrawer(); showSub(panel, go.getAttribute('data-go-sub')); return; }
+      if (t.closest && t.closest('[data-drawer-close]')) { closeDrawer(); return; }
+      var dis = t.closest && t.closest('[data-pt-discharge]');
+      if (dis && panel) { closeDrawer(); showSub(panel, 'patients'); openDischargeEdit(panel, dis.getAttribute('data-pt-discharge')); return; }
+      var note = t.closest && t.closest('[data-pt-note]');
+      if (note && panel) {
+        var c = cache[drawer.key] && cache[drawer.key].data;
+        var p = c && (c.patients || [])[Number(note.getAttribute('data-pt-note'))];
+        closeDrawer();
+        prefillCommitteeNote(panel, { id: '', patientName: p ? p.name : '', date: (c && c.today) || '' });
+        return;
+      }
+      var talk = t.closest && t.closest('[data-emp-talk]');
+      if (talk && panel) {
+        closeDrawer();
+        showSub(panel, 'staffTalks');
+        var f = panel.querySelector('[data-sub-panel="staffTalks"] form[data-wk-form="staffTalks"]:not([data-thread-form])');
+        if (f && f.elements.employeeName) { f.elements.employeeName.value = talk.getAttribute('data-emp-talk'); f.setAttribute('data-wk-dirty', '1'); if (f.elements.summary) f.elements.summary.focus(); }
+      }
+    });
+  }
+  /* Opens «ועדות» with the «מה היה בוועדה» form filled for one committee. */
+  function prefillCommitteeNote(panel, c) {
+    showSub(panel, 'committees');
+    var f = panel.querySelector('form[data-wk-form="committeeNotes"]');
+    if (!f) return;
+    if (f.elements.committeeId) f.elements.committeeId.value = /^[A-Za-z0-9_-]{1,64}$/.test(String(c.id || '')) ? c.id : '';
+    if (f.elements.patientName && c.patientName) f.elements.patientName.value = c.patientName;
+    if (f.elements.heldDate && isRealIso(c.date)) f.elements.heldDate.value = c.date;
+    f.setAttribute('data-wk-dirty', '1');
+    if (f.scrollIntoView) f.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    if (f.elements.summary && f.elements.summary.focus) f.elements.summary.focus();
+  }
+
+  /* ── «תקציב כוח אדם» + the quarterly budget bonus (14 Nov 2026) ──
+   * One load per house (10 minutes): houseStaffCost for this month and
+   * houseCost for every month of the calendar quarter up to next month (the
+   * staffing feed's limit). The quarter math is BonusEligibility.budgetBonusQuarter. */
+  var budgetState = {};   // houseKey → { at, staff, quarter, loading }
+  function nextYM(ym) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
+    if (!m) return '';
+    var y = +m[1], mo = +m[2] + 1;
+    if (mo > 12) { mo = 1; y += 1; }
+    return y + '-' + (mo < 10 ? '0' + mo : mo);
+  }
+  function paintBudget(panel, key) {
+    var st = budgetState[key];
+    var hb = host(panel, 'budget');
+    if (hb && CV) hb.innerHTML = CV.budgetHtml(st && !st.loading ? st : { staff: { loading: true } });
+    var bb = panel.querySelector('[data-budget-bonus]');
+    if (bb && CV) bb.innerHTML = CV.budgetBonusHtml(st && !st.loading ? (st.quarter || { error: 'לא הצלחנו לחשב את הרבעון — נסו שוב מאוחר יותר.' }) : { loading: true });
+    if (drawer.open && drawer.key === key && drawer.type === 'employee') renderDrawerIfOpen(key);
+  }
+  function loadBudget(panel, key, force) {
+    var st = budgetState[key];
+    if (!force && st && (st.loading || Date.now() - st.at < 600000)) { paintBudget(panel, key); return st.promise; }
+    var c = cache[key] && cache[key].data;
+    var today = (c && c.today) || (root.CommitteeAlerts ? root.CommitteeAlerts.israelToday() : '');
+    var ym = String(today || '').slice(0, 7);
+    var q = BE && BE.calendarQuarterOf ? BE.calendarQuarterOf(ym) : null;
+    var cap = nextYM(ym);
+    st = budgetState[key] = { at: Date.now(), loading: true, staff: null, quarter: null };
+    paintBudget(panel, key);
+    var months = q ? q.months.filter(function (m) { return m <= cap; }) : [];
+    st.promise = Promise.all([
+      post({ op: 'houseStaffCost', house: key, month: ym }).then(function (r) { return r && r.staff; }).catch(function () { return { available: false, reason: 'unreachable' }; }),
+      Promise.all(months.map(function (m) {
+        return post({ op: 'houseCost', house: key, month: m }).then(function (r) { return { ym: m, cost: r && r.cost }; }).catch(function () { return { ym: m, cost: null }; });
+      }))
+    ]).then(function (res) {
+      st.staff = res[0] || { available: false, reason: 'unreachable' };
+      if (q && BE) {
+        st.quarter = BE.budgetBonusQuarter(q.months.map(function (m) {
+          var got = res[1].filter(function (x) { return x.ym === m; })[0];
+          var cc = got && got.cost;
+          return cc && cc.available ? { ym: m, available: true, cost: cc.total, budget: cc.budget } : { ym: m, available: false };
+        }), { nowYM: ym });
+      }
+      st.loading = false;
+      st.at = Date.now();
+      paintBudget(panel, key);
+    });
+    return st.promise;
+  }
+
+  /* A log save that failed, in plain Hebrew — never a raw code (14 Nov 2026). */
+  var LOG_ERRORS = {
+    not_found: 'הרישום המקורי לא נמצא — רעננו את הדף ונסו שוב.',
+    forbidden: 'אין הרשאה להוסיף לרישום הזה.',
+    missing_fields: 'חסרים פרטים — מלאו את השדות המסומנים ב-*.',
+    bad_request: 'הפרטים לא תואמים לשיחה המקורית — רעננו את הדף ונסו שוב.'
+  };
+  function logErrorText(e) {
+    var code = e && e.data && e.data.error;
+    if (code && Object.prototype.hasOwnProperty.call(LOG_ERRORS, code)) return LOG_ERRORS[code];
+    if (code && Object.prototype.hasOwnProperty.call(WORK_ERRORS, code)) return WORK_ERRORS[code];
+    return 'השמירה נכשלה — נסו שוב. אם זה חוזר, פנו לסנדרה.';
   }
 
   /* Busy state of one discharge form — text-only DOM (textContent, disabled,
@@ -1444,8 +1717,10 @@
   function onHouseRendered(panel, key) {
     if (!panel || !panel.querySelector('[data-subtabs]')) return;
     wire(panel, key);
+    wireDrawer();
     refresh(panel, key, false);
     loadCost(panel, key);
+    loadBudget(panel, key);
   }
 
   WorkView.saveDischarge = saveDischarge;   // tests drive it with injected post / refresh / cache

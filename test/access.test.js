@@ -186,6 +186,34 @@ test('personal-code access', async (t) => {
     assert.equal(fc.status, 400);
   });
 
+  await t.test('manpower budget (14 Nov 2026): houseStaffCost — a manager only ever gets their OWN house; a bad month is refused before upstream', async () => {
+    mockUpstream(() => '{"ok":true,"staff":{"available":false,"reason":"not_configured"}}');
+    const cookie = await auth.login(server, auth.ORAN_CODE);
+    const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseStaffCost', house: 'raanana', month: '2026-11' } });
+    assert.equal(r.status, 200);
+    assert.deepEqual([calls[0].body.op, calls[0].body.house, calls[0].body.role, calls[0].body.month], ['houseStaffCost', 'ramot', 'manager', '2026-11']);
+    calls = [];
+    for (const month of ['2026-13', '11-2026', 'x', '2026-1']) {
+      const bad = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseStaffCost', month } });
+      assert.equal(bad.status, 400, month);
+      const bad2 = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseCost', month } });
+      assert.equal(bad2.status, 400, month);
+    }
+    assert.equal(calls.length, 0, 'nothing forwarded');
+    assert.equal(r.headers['cache-control'], 'no-store', 'salary data is never cached by the browser');
+  });
+
+  await t.test('«מה היה בוועדה» (14 Nov 2026): the committeeNotes log is allowed, scoped to the manager\'s house', async () => {
+    mockUpstream(() => '{"ok":true,"id":"x1"}');
+    const cookie = await auth.login(server, auth.ORAN_CODE);
+    const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'logAdd', log: 'committeeNotes', house: 'raanana', entry: { patientName: 'דנה', heldDate: '2026-11-12', summary: 'x' } } });
+    assert.equal(r.status, 200);
+    assert.deepEqual([calls[0].body.op, calls[0].body.log, calls[0].body.house], ['logAdd', 'committeeNotes', 'ramot']);
+    assert.deepEqual(JSON.parse(calls[0].body.entry), { patientName: 'דנה', heldDate: '2026-11-12', summary: 'x' });
+    const thread = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'logAdd', log: 'staffTalks', entry: { employeeName: 'רינה', talkDate: '2026-11-12', summary: 'y', talkKind: 'outcome', parentId: 'p1', outcome: 'improved' } } });
+    assert.equal(thread.status, 200, 'a talk-thread entry passes through; the Dashboard validates the thread');
+  });
+
   await t.test('the backend refusing the secret shows as 503, not as data', async () => {
     mockUpstream(() => '{"ok":false,"error":"unauthorized"}');
     const cookie = await auth.login(server, auth.ORAN_CODE);
