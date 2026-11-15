@@ -377,7 +377,8 @@ app.get('/api/sheets', requireUser, async (req, res) => {
 });
 
 // ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
-const WORK_OPS = new Set(['houseData', 'houseCost', 'logAdd', 'logUpdate', 'dischargeSet', 'meetingSummaries', 'feedbackDone']);
+// houseStaffCost (14 Nov 2026): the house's per-worker month cost («תקציב כוח אדם»), Dashboard → staffing.
+const WORK_OPS = new Set(['houseData', 'houseCost', 'houseStaffCost', 'logAdd', 'logUpdate', 'dischargeSet', 'meetingSummaries', 'feedbackDone']);
 // Direct read-only feed from the Coordinators app (22 Oct 2026, docs/coordinators-feed.md):
 // committees (with status + notes) merged into houseData, meeting summaries (Dashboard as the
 // fallback) and «עדכון משמרת» (feed only). OFF — never called — until both variables are set.
@@ -408,7 +409,8 @@ function mergeCommittees(data, feed) {
 // their app; the managers see them in houseData.committees. The old write op is GONE (410), refused
 // before anything is forwarded — never reaches the Dashboard.
 const RETIRED_WORK_OPS = new Set(['committeeSet']);
-const WORK_LOGS = new Set(['staffTalks', 'events']);   // family calls removed from the app (14 Oct 2026)
+// family calls removed from the app (14 Oct 2026); committeeNotes «מה היה בוועדה» added 14 Nov 2026.
+const WORK_LOGS = new Set(['staffTalks', 'events', 'committeeNotes']);
 const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // Writes get their own, tighter bucket on top of the shared one.
@@ -446,7 +448,9 @@ app.post('/api/work', requireUser, async (req, res) => {
     return res.status(200).json(r.ok ? { ok: true, house, from: r.data.from, upTo: r.data.upTo, updates: r.data.updates } : { ok: false, error: r.error });
   }
   const body = { action: 'managersWork', secret: WORK_SECRET, op, house, role: u.role, actor: u.name, actorId: u.id };
-  if ((op === 'houseData' || op === 'houseCost' || op === 'meetingSummaries') && YM_RE.test(String(b.month || ''))) body.month = String(b.month);
+  if ((op === 'houseData' || op === 'houseCost' || op === 'houseStaffCost' || op === 'meetingSummaries') && YM_RE.test(String(b.month || ''))) body.month = String(b.month);
+  // A month on a cost read must be a real YYYY-MM — refused here, never forwarded.
+  if ((op === 'houseCost' || op === 'houseStaffCost') && b.month != null && b.month !== '' && !YM_RE.test(String(b.month))) return res.status(400).json({ error: 'bad_month' });
   // «סיכומי ישיבות» (20 Oct 2026, docs/meeting-summaries.md): READ-ONLY; a bad month is refused here.
   if (op === 'meetingSummaries' && b.month != null && b.month !== '' && !YM_RE.test(String(b.month))) return res.status(400).json({ error: 'bad_month' });
   // The coordinators feed first (22 Oct 2026); the Dashboard path stays the fallback.

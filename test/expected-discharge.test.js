@@ -52,7 +52,8 @@ test('view: every value escaped — a name or a junk date never becomes markup',
 test('view: an older backend (no expectedDischargeSupported) shows exactly the old list', () => {
   const h = W.patientsHtml({ patients: PATS });
   assert.ok(!h.includes('wk-dis') && !h.includes('שחרור'));
-  assert.match(h, /דנה<\/span><span class="wk-meta">מ-1\/9\/26 · יום 45<\/span><\/li>/);
+  // 14 Nov 2026: every row also opens the patient card (crm.js) — nothing else is added.
+  assert.match(h, /דנה<\/span><span class="wk-meta">מ-1\/9\/26 · יום 45<\/span><button type="button" class="wk-link pt-open" data-pt-open="0">כרטיס מטופל\/ת ←<\/button><\/li>/);
 });
 
 test('validation: empty, malformed, impossible, before admission → a Hebrew reason; a valid date → ""', () => {

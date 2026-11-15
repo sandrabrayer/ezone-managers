@@ -1,0 +1,104 @@
+# CRM redesign — light look, CRM tabs, cards, budget (14 Nov 2026)
+
+## Why
+
+Sandra, 14 Nov 2026:
+
+> «באפליקציה של המנהלים אני רוצה גם לשנות את כל המראה לכזה שדומה עכשיו לכל האפליקציות — הרבה יותר
+> כלי לניהול למנהל. לכל מנהל צריך תקציב כוח אדם עם רשימה מעודכנת של העובדים שלו ומה עלות השכר שלהם,
+> מי המטופלים בבית היום ומי המטפל שלהם, מתי הם נכנסו לבית ומה תאריך המשוער לשחרור, פרטים מלאים הכל
+> בלשוניות כמו CRM רק בצבעים שונים, לשונית הבונוס בסוף, בועדות אפשרות לרשום מה היה בועדה … בשיחות עם
+> עובדים צריך גם אפשרות לשיחה שניה או תוצאה … בבונוסים אני רוצה להוסיף אפשרות לבונוס עמידה בתקציב,
+> שיבדק פעם ברבעון.»
+
+## What changed
+
+### Look
+
+- **Light theme**, like the newer E-ZONE apps (the Dashboard CRM): a light page, white cards, dark ink, a soft
+  shadow. The Managers keep their own accent (plum `#7E1F4F`); the Dashboard CRM uses teal.
+- **One colour per tab.** Each house sub-tab has its own colour, filled when active; each work card has a
+  coloured top line in its tab's colour.
+- Status labels are filled chips that always carry a word, never colour alone.
+- The old dark palette was converted mechanically (`rgba(255,255,255,a)` overlays became ink overlays, the pale
+  dark-theme text colours became deep tones). A redesign section at the end of `styles.css` sets the final
+  look. `test/work-colours.test.js` was rewritten for the light theme. It pins WCAG AA for body, muted and
+  accent text on white, for every tab colour, and for every status chip.
+
+### Tabs (the bonus tab is LAST)
+
+| Level | Order |
+|---|---|
+| Top | הבית היום · the five houses · **בונוס** (last). «📖 מדריך» moved to a top-bar button; its tab stays (hidden) for `#guide` links. |
+| House | הבית היום · מטופלים · צוות ומשמרות · מטפלים · **תקציב כוח אדם** (new) · ועדות · שיחות עם עובדים · אירועים חריגים · סיכומי ישיבות · עדכון משמרת · **בונוס** (last) |
+
+### New
+
+| Feature | Where | Data |
+|---|---|---|
+| **Patient card** — פרטים · טיפול · ועדות · אירועים | «כרטיס מטופל/ת ←» on every patient | `houseData` (patients, coordinators team / therapist week, committees, logs) — no new read |
+| Therapist + next committee on every patient row | «מטופלים בבית» | same |
+| **Employee card** — פרטים · עלות · שיחות · משוב | «כרטיס ←» in «צוות ומשמרות», names in the budget table | `houseData` + `houseStaffCost` |
+| **«תקציב כוח אדם»** — month cost vs budget, budget lines, every worker and their month cost, the quarter | new sub-tab | `houseStaffCost` (new op) + `houseCost` per quarter month |
+| **Staff-talk threads** — «+ שיחת המשך» and «✓ רישום תוצאה» on each talk; «מה סוכם» on every talk | «שיחות עם עובדים» | `logAdd staffTalks` with `talkKind` / `parentId` / `outcome` / `agreedActions` |
+| **«מה היה בוועדה»** — the form, «📝 מה היה בוועדה» on today's and past committees, the history | «ועדות» + the patient card | new log `committeeNotes` |
+| **Quarterly budget-adherence bonus** | «בונוס» card + the quarter card in the budget tab | `BonusEligibility.budgetBonusQuarter` |
+
+### The budget bonus rule (`lib/bonus-eligibility.js`)
+
+- The bonus is checked per **calendar quarter**: Q1 = Jan–Mar … Q4 = Oct–Dec. **Q4 2026 is the first.**
+- **Condition:** the house's manpower cost for the quarter is at or below its manpower budget for the quarter.
+  Cost is the staffing engine's `projectedTotal`, summed over the 3 months. Budget is the staffing budget,
+  summed over the 3 months.
+- **Settled** once the quarter has ended. A settled quarter with a month that could not be read, or a month
+  without a budget, is «חסרים נתונים». A pass is never guessed.
+- **Running quarter:** the forecast uses the months read so far. A month not readable yet borrows the average
+  cost and the last budget. The status reads «בדרך לבונוס» or «חריגה צפויה», with no tier wording.
+- **The amount is not set yet** (`BUDGET_BONUS_RULES = [{ from: '2026-10', amount: null }]`). The card shows
+  «הסכום ייקבע על ידי סנדרה», and nothing is ever counted as money. To set it, add a rule with the amount;
+  never edit a rule that a settled quarter used. It is not part of the monthly «מה אם?» total.
+
+### Security
+
+- Salary data (`houseStaffCost`) is visible only to the house's manager, Sandra and Ron:
+  - The server pins a manager to their own house, and the Dashboard re-validates it.
+  - The response is `no-store` and stays out of the service-worker cache (`/api/*` is network-only).
+  - Nothing is logged.
+- A month on a cost read is checked server-side (`bad_month` 400) before anything goes upstream.
+- Staff-talk threads stay private: only the author and the admins see them. A follow-up can only hang on a
+  first talk the caller can see — the Dashboard enforces this.
+- Every feed value is escaped. `crm.js` is pure, with no `innerHTML`, `fetch` or `console`; a test pins this.
+- The drawer is text built from escaped strings.
+
+## Everything that existed is still there (checked 14 Nov 2026)
+
+| Before | Now |
+|---|---|
+| Login: username + personal code; logout; user chip; month tag | unchanged (top bar) |
+| «מוצגים נתונים שמורים» notice; footer status | unchanged |
+| Top tab «הבית היום» (admin): one card per house, all-houses committee + discharge alerts with filters | unchanged, first tab |
+| Top tab «בונוס» (network): month picker, 4 KPIs, winners banner, occupancy-vs-eligibility chart, house cards, «תפוסה חודשית (סופי)» + CSV | unchanged — now the LAST tab |
+| Five house tabs; a manager sees only their own | unchanged |
+| «מדריך» tab + print | the «📖 מדריך» button in the top bar; guide extended (tabs, cards, threads, committee notes, budget §11) |
+| House «הבית היום»: committee alerts, discharge alerts, today card (shifts, sessions, open requests), visits/admissions, expected admissions, latest events, feedback card, manpower-cost card | unchanged |
+| House «בונוס»: picker, hero, gauge + «מה אם?», «הבונוסים החודש», KPIs, treatment-days bar + daily chart, entries/exits, occupancy history, monthly occupancy | unchanged (+ the budget-bonus card) — now the LAST sub-tab |
+| «מטופלים»: patients + expected discharge (set / clear / «אין צפי»), outpatients, visits and admissions | unchanged (+ therapist, next committee, patient card) |
+| «ועדות» (read-only list) | unchanged (+ «מה היה בוועדה») |
+| «סיכומי ישיבות», «עדכון משמרת» | unchanged |
+| «צוות ומשמרות»: on shift today, 14 days, staff with phones, half-yearly feedback with «בוצע» | unchanged (+ employee card) |
+| «מטפלים»: therapists, workdays, weekly schedule | unchanged |
+| «שיחות עם עובדים» (private), «אירועים חריגים», follow-up reminders strip | unchanged (+ threads, «מה סוכם») |
+
+## Deployment order
+
+1. **ezone-staffing PR** (`getHouseWorkerCostsForManagers`) — auto-deploys its Apps Script on merge.
+2. **E-Zone-Dashboard PR** (`houseStaffCost`, threads, `committeeNotes`) — auto-deploys its Apps Script on merge.
+3. **This PR.**
+
+Merged in any other order, nothing breaks, but merge the Dashboard first:
+
+- With an older Dashboard, the budget tab says the data is not connected.
+- A committee note is refused with a Hebrew reason.
+- A follow-up talk is saved as a separate talk.
+
+No Railway variable, secret or Script Property is added.

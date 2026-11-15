@@ -525,6 +525,11 @@ function wireTabs() {
     if (!btn) return;
     activateTab(btn.dataset.tab);
   });
+  // «📖 מדריך» in the top bar (14 Nov 2026): the guide left the tab row so
+  // «בונוס» is the last tab.
+  document.querySelectorAll('[data-tab-link]').forEach(b => {
+    b.addEventListener('click', () => activateTab(b.getAttribute('data-tab-link')));
+  });
 }
 
 /* ============================================================
@@ -2655,8 +2660,9 @@ function applyRole_(u) {
   activateTab(u.house);
 }
 
-/* Top-level tabs: «הבית היום» (landing), «בונוס» (network overview), houses. */
-const TOP_TABS_ = ['today', 'overview', ...HOUSE_KEYS, 'guide'];
+/* Top-level tabs: «הבית היום» (landing), the houses, «בונוס» (network
+ * overview) LAST (14 Nov 2026), and the guide (opened from the top bar). */
+const TOP_TABS_ = ['today', ...HOUSE_KEYS, 'overview', 'guide'];
 
 /* The tab a user may open: a manager is always sent to their own house —
  * or the static «מדריך», which every role may read (no data in it). */

@@ -23,11 +23,14 @@ const NETWORK_BONUS = ['id="bonusMonthOverview"', 'id="bonusMonthBackOverview"',
   'id="networkSpark"', 'id="houseGrid"', 'id="occupancyCard"'];
 const BONUS_WORDS = /בונוס|₪|סופי|לתשלום|מדרגה|זכאי/;
 
-test('top tabs: «הבית היום» is first and active (the landing screen), «בונוס» second, then the five houses', () => {
+test('top tabs: «הבית היום» is first and active (the landing screen), then the five houses, «בונוס» LAST (14 Nov 2026)', () => {
   const nav = section(html, /<nav class="tabs"[\s\S]*?<\/nav>/);
-  const tabs = [...nav.matchAll(/<button class="tab( is-active)?" data-tab="(\w+)"[^>]*>([^<]+)</g)].map((m) => [m[2], m[3], !!m[1]]);
-  assert.deepEqual(tabs.slice(0, 2), [['today', 'הבית היום', true], ['overview', 'בונוס', false]]);
-  assert.deepEqual(tabs.slice(2, 7).map((t) => t[0]), ['raanana', 'ramot', 'efroni', 'rehab', 'pardes']);
+  const tabs = [...nav.matchAll(/<button class="tab(?: tab-\w+)?( is-active)?" data-tab="(\w+)"[^>]*>([^<]+)</g)].map((m) => [m[2], m[3], !!m[1]]);
+  assert.deepEqual(tabs[0], ['today', 'הבית היום', true]);
+  assert.deepEqual(tabs.slice(1, 6).map((t) => t[0]), ['raanana', 'ramot', 'efroni', 'rehab', 'pardes']);
+  assert.deepEqual(tabs[tabs.length - 1], ['overview', 'בונוס', false], '«בונוס» is the last tab');
+  assert.match(html, /class="tab tab-guide" data-tab="guide"/, 'the guide tab stays (hash / links), hidden by CSS');
+  assert.match(html, /class="guide-btn" data-tab-link="guide"/, 'opened from the top bar');
   assert.equal(tabs.filter((t) => t[2]).length, 1, 'exactly one active tab');
   assert.match(html, /<section class="panel is-active" id="panel-today"/);
   assert.match(html, /<section class="panel" id="panel-overview"/);
@@ -46,9 +49,11 @@ test('network: the «בונוס» panel holds every bonus element; «הבית ה
   assert.match(today, /id="dischargeAlertsAll"/);
 });
 
-test('house page: «הבית היום» is the first, active sub-tab; «בונוס» second', () => {
-  const subs = [...tpl.matchAll(/<button type="button" class="subtab( is-active)?" data-sub="(\w+)"[^>]*>([^<]+)</g)].map((m) => [m[2], m[3], !!m[1]]);
-  assert.deepEqual(subs.slice(0, 2), [['home', 'הבית היום', true], ['bonus', 'בונוס', false]]);
+test('house page: «הבית היום» is the first, active sub-tab; «בונוס» LAST (14 Nov 2026, CRM order)', () => {
+  const subs = [...tpl.matchAll(/<button type="button" class="subtab( is-active)?" data-sub="(\w+)"[^>]*>([^<]+)</g)].map((m) => [m[2], m[3].replace(/^\S+\s/, ''), !!m[1]]);
+  assert.deepEqual(subs[0], ['home', 'הבית היום', true]);
+  assert.deepEqual(subs[subs.length - 1], ['bonus', 'בונוס', false]);
+  assert.deepEqual(subs.map((s) => s[0]), ['home', 'patients', 'team', 'therapists', 'budget', 'committees', 'staffTalks', 'events', 'summaries', 'shiftUpdates', 'bonus']);
   assert.match(tpl, /<section data-sub-panel="home">/, 'home is shown on open');
   assert.match(tpl, /<section data-sub-panel="bonus" hidden>/);
 });
