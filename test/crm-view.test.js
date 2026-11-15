@@ -224,3 +224,29 @@ test('wiring: crm.js loads before work.js; cached by the SW; the drawer is one p
   const crm = fs.readFileSync(path.join(__dirname, '..', 'public', 'crm.js'), 'utf8');
   assert.doesNotMatch(crm.replace(/\/\*[\s\S]*?\*\//g, ''), /innerHTML|fetch\(|console\./, 'crm.js is pure: markup strings only');
 });
+
+test('«עלות אוקטובר 2026 מול היעד»: October with the shared freelancers, the target and the saving; shown above the month card', () => {
+  const over = { baselineMonth: '2026-10', targetFrom: '2026-11', table: 260000, shared: 8727, total: 268727, target: 205000, gap: 63727, gapPct: 23.7 };
+  const h = C.octoberTargetHtml(over);
+  assert.match(h, /עלות אוקטובר 2026 מול היעד החודשי/);
+  assert.match(h, /268,727 ₪<\/b><span>עלות כוח אדם — אוקטובר 2026/);
+  assert.match(h, /205,000 ₪<\/b><span>יעד תקציב חודשי — מנובמבר 2026/);
+  assert.match(h, /budget-kpi bad"><b>63,727 ₪<\/b><span>חיסכון נדרש · 23\.7% מעלות אוקטובר/);
+  assert.match(h, /260,000 ₪ ועוד פרילנסרים משותפים 8,727 ₪/);
+  // under the target → green, no percentage, no minus sign on the amount
+  const under = C.octoberTargetHtml({ table: 100000, shared: 0, total: 100000, target: 120000, gap: -20000, gapPct: -20 });
+  assert.match(under, /budget-kpi ok"><b>20,000 ₪<\/b><span>מתחת ליעד<\/span>/);
+  assert.doesNotMatch(under, /פרילנסרים משותפים/, 'no shared line where nothing was added');
+  // nothing to show → no card
+  [null, undefined, {}, { total: 0, target: 5 }, { total: 5, target: 0 }].forEach((x) => assert.equal(C.octoberTargetHtml(x), ''));
+  // a hostile value never becomes markup
+  assert.ok(!C.octoberTargetHtml({ total: 5, target: 5, gap: 0, table: '<img src=x>', shared: 1 }).includes('<img'));
+  // inside the tab: first card, also while the month data is loading or down
+  const staff = { available: true, month: '2026-11', hasActuals: false, total: 1, budget: 2, workers: [], budgetLines: [] };
+  const tab = C.budgetHtml({ staff, octoberTarget: over });
+  assert.ok(tab.indexOf('wk-budget-october') >= 0 && tab.indexOf('wk-budget-october') < tab.indexOf('wk-budget-sum'));
+  assert.match(C.budgetHtml({ staff: { available: false, reason: 'unreachable' }, octoberTarget: over }), /wk-budget-october/);
+  assert.doesNotMatch(C.budgetHtml({ staff }), /wk-budget-october/, 'no numbers from the server → no card');
+  // no parentheses in the new Hebrew strings
+  assert.doesNotMatch(h.replace(/<[^>]+>/g, ' '), /[()]/);
+});

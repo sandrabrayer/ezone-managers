@@ -2,6 +2,9 @@
 
 > **November 14, 2026 — Managers CRM redesign** (`docs/crm-redesign.md`).
 > - **Look and tabs:** light theme, one colour per tab, «בונוס» last.
+> - **15 Nov 2026:** «תקציב כוח אדם» opens with «עלות אוקטובר 2026 מול היעד החודשי» — October manpower cost
+>   with the shared freelancers, the monthly target from November 2026, and the saving. Fixed numbers that mirror
+>   ezone-staffing `TARGET_PLAN`; server-only in `lib/october-target.js`, a manager gets only their own house.
 > - **New:** a patient card and an employee card; «תקציב כוח אדם» with every worker's month cost; staff-talk
 >   threads; «מה היה בוועדה»; the quarterly budget-adherence bonus (amount not set yet).
 > - **Needs:** E-Zone-Dashboard `managersWork` (`houseStaffCost`, the `staffTalks` thread columns, the

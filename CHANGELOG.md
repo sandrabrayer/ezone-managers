@@ -3,6 +3,24 @@
 
 ## Unreleased
 
+### Added — «עלות אוקטובר 2026 מול היעד החודשי» card in «תקציב כוח אדם» (November 15, 2026)
+
+- **Why**: Sandra, 15 Nov 2026 — «Add the "October cost vs target" card to the managers app, per house, with the
+  same numbers as the staffing app including the shared freelancers».
+- **What**: the first card of «תקציב כוח אדם» shows the house's October 2026 manpower cost, the monthly target that
+  applies from November 2026, and the saving needed.
+  - רמות 322,537 → 265,000 · עפרוני 268,727 → 205,000 · ריהאב 198,727 → 170,000 · הפרדס 161,231 → 150,000 ·
+    רעננה אשר 168,785 → 80,000.
+  - October = the «כוח אדם» column of the action-plan table plus the shared freelancers split to the houses.
+  - Fixed numbers: the card reads the same whatever the month, also when the staffing feed is down.
+- **Server**: new `lib/october-target.js` (server-only). `/api/work` adds `octoberTarget` to the `houseStaffCost`
+  reply for the house the SERVER decided. No new endpoint, env var or secret.
+- **Security**: the figures are never in `public/`; a manager receives only their own house (pinned by tests);
+  the reply stays `no-store`; every value is rendered through `esc`.
+- **Keep in step**: the numbers mirror ezone-staffing `TARGET_PLAN`. A change there must be made here too.
+- **Docs**: `docs/crm-redesign.md`, guide §11, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
+- **Tests**: 507 → 512 (`test/october-target.test.js` 3, `crm-view` +1, `access` +1). SW v43 → v44.
+
 ### Changed — budget bonus amounts: 6,000 ₪ per quarter from Q1 2027 + a one-off 2,500 ₪ for December 2026 (November 15, 2026)
 
 - **Why**: Sandra, 15 Nov 2026 — «הבונוס יהיה 6000 ש"ח ויתחיל ברבעון ראשון של 2027. ללא קשר עבור חודש דצמבר אם תהיה

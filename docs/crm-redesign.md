@@ -66,6 +66,24 @@ Sandra, 14 Nov 2026:
   - It is settled after December ends. Missing data is never a pass.
   - It is shown from October 2026 to March 2027, in the «בונוס» card and in «תקציב כוח אדם».
 
+### «עלות אוקטובר 2026 מול היעד החודשי» (15 Nov 2026)
+
+- The first card of «תקציב כוח אדם»: October 2026 manpower cost, the monthly target from November 2026, the saving.
+- The numbers are fixed and mirror ezone-staffing `TARGET_PLAN` (its `docs/target-budget-dec-2026.md`):
+  the action-plan table's October column plus the shared freelancers split to the houses.
+
+| House | October, table | Shared freelancers | October total | Target | Saving |
+|---|---:|---:|---:|---:|---:|
+| רמות השבים | 310,000 | 12,537 | 322,537 | 265,000 | 57,537 |
+| קיסריה עפרוני | 260,000 | 8,727 | 268,727 | 205,000 | 63,727 |
+| קיסריה ריהאב | 190,000 | 8,727 | 198,727 | 170,000 | 28,727 |
+| רעננה הפרדס | 129,261 | 31,970 | 161,231 | 150,000 | 11,231 |
+| רעננה אשר | 163,000 | 5,785 | 168,785 | 80,000 | 88,785 |
+
+- They live in `lib/october-target.js`, server-only. `server.js` adds `octoberTarget` to the `houseStaffCost` reply
+  for the session's house. `CrmView.octoberTargetHtml` renders it.
+- To change a number, change it in ezone-staffing first, then here, and update `test/october-target.test.js`.
+
 ### Security
 
 - Salary data (`houseStaffCost`) is visible only to the house's manager, Sandra and Ron:
