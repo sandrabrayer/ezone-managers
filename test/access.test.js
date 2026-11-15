@@ -203,6 +203,27 @@ test('personal-code access', async (t) => {
     assert.equal(r.headers['cache-control'], 'no-store', 'salary data is never cached by the browser');
   });
 
+  await t.test('October vs target (15 Nov 2026): rides on houseStaffCost for the manager\'s OWN house only — also when staffing is down; never on other ops', async () => {
+    mockUpstream(() => '{"ok":true,"staff":{"available":false,"reason":"not_configured"}}');
+    const cookie = await auth.login(server, auth.ORAN_CODE);
+    // asks for raanana, is the ramot manager → gets ramot's numbers
+    const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseStaffCost', house: 'raanana', month: '2026-11' } });
+    assert.equal(r.status, 200);
+    const j = JSON.parse(r.text);
+    assert.deepEqual([j.octoberTarget.table, j.octoberTarget.shared, j.octoberTarget.total, j.octoberTarget.target, j.octoberTarget.gap], [310000, 12537, 322537, 265000, 57537]);
+    assert.equal(r.headers['cache-control'], 'no-store');
+    assert.ok(!r.text.includes('168785') && !r.text.includes('163000'), 'another house\'s figures never leave the server');
+    // a second (cached) read still carries it
+    const again = JSON.parse((await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseStaffCost', month: '2026-11' } })).text);
+    assert.equal(again.octoberTarget.total, 322537);
+    const cost = JSON.parse((await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseCost', month: '2026-11' } })).text);
+    assert.equal(cost.octoberTarget, undefined, 'only on houseStaffCost');
+    // not signed in → nothing
+    const anon = await req(server, '/api/work', { method: 'POST', body: { op: 'houseStaffCost', house: 'ramot', month: '2026-11' } });
+    assert.ok(anon.status === 401 || anon.status === 403);
+    assert.ok(!anon.text.includes('octoberTarget'));
+  });
+
   await t.test('«מה היה בוועדה» (14 Nov 2026): the committeeNotes log is allowed, scoped to the manager\'s house', async () => {
     mockUpstream(() => '{"ok":true,"id":"x1"}');
     const cookie = await auth.login(server, auth.ORAN_CODE);

@@ -2278,6 +2278,7 @@ body.drawer-on { overflow: hidden; }
 .crm-tbl tr.muted td { color: var(--text-dim); font-style: italic; }
 
 /* «תקציב כוח אדם». */
+.wk-budget-october .wk-note { margin-top: 4px; }
 .budget-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 6px 0 10px; }
 .budget-kpi { background: var(--card-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
 .budget-kpi b { font-size: 20px; font-weight: 800; color: var(--text); }

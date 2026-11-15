@@ -354,11 +354,28 @@
     if (st.pct === null) return '';
     return '<div class="budget-bar ' + st.cls + '" role="img" aria-label="' + esc(st.pct + '% מהתקציב') + '"><div class="budget-fill" style="width:' + Math.min(100, Math.max(0, st.pct)) + '%"></div></div>';
   }
-  /* st = { staff: houseStaffCost.staff | {loading}, quarter: budgetBonusQuarter() | null } */
+  /* «עלות אוקטובר 2026 מול היעד» (15 Nov 2026). ot = the server's octoberTarget for THIS house:
+   * { table, shared, total, target, gap, gapPct }. Fixed numbers, the same as the staffing app. */
+  function octoberTargetHtml(ot) {
+    if (!ot || !(Number(ot.target) > 0) || !(Number(ot.total) > 0)) return '';
+    var total = Number(ot.total), target = Number(ot.target), gap = Number(ot.gap) || 0;
+    var table = Number(ot.table) || 0, shared = Number(ot.shared) || 0;
+    var gapText = gap > 0 ? 'חיסכון נדרש' : gap < 0 ? 'מתחת ליעד' : 'בדיוק ביעד';
+    var pct = gap > 0 && ot.gapPct !== null && ot.gapPct !== undefined ? ' · ' + Number(ot.gapPct) + '% מעלות אוקטובר' : '';
+    return '<div class="card work-card wk-budget-october"><div class="card-title">עלות אוקטובר 2026 מול היעד החודשי</div>' +
+      '<div class="budget-kpis">' +
+        '<div class="budget-kpi"><b>' + esc(ils(total)) + '</b><span>עלות כוח אדם — אוקטובר 2026</span></div>' +
+        '<div class="budget-kpi"><b>' + esc(ils(target)) + '</b><span>יעד תקציב חודשי — מנובמבר 2026</span></div>' +
+        '<div class="budget-kpi ' + (gap > 0 ? 'bad' : 'ok') + '"><b>' + esc(ils(Math.abs(gap))) + '</b><span>' + esc(gapText + pct) + '</span></div>' +
+      '</div>' +
+      '<div class="wk-note">' + esc('אוקטובר לפי טבלת תוכנית הפעולה' + (shared > 0 ? ': ' + ils(table) + ' ועוד פרילנסרים משותפים ' + ils(shared) + ', ללא מע״מ.' : '.') +
+        ' אלה מספרים קבועים — הם לא משתנים עם החודש.') + '</div></div>';
+  }
+  /* st = { staff: houseStaffCost.staff | {loading}, quarter: budgetBonusQuarter() | null, octoberTarget } */
   function budgetHtml(st) {
     var s = st && st.staff;
-    var h = '';
-    if (!s || s.loading) return '<div class="card work-card"><div class="wk-empty">טוען את נתוני התקציב…</div></div>';
+    var h = octoberTargetHtml(st && st.octoberTarget);
+    if (!s || s.loading) return h +  '<div class="card work-card"><div class="wk-empty">טוען את נתוני התקציב…</div></div>';
     if (!s.available) {
       h += '<div class="card work-card wk-budget-sum"><div class="card-title">תקציב כוח אדם</div><div class="wk-empty">' +
         esc(STAFF_REASON[s.reason] || 'לא הצלחנו לקרוא את נתוני כוח האדם. נסו שוב מאוחר יותר.') + '</div>' +
@@ -480,7 +497,7 @@
     patientRowExtras: patientRowExtras, patientCardHtml: patientCardHtml, cardTabsHtml: cardTabsHtml,
     talkThreads: talkThreads, talksListHtml: talksListHtml,
     committeeNoteFormHtml: committeeNoteFormHtml, committeeNotesPanelHtml: committeeNotesPanelHtml, notesListHtml: notesListHtml,
-    employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, quarterHtml: quarterHtml,
+    employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, octoberTargetHtml: octoberTargetHtml, quarterHtml: quarterHtml,
     budgetBonusHtml: budgetBonusHtml, monthBonusCardHtml: monthBonusCardHtml
   };
   root.CrmView = CrmView;

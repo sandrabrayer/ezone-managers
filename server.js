@@ -24,6 +24,7 @@ const path = require('path');
 
 const { createReadCache } = require('./lib/read-cache');
 const access = require('./lib/access');
+const octoberTarget = require('./lib/october-target');
 const { createReadiness } = require('./lib/readiness');
 const { createCoordFeed } = require('./lib/coord-feed');
 const StaffingFeed = require('./lib/staffing-feed');
@@ -541,6 +542,10 @@ app.post('/api/work', requireUser, async (req, res) => {
     if (out.status === 200 && !(out.json && out.json.ok === false)) readCache.invalidate((tag) => tag && (tag.house === house || tag.house === ''));
     return res.status(out.status).json(out.json);
   }
+  // «עלות אוקטובר מול היעד» (15 Nov 2026): fixed numbers for THIS house only — the house is the
+  // server's decision above, never the browser's. Added at send time, so the cached reply stays as it came.
+  const withOctober = (json) => (op === 'houseStaffCost' && json && typeof json === 'object'
+    ? Object.assign({}, json, { octoberTarget: octoberTarget.forHouse(house) }) : json);
   // Reads: fast path with stale-while-revalidate. The key holds op + house + month + role + person.
   const rkey = JSON.stringify(['work', op, house, body.month || '', u.role, u.id]);
   const rloader = async () => {
@@ -551,9 +556,9 @@ app.post('/api/work', requireUser, async (req, res) => {
   try {
     const r = await readCache.read(rkey, rloader, { wait: b.swr === 'wait', tag: { house } });
     setCacheHeaders(res, r);
-    return res.status(r.value.status).json(r.value.json);
+    return res.status(r.value.status).json(withOctober(r.value.json));
   } catch (err) {
-    if (err && err.reply) return res.status(err.reply.status).json(err.reply.json);
+    if (err && err.reply) return res.status(err.reply.status).json(withOctober(err.reply.json));
     const f = workFailure(err);
     return res.status(f.status).json({ ok: false, error: f.error });
   }

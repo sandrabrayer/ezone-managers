@@ -1569,7 +1569,7 @@
     var ym = String(today || '').slice(0, 7);
     var q = BE && BE.calendarQuarterOf ? BE.calendarQuarterOf(ym) : null;
     var cap = nextYM(ym);
-    st = budgetState[key] = { at: Date.now(), loading: true, staff: null, quarter: null, monthBonuses: [] };
+    st = budgetState[key] = { at: Date.now(), loading: true, staff: null, quarter: null, monthBonuses: [], octoberTarget: null };
     paintBudget(panel, key);
     var months = q ? q.months.filter(function (m) { return m <= cap; }) : [];
     // One-off monthly budget bonuses (15 Nov 2026: December 2026) are shown
@@ -1580,7 +1580,7 @@
     });
     monthRules.forEach(function (r) { if (r.month <= cap && months.indexOf(r.month) < 0) months.push(r.month); });
     st.promise = Promise.all([
-      post({ op: 'houseStaffCost', house: key, month: ym }).then(function (r) { return r && r.staff; }).catch(function () { return { available: false, reason: 'unreachable' }; }),
+      post({ op: 'houseStaffCost', house: key, month: ym }).then(function (r) { st.octoberTarget = (r && r.octoberTarget) || null; return r && r.staff; }).catch(function () { return { available: false, reason: 'unreachable' }; }),
       Promise.all(months.map(function (m) {
         return post({ op: 'houseCost', house: key, month: m }).then(function (r) { return { ym: m, cost: r && r.cost }; }).catch(function () { return { ym: m, cost: null }; });
       }))
