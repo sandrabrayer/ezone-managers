@@ -397,6 +397,7 @@
           }).join('') + '</tbody><tfoot><tr><td>סה״כ</td><td></td><td>' + esc(ils(total)) + '</td><td>100%</td><td></td></tr></tfoot></table></div>'
           : '<div class="wk-empty">אין עובדים עם עלות בחודש הזה</div>') + '</div>';
     }
+    (st.monthBonuses || []).forEach(function (mb) { h += monthBonusCardHtml(mb); });
     if (st.quarter) h += quarterHtml(st.quarter);
     return h;
   }
@@ -417,24 +418,58 @@
     on_track: 'בדרך לבונוס — הצפי לרבעון בתוך התקציב',
     at_risk: 'חריגה צפויה — הצפי לרבעון מעל התקציב',
     missing_data: 'חסרים נתוני עלות או תקציב — עוד אי אפשר לחשב',
-    not_enabled: 'הבונוס מתחיל ברבעון 4 2026'
+    not_enabled: 'הבונוס הרבעוני עוד לא התחיל'
   };
   var BB_TONE = { earned: 'ok', not_earned: 'bad', on_track: 'ok', at_risk: 'warn', missing_data: 'wait', not_enabled: 'wait' };
-  function budgetBonusLineHtml(q) {
-    return '<div class="bb-line ' + (BB_TONE[q.status] || 'wait') + '"><b>' + esc(BB_TEXT[q.status] || '') + '</b>' +
-      (q.forecast !== null && !q.settled && q.forecastBudget ? '<span>' + esc('צפי לרבעון: ' + ils(q.forecast) + ' מתוך ' + ils(q.forecastBudget)) + '</span>' : '') +
-      (q.settled && q.budget ? '<span>' + esc('עלות הרבעון: ' + ils(q.spent) + ' מתוך ' + ils(q.budget)) + '</span>' : '') + '</div>';
+  function notEnabledText(q) {
+    return q.startsLabel ? 'הבונוס הרבעוני מתחיל ב' + q.startsLabel + (q.startsAmount ? ' — ' + ils(q.startsAmount) : '') : BB_TEXT.not_enabled;
   }
-  /* The «בונוס» tab card. q = budgetBonusQuarter(...) or { loading } / null. */
-  function budgetBonusHtml(q) {
-    var title = '<div class="card-title">בונוס עמידה בתקציב (רבעוני)</div>';
+  function budgetBonusLineHtml(q) {
+    var text = q.status === 'not_enabled' ? notEnabledText(q) : (BB_TEXT[q.status] || '');
+    return '<div class="bb-line ' + (BB_TONE[q.status] || 'wait') + '"><b>' + esc(text) + '</b>' +
+      (q.status !== 'not_enabled' && q.forecast !== null && !q.settled && q.forecastBudget ? '<span>' + esc('צפי לרבעון: ' + ils(q.forecast) + ' מתוך ' + ils(q.forecastBudget)) + '</span>' : '') +
+      (q.status !== 'not_enabled' && q.settled && q.budget ? '<span>' + esc('עלות הרבעון: ' + ils(q.spent) + ' מתוך ' + ils(q.budget)) + '</span>' : '') + '</div>';
+  }
+  /* One-off monthly budget bonus (15 Nov 2026: December 2026, 2,500 ₪). */
+  var MB_TEXT = {
+    earned: 'עמד/ה ביעד החודש — זכאי/ת לבונוס',
+    not_earned: 'החודש הסתיים מעל היעד — אין בונוס',
+    on_track: 'בדרך לבונוס — העלות הצפויה בתוך היעד',
+    at_risk: 'חריגה צפויה — העלות הצפויה מעל היעד',
+    missing_data: 'חסרים נתוני עלות או יעד — עוד אי אפשר לחשב'
+  };
+  function monthBonusBlockHtml(mb) {
+    if (!mb || !mb.enabled) return '';
+    var when = mb.settled ? ' — סופי' : mb.future ? ' — עוד לא התחיל' : ' — בתהליך';
+    var line = '<div class="bb-line ' + (BB_TONE[mb.status] || 'wait') + '"><b>' + esc(MB_TEXT[mb.status] || '') + '</b>' +
+      (mb.budget ? '<span>' + esc((mb.settled ? 'עלות החודש: ' : 'עלות צפויה: ') + ils(mb.cost) + ' מתוך יעד ' + ils(mb.budget)) + '</span>' : '') + '</div>';
+    return '<div class="bb-month"><div class="bb-cond">בונוס חד-פעמי: אם עלות כוח האדם של ' + esc(monthHe(mb.ym)) +
+      ' לא עוברת את יעד התקציב של החודש. בנוסף לבונוס הרבעוני ובלי קשר אליו.</div>' +
+      '<div class="bb-head"><span class="bb-q">' + esc(monthHe(mb.ym) + when) + '</span><span class="bb-amount">' + esc(ils(mb.amount)) + '</span></div>' +
+      line + (mb.budget ? barHtml(mb.cost, mb.budget) : '') + '</div>';
+  }
+  function monthBonusCardHtml(mb) {
+    if (!mb || !mb.enabled) return '';
+    return '<div class="card work-card wk-budget-month"><div class="card-title">' + esc('בונוס יעד ' + monthHe(mb.ym)) + '</div>' + monthBonusBlockHtml(mb) + '</div>';
+  }
+  /* The «בונוס» tab card. q = budgetBonusQuarter(...) or { loading } / { error } / null;
+   * monthBonuses = [budgetBonusMonth(...)] — the one-off monthly bonuses in view. */
+  function budgetBonusHtml(q, monthBonuses) {
+    var title = '<div class="card-title">בונוס עמידה בתקציב</div>';
     if (!q || q.loading) return title + '<div class="wk-empty">טוען…</div>';
     if (q.error) return title + '<div class="wk-empty">' + esc(q.error) + '</div>';
-    var amount = q.amount ? ils(q.amount) : 'הסכום ייקבע על ידי סנדרה';
-    return title +
-      '<div class="bb-cond">התנאי: עלות כוח האדם של הבית ברבעון לא עוברת את תקציב כוח האדם של הרבעון. נבדק פעם ברבעון, אחרי שהרבעון מסתיים.</div>' +
-      '<div class="bb-head"><span class="bb-q">' + esc(q.quarter ? q.quarter.label : '') + (q.settled ? ' — סופי' : ' — בתהליך') + '</span><span class="bb-amount">' + esc(amount) + '</span></div>' +
-      budgetBonusLineHtml(q) + barHtml(q.settled ? q.spent : (q.forecast || 0), q.settled ? q.budget : (q.forecastBudget || 0)) +
+    var months = (monthBonuses || []).filter(function (m) { return m && m.enabled; }).map(monthBonusBlockHtml).join('');
+    var quarter;
+    if (q.status === 'not_enabled') {
+      quarter = '<div class="bb-cond">רבעוני: עלות כוח האדם של הבית ברבעון לא עוברת את תקציב כוח האדם של הרבעון. נבדק פעם ברבעון, אחרי שהרבעון מסתיים.</div>' +
+        budgetBonusLineHtml(q);
+    } else {
+      var amount = q.amount ? ils(q.amount) : 'הסכום ייקבע על ידי סנדרה';
+      quarter = '<div class="bb-cond">רבעוני: עלות כוח האדם של הבית ברבעון לא עוברת את תקציב כוח האדם של הרבעון. נבדק פעם ברבעון, אחרי שהרבעון מסתיים.</div>' +
+        '<div class="bb-head"><span class="bb-q">' + esc(q.quarter ? q.quarter.label : '') + (q.settled ? ' — סופי' : ' — בתהליך') + '</span><span class="bb-amount">' + esc(amount) + '</span></div>' +
+        budgetBonusLineHtml(q) + barHtml(q.settled ? q.spent : (q.forecast || 0), q.settled ? q.budget : (q.forecastBudget || 0));
+    }
+    return title + months + '<div class="bb-quarter">' + quarter + '</div>' +
       '<button type="button" class="wk-link" data-go-sub="budget">לפירוט בתקציב כוח אדם ←</button>';
   }
 
@@ -446,7 +481,7 @@
     talkThreads: talkThreads, talksListHtml: talksListHtml,
     committeeNoteFormHtml: committeeNoteFormHtml, committeeNotesPanelHtml: committeeNotesPanelHtml, notesListHtml: notesListHtml,
     employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, quarterHtml: quarterHtml,
-    budgetBonusHtml: budgetBonusHtml
+    budgetBonusHtml: budgetBonusHtml, monthBonusCardHtml: monthBonusCardHtml
   };
   root.CrmView = CrmView;
   if (typeof module === 'object' && module.exports) module.exports = CrmView;

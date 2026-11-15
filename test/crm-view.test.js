@@ -175,25 +175,41 @@ test('«תקציב כוח אדם»: KPIs, the bar status, budget lines, workers 
   assert.match(C.budgetHtml({ staff: { loading: true } }), /טוען/);
 });
 
-test('budget bonus card: condition in plain words, the amount «ייקבע» until Sandra sets it, running vs settled', () => {
-  const q = BE.budgetBonusQuarter([
+test('budget bonus card: condition in plain words; Q4 2026 shows when the quarterly bonus starts; December\'s one-off 2,500 ₪; running vs settled', () => {
+  // Today (Nov 2026): Q4 2026 is not a bonus quarter — the card says when it starts and for how much.
+  const q4 = BE.budgetBonusQuarter([
     { ym: '2026-10', available: true, cost: 90, budget: 100 },
     { ym: '2026-11', available: true, cost: 95, budget: 100 },
     { ym: '2026-12', available: true, cost: 95, budget: 100 }], { nowYM: '2026-11' });
-  const h = C.budgetBonusHtml(q);
+  const dec = BE.budgetBonusMonth({ ym: '2026-12', available: true, cost: 95000, budget: 100000 }, { nowYM: '2026-11' });
+  const h = C.budgetBonusHtml(q4, [dec]);
   assert.match(h, /עלות כוח האדם של הבית ברבעון לא עוברת את תקציב כוח האדם של הרבעון/);
-  assert.match(h, /רבעון 4 2026 — בתהליך/);
-  assert.match(h, /הסכום ייקבע על ידי סנדרה/);
-  assert.match(h, /בדרך לבונוס/);
-  assert.doesNotMatch(h, /מדרגה/, 'no tier wording');
-  const settled = BE.budgetBonusQuarter(q.months.map((m) => ({ ym: m.ym, available: true, cost: 110, budget: 100 })), { nowYM: '2027-01', amount: 1500 });
+  assert.match(h, /הבונוס הרבעוני מתחיל ברבעון 1 2027 — 6,000 ₪/);
+  assert.match(h, /בונוס חד-פעמי: אם עלות כוח האדם של דצמבר 2026 לא עוברת את יעד התקציב של החודש/);
+  assert.match(h, /דצמבר 2026 — עוד לא התחיל<\/span><span class="bb-amount">2,500 ₪/);
+  assert.match(h, /בדרך לבונוס — העלות הצפויה בתוך היעד/);
+  assert.match(h, /עלות צפויה: 95,000 ₪ מתוך יעד 100,000 ₪/);
+  assert.doesNotMatch(h, /מדרגה|ייקבע/, 'no tier wording; the amounts are set');
+  assert.doesNotMatch(h, /צפי לרבעון/, 'no quarter forecast before the quarterly bonus starts');
+  // Q1 2027, running, then settled over budget.
+  const q1 = BE.budgetBonusQuarter([
+    { ym: '2027-01', available: true, cost: 90, budget: 100 },
+    { ym: '2027-02', available: false },
+    { ym: '2027-03', available: false }], { nowYM: '2027-01' });
+  const r = C.budgetBonusHtml(q1, []);
+  assert.match(r, /רבעון 1 2027 — בתהליך<\/span><span class="bb-amount">6,000 ₪/);
+  assert.match(r, /בדרך לבונוס — הצפי לרבעון בתוך התקציב/);
+  const settled = BE.budgetBonusQuarter(q1.months.map((m) => ({ ym: m.ym, available: true, cost: 110, budget: 100 })), { nowYM: '2027-04' });
   const s = C.budgetBonusHtml(settled);
   assert.match(s, /— סופי/);
-  assert.match(s, /1,500 ₪/);
   assert.match(s, /אין בונוס/);
+  const decDone = C.budgetBonusHtml(q1, [BE.budgetBonusMonth({ ym: '2026-12', available: true, cost: 101, budget: 100 }, { nowYM: '2027-01' })]);
+  assert.match(decDone, /דצמבר 2026 — סופי/);
+  assert.match(decDone, /החודש הסתיים מעל היעד — אין בונוס/);
   assert.match(C.budgetBonusHtml({ loading: true }), /טוען/);
   assert.match(C.budgetBonusHtml({ error: 'x' }), /x/);
-  assert.match(C.quarterHtml(q), /אוקטובר 2026[\s\S]*נובמבר 2026[\s\S]*דצמבר 2026/);
+  assert.match(C.quarterHtml(q4), /אוקטובר 2026[\s\S]*נובמבר 2026[\s\S]*דצמבר 2026/);
+  assert.match(C.budgetHtml({ staff: { available: false, reason: 'no_house' }, monthBonuses: [dec] }), /בונוס יעד דצמבר 2026[\s\S]*2,500 ₪/, 'the budget tab shows it too');
 });
 
 test('wiring: crm.js loads before work.js; cached by the SW; the drawer is one per page and closed on load', () => {

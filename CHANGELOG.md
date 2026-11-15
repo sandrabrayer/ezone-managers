@@ -3,6 +3,26 @@
 
 ## Unreleased
 
+### Changed — budget bonus amounts: 6,000 ₪ per quarter from Q1 2027 + a one-off 2,500 ₪ for December 2026 (November 15, 2026)
+
+- **Why**: Sandra, 15 Nov 2026 — «הבונוס יהיה 6000 ש"ח ויתחיל ברבעון ראשון של 2027. ללא קשר עבור חודש דצמבר אם תהיה
+  עמידה ביעד של חודש זה יקבלו 2500».
+- **Quarterly**: `BUDGET_BONUS_RULES = [{ from: '2027-01', amount: 6000 }]`.
+  - This replaces the 14 Nov placeholder (`2026-10`, amount `null`), which never judged a settled quarter.
+  - Q4 2026 shows its months with «הבונוס הרבעוני מתחיל ברבעון 1 2027 — 6,000 ₪».
+- **December 2026**: new `BUDGET_MONTH_BONUSES` + `budgetMonthBonusRuleFor` + `budgetBonusMonth`.
+  - Pays 2,500 ₪ once when December's manpower cost is ≤ December's budget.
+  - Independent of the quarter. A settled month without data or a target is «חסרים נתונים», never a pass.
+- **UI**:
+  - The «בונוס עמידה בתקציב» card shows the December block and the quarterly block.
+  - «תקציב כוח אדם» adds a «בונוס יעד דצמבר 2026» card.
+  - December's cost is fetched even after the quarter changes (shown Oct 2026 – Mar 2027).
+  - Guide §11 and the bonus list updated.
+- **Not included**: the staffing payroll feed (`/api/feeds/staffing/bonuses`) still carries the monthly occupancy /
+  referral / intake bonuses only, not the budget bonuses.
+- **Tests**: 506 → 507 (`budget-bonus` +1 and rules updated to Q1 2027; the `crm-view` card test rewritten).
+  SW v42 → v43.
+
 ### Changed — CRM redesign: light look, colour per tab, cards, manpower budget, talk threads, committee notes, quarterly budget bonus (November 14, 2026)
 
 - **Why**: Sandra, 14 Nov 2026 — the app should look like the newer E-ZONE apps and be much more of a management
