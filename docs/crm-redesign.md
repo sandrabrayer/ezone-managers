@@ -54,9 +54,17 @@ Sandra, 14 Nov 2026:
   without a budget, is «חסרים נתונים». A pass is never guessed.
 - **Running quarter:** the forecast uses the months read so far. A month not readable yet borrows the average
   cost and the last budget. The status reads «בדרך לבונוס» or «חריגה צפויה», with no tier wording.
-- **The amount is not set yet** (`BUDGET_BONUS_RULES = [{ from: '2026-10', amount: null }]`). The card shows
-  «הסכום ייקבע על ידי סנדרה», and nothing is ever counted as money. To set it, add a rule with the amount;
-  never edit a rule that a settled quarter used. It is not part of the monthly «מה אם?» total.
+- **Amount and start** (Sandra, 15 Nov 2026): **6,000 ₪ per quarter, from Q1 2027** —
+  `BUDGET_BONUS_RULES = [{ from: '2027-01', amount: 6000 }]`. This replaced the 14 Nov placeholder
+  (`{ from: '2026-10', amount: null }`), which had never judged a settled quarter. Q4 2026 is not a bonus
+  quarter: its months are shown, with «הבונוס הרבעוני מתחיל ברבעון 1 2027 — 6,000 ₪». From now on, add rules and
+  never edit one a settled quarter used. The bonus is not part of the monthly «מה אם?» total.
+- **December 2026, one-off — 2,500 ₪** (Sandra, 15 Nov 2026: «ללא קשר עבור חודש דצמבר אם תהיה עמידה ביעד של חודש זה
+  יקבלו 2500»): `BUDGET_MONTH_BONUSES = [{ month: '2026-12', amount: 2500 }]`, judged by `budgetBonusMonth`.
+  - Earned when December's manpower cost is at or below December's budget (the target).
+  - It is independent of the quarterly bonus.
+  - It is settled after December ends. Missing data is never a pass.
+  - It is shown from October 2026 to March 2027, in the «בונוס» card and in «תקציב כוח אדם».
 
 ### Security
 

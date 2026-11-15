@@ -1542,6 +1542,10 @@
    * houseCost for every month of the calendar quarter up to next month (the
    * staffing feed's limit). The quarter math is BonusEligibility.budgetBonusQuarter. */
   var budgetState = {};   // houseKey → { at, staff, quarter, loading }
+  function ymIndex(ym) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
+    return m ? (+m[1]) * 12 + (+m[2]) - 1 : NaN;
+  }
   function nextYM(ym) {
     var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
     if (!m) return '';
@@ -1554,7 +1558,7 @@
     var hb = host(panel, 'budget');
     if (hb && CV) hb.innerHTML = CV.budgetHtml(st && !st.loading ? st : { staff: { loading: true } });
     var bb = panel.querySelector('[data-budget-bonus]');
-    if (bb && CV) bb.innerHTML = CV.budgetBonusHtml(st && !st.loading ? (st.quarter || { error: 'לא הצלחנו לחשב את הרבעון — נסו שוב מאוחר יותר.' }) : { loading: true });
+    if (bb && CV) bb.innerHTML = CV.budgetBonusHtml(st && !st.loading ? (st.quarter || { error: 'לא הצלחנו לחשב את הרבעון — נסו שוב מאוחר יותר.' }) : { loading: true }, st && st.monthBonuses);
     if (drawer.open && drawer.key === key && drawer.type === 'employee') renderDrawerIfOpen(key);
   }
   function loadBudget(panel, key, force) {
@@ -1565,9 +1569,16 @@
     var ym = String(today || '').slice(0, 7);
     var q = BE && BE.calendarQuarterOf ? BE.calendarQuarterOf(ym) : null;
     var cap = nextYM(ym);
-    st = budgetState[key] = { at: Date.now(), loading: true, staff: null, quarter: null };
+    st = budgetState[key] = { at: Date.now(), loading: true, staff: null, quarter: null, monthBonuses: [] };
     paintBudget(panel, key);
     var months = q ? q.months.filter(function (m) { return m <= cap; }) : [];
+    // One-off monthly budget bonuses (15 Nov 2026: December 2026) are shown
+    // from two months before their month until three months after it.
+    var monthRules = (BE && BE.BUDGET_MONTH_BONUSES ? BE.BUDGET_MONTH_BONUSES : []).filter(function (r) {
+      var d = ymIndex(ym) - ymIndex(r.month);
+      return d >= -2 && d <= 3;
+    });
+    monthRules.forEach(function (r) { if (r.month <= cap && months.indexOf(r.month) < 0) months.push(r.month); });
     st.promise = Promise.all([
       post({ op: 'houseStaffCost', house: key, month: ym }).then(function (r) { return r && r.staff; }).catch(function () { return { available: false, reason: 'unreachable' }; }),
       Promise.all(months.map(function (m) {
@@ -1581,6 +1592,13 @@
           var cc = got && got.cost;
           return cc && cc.available ? { ym: m, available: true, cost: cc.total, budget: cc.budget } : { ym: m, available: false };
         }), { nowYM: ym });
+      }
+      if (BE && BE.budgetBonusMonth) {
+        st.monthBonuses = monthRules.map(function (r) {
+          var got = res[1].filter(function (x) { return x.ym === r.month; })[0];
+          var cc = got && got.cost;
+          return BE.budgetBonusMonth(cc && cc.available ? { ym: r.month, available: true, cost: cc.total, budget: cc.budget } : { ym: r.month, available: false }, { nowYM: ym });
+        });
       }
       st.loading = false;
       st.at = Date.now();

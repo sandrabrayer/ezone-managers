@@ -2320,3 +2320,5 @@ body.drawer-on { overflow: hidden; }
   .guide-btn { padding: 5px 9px; font-size: 13px; }
   .month-tag { display: none; }
 }
+/* One-off monthly budget bonus inside the «בונוס עמידה בתקציב» card (15 Nov 2026). */
+.bb-month { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px dashed var(--line-strong); }
