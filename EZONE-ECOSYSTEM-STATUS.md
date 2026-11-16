@@ -14,6 +14,29 @@
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 
+## Managers: committees for information, operational issues, collapsible cards, budget simulation, family calls (November 16, 2026)
+
+Sandra, 16 Nov 2026. Details: `docs/simulation-family-collapse.md` in ezone-managers.
+
+- **«ועדות» is information only.** «מה היה בוועדה» (14 Nov) is removed from the Managers app: the therapists document a
+  committee and they do not use this app. The Managers server refuses a `committeeNotes` write. The Dashboard keeps
+  the sheet and its rows.
+- **«אירועים חריגים» is now «סוגיות תפעוליות למעקב».** The log key and sheet stay `events`.
+- **Collapsible cards** on every work tab: a header with an arrow; the main card open; state in page memory only.
+- **Simulation** in «תקציב כוח אדם»: per worker «סיום העסקה» / «שינוי שכר» (a new monthly cost). The simulated figure
+  replaces the worker's and the total follows, also for next month and in the quarter card. In the browser only —
+  never saved, never sent, nothing changes in staffing.
+- **Next month per worker**: a «צפי <next month>» column and tile, from `houseStaffCost` for the next month, next to
+  «חיסכון צפוי מסיומי עבודה» (staffing #135 → Dashboard #403 → Managers #73), which stays the one card about who is
+  leaving. December equals November only while staffing has no end date recorded for the house.
+- **«שיחות עם משפחה»**, a new sub-tab after «מטופלים»: the contact person from the Dashboard
+  (`houseData.patients[].contact`, Dashboard #402 — by `Patients.fromLead` only) and the documented calls
+  (`familyCalls` log, back after its removal on 14 Oct). Also a «משפחה» tab in the patient card.
+- **Duplicates removed**: reminders listed once (the strip), therapists once («מטפלים»), «נקלטו» once («מטופלים»).
+- House sub-tabs now: הבית היום · מטופלים · שיחות עם משפחה · צוות ומשמרות · מטפלים · תקציב כוח אדם · ועדות ·
+  שיחות עם עובדים · סוגיות תפעוליות למעקב · סיכומי ישיבות · עדכון משמרת · בונוס.
+- No new endpoint, env var or secret. Tests 513 → 521. SW v47.
+
 ## Managers protocol 2 — prepared October 14, 2026 (not activated)
 
 Coordinated Managers/Dashboard hardening requires immutable account IDs,

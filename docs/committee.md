@@ -152,3 +152,14 @@ previousDate, previousLabel, correction?, mode? }` → Dashboard `managersWork` 
 - **Shared rule**: the E-Zone-Dashboard card «ועדות קרובות» runs the identical fixture
   `test/fixtures/committee-alert-cases.json`, with its sha256 pinned on both sides.
 - Display-only: no bonus code reads it, and the golden bonus snapshots are unchanged.
+
+## 16 Nov 2026 — information only
+
+Sandra, 16 Nov 2026: «הועדות אצל המנהלים רק אינפורמטיביות, הם לא מכניסים דאטה … מי שממלא את המידע על מה שקורה שם זה
+המטפלים, שאין להם גישה לאפליקציה הזו. כרגע תסיר את האופציה של תוכן ותשאיר אותן רק ברמת המידע של מתי יש.»
+
+- «מה היה בוועדה» (14 Nov 2026) is removed: the form, the «📝» buttons, the list of past committees to summarise, the
+  notes in the patient card and the `committeeNotes` log of this app.
+- The sub-tab is the read-only list alone, soonest first. `server.js` refuses a `committeeNotes` write (`unknown_log`).
+- The Dashboard keeps the `ManagersCommitteeNotes` sheet and its rows; this app no longer reads them.
+- The alerts above are unchanged.

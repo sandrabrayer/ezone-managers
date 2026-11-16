@@ -3,6 +3,51 @@
 
 ## Unreleased
 
+### Changed — committees for information only, «סוגיות תפעוליות למעקב», collapsible cards, budget simulation, the people who are leaving, family calls (November 16, 2026)
+
+- **Why**: Sandra, 16 Nov 2026, after looking at the redesigned app — the full request is quoted in
+  `docs/simulation-family-collapse.md`.
+- **«ועדות» — information only**: the sub-tab shows when there is a committee, soonest first.
+  - Removed: the «מה היה בוועדה» form, its «📝» buttons, the «ועדות שהתקיימו — עוד לא נרשם מה היה» list, the notes in the
+    patient card, and the `committeeNotes` log.
+  - The therapists document a committee, and they do not use this app.
+  - `server.js` refuses a `committeeNotes` write (`unknown_log`) before anything is forwarded. The Dashboard keeps the
+    sheet and its rows.
+- **«אירועים חריגים» → «סוגיות תפעוליות למעקב»**: the sub-tab, the home card, the patient-card tab, the reminder label, the
+  guide. The log key and the saved rows are unchanged (`events`).
+- **Collapsible cards**: every card of a work tab is a header with an arrow.
+  - A tab with 3+ cards opens with its main card(s) open; a card with alerts is always open; «פתיחת הכול» / «סגירת הכול».
+  - Remembered in the page's memory only — nothing is written to the device.
+- **Simulation in «תקציב כוח אדם»**: beside every worker — «סיום העסקה» or «שינוי שכר» with a new monthly cost.
+  - The simulated figure replaces the worker's figure; the total under the table follows, also for next month.
+  - A «🧪 סימולציה» card: the simulated cost against the budget. The quarter card gets a «בסימולציה» column.
+  - In the browser only: never saved, never sent to the server, nothing changes in the staffing app.
+- **Next month, per worker**: the workers table has a «צפי <next month>» column and the month card shows next month's
+  forecast (`houseStaffCost` for the next month).
+  - Staffing already prices a month without the days after an end date, so the offset of a worker who leaves is
+    visible per worker, next to «חיסכון צפוי מסיומי עבודה» (PR #73) — which stays the one card about who is leaving.
+  - Q4 looked static because staffing had no end date for anyone in the house; once one is recorded there, the
+    following months drop here by themselves. Until then the simulation shows the effect.
+- **«שיחות עם משפחה»** — a new sub-tab after «מטופלים», CRM-style:
+  - the contact person of every patient, from the Dashboard (name, relation, phone);
+  - «+ רישום שיחה», the documented calls by patient with a filter, follow-up reminders;
+  - a «משפחה» tab in the patient card.
+  - The `familyCalls` log is back (removed 14 Oct 2026).
+- **Duplicates removed**: the reminders are listed once (the strip above the tabs), the therapists once («מטפלים», now
+  with «כרטיס ←»), «נקלטו» once («מטופלים»). The home cost card links to «תקציב כוח אדם».
+- **Also**: the link buttons under the home cards were white on pale grey — now readable; wide tables are shown one
+  block per row on a phone.
+- **Server**: `WORK_LOGS` = `staffTalks`, `events`, `familyCalls`. No new endpoint, env var, secret or dependency.
+- **Security**: house scoping unchanged (the server decides the house). The contact person arrives only inside the
+  manager's own `houseData`, `no-store`, never in the SW cache, never logged; a phone is linked only when it is a
+  plain local number. Every feed value is escaped. The simulation never leaves the page.
+- **Needs**: E-Zone-Dashboard #402 (`contact` per patient). Safe to merge before it: the tab then says the contact is
+  «עוד לא מחוברים», and calls can still be documented.
+- **Docs**: `docs/simulation-family-collapse.md` (new), `docs/crm-redesign.md`, `docs/committee.md`, `docs/guide.md`,
+  README, guide §1, §2, §4, §6, §7, §11 and new §12–§14, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
+- **Tests**: 513 → 521. `crm-view` +8 (family contacts / calls / panel, simulation ×2, next month per worker, collapse,
+  the simulation never leaves the page; the committee-notes test replaced); `access`, `committee`, `work-view`,
+  `home-bonus-tabs`, `guide` updated. SW v46 → v47.
 ### Added — «חיסכון צפוי מסיומי עבודה» in «תקציב כוח אדם» (November 16, 2026)
 
 - **Why**: Sandra, 16 Nov 2026 — «לגבי עובד שמסיים, לחזות את קיזוז השכר העתידי שלו מהיום שהוא מסיים. זה חשוב

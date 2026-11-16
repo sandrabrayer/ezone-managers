@@ -9,8 +9,12 @@
  *   מטפלים         therapists, their workdays and weekly visits
  *   שיחות עם עובדים private staff-talk log (author + admins only — enforced
  *                  by the backend, not here)
- *   אירועים חריגים unusual-events log
- * plus a follow-up reminders strip at the top of every house tab.
+ *   שיחות עם משפחה  family-calls log, CRM-style: the contact person from
+ *                  the Dashboard + every documented call (16 Nov 2026)
+ *   סוגיות תפעוליות למעקב  operational-issues log (was «אירועים חריגים»
+ *                  until 16 Nov 2026; the log key is still `events`)
+ * plus a follow-up reminders strip at the top of every house tab, and
+ * collapsible cards (a header with an arrow) on every work tab.
  *
  * Data: POST /api/work → the Dashboard's `managersWork` (the server adds the
  * secret and decides house / role / actor). Every value from the feed is
@@ -25,6 +29,24 @@
   var BE = root.BonusEligibility || (typeof require === 'function' ? require('../lib/bonus-eligibility.js') : null);
 
   var LOGS = {
+    // «שיחות עם משפחה» (16 Nov 2026, Sandra: «תוסיף שדה אחרי מטופלים לשיחות עם בני
+    // משפחה שתהיה מתועדת כמו ב-CRM»). The panel is drawn by crm.js
+    // (familyPanelHtml); the contact person comes from the Dashboard.
+    familyCalls: {
+      title: 'שיחות עם בני משפחה', add: 'שמירת השיחה', custom: true,
+      note: 'כל שיחה עם בן/בת משפחה של מטופל/ת: עם מי, מתי, מה נאמר ומה הלאה.',
+      fields: [
+        { k: 'patientName', label: 'מטופל/ת', type: 'patient', required: true },
+        { k: 'contactName', label: 'עם מי דיברת', type: 'text', max: 80, required: true },
+        { k: 'relation', label: 'קרבה', type: 'text', max: 40 },
+        { k: 'callDate', label: 'תאריך', type: 'date', required: true },
+        { k: 'callTime', label: 'שעה', type: 'time' },
+        { k: 'summary', label: 'עיקרי השיחה', type: 'textarea', max: 1000, required: true }
+      ],
+      head: function (r) { return (r.patientName || '') + (r.contactName ? ' — ' + r.contactName : ''); },
+      body: function (r) { return [r.summary]; },
+      when: function (r) { return [r.callDate, r.callTime]; }
+    },
     staffTalks: {
       title: 'שיחות אישיות עם עובדים', add: 'רישום שיחה',
       note: 'השיחות כאן נראות רק לך, לסנדרה ולרון. לכל שיחה אפשר להוסיף שיחת המשך ולרשום תוצאה.',
@@ -44,38 +66,26 @@
       body: function (r) { return [r.summary, r.agreedActions ? 'מה סוכם: ' + r.agreedActions : '']; },
       when: function (r) { return [r.talkDate, r.talkTime]; }
     },
+    // «סוגיות תפעוליות למעקב» (renamed 16 Nov 2026 from «אירועים חריגים»; the
+    // log key and its sheet stay `events`).
     events: {
-      title: 'אירועים חריגים', add: 'רישום אירוע',
+      title: 'סוגיות תפעוליות למעקב', add: 'רישום סוגיה',
       fields: [
         { k: 'eventDate', label: 'תאריך', type: 'date', required: true },
         { k: 'eventTime', label: 'שעה', type: 'time' },
         { k: 'patientName', label: 'מטופל/ת (אם רלוונטי)', type: 'patient' },
-        { k: 'whatHappened', label: 'מה קרה', type: 'textarea', max: 1500, required: true },
-        { k: 'actionTaken', label: 'מה נעשה', type: 'textarea', max: 1500 }
+        { k: 'whatHappened', label: 'מה הסוגיה', type: 'textarea', max: 1500, required: true },
+        { k: 'actionTaken', label: 'מה נעשה / מה נדרש', type: 'textarea', max: 1500 }
       ],
-      head: function (r) { return r.patientName ? 'אירוע — ' + r.patientName : 'אירוע'; },
+      head: function (r) { return r.patientName ? 'סוגיה — ' + r.patientName : 'סוגיה'; },
       body: function (r) { return [r.whatHappened, r.actionTaken ? 'מה נעשה: ' + r.actionTaken : '']; },
       when: function (r) { return [r.eventDate, r.eventTime]; }
-    },
-    // «מה היה בוועדה» (14 Nov 2026). Drawn inside the «ועדות» sub-tab by
-    // crm.js (committeeNotesPanelHtml) — there is no sub-panel of this name.
-    committeeNotes: {
-      title: 'מה היה בוועדה', add: 'שמירת סיכום הוועדה', inCommittees: true,
-      fields: [
-        { k: 'committeeId', type: 'hidden', value: '', max: 64 },
-        { k: 'patientName', label: 'מטופל/ת', type: 'patient', required: true },
-        { k: 'heldDate', label: 'תאריך הוועדה', type: 'date', required: true },
-        { k: 'participants', label: 'משתתפים', type: 'text', max: 300 },
-        { k: 'decision', label: 'החלטה', type: 'hidden', value: '', max: 20 },
-        { k: 'summary', label: 'מה היה בוועדה', type: 'textarea', max: 1500, required: true },
-        { k: 'nextDate', label: 'ועדה הבאה מומלצת', type: 'date' }
-      ],
-      head: function (r) { return 'ועדה — ' + (r.patientName || ''); },
-      body: function (r) { return [r.summary]; },
-      when: function (r) { return [r.heldDate, '']; }
     }
+    // «מה היה בוועדה» (14 Nov 2026) was REMOVED on 16 Nov 2026: the therapists
+    // document a committee, and they do not use this app. Committees are
+    // information only here — when there is one (committeesHtml).
   };
-  var LOG_LABEL = { staffTalks: 'שיחה עם עובד/ת', events: 'אירוע חריג', committeeNotes: 'ועדה' };
+  var LOG_LABEL = { familyCalls: 'שיחה עם משפחה', staffTalks: 'שיחה עם עובד/ת', events: 'סוגיה תפעולית' };
   var STAGE_LABELS = { new: 'ליד', visit: 'נקבע ביקור', paid: 'שילם מקדמה', entry: 'נכנס לבית', waitlist: 'רשימת המתנה' };
   var OUTCOME_LABELS = { not_relevant: 'לא רלוונטי', thinking: 'חושבים על זה', entered: 'נכנסים לטיפול', postponed: 'נדחה', cancelled: 'התבטל' };
 
@@ -261,7 +271,7 @@
     h += due.length ? '<ul class="wk-list wk-fb-list">' + due.map(feedbackLine).join('') + '</ul>'
       : '<div class="wk-empty">אין משובים באיחור או ב-30 הימים הקרובים</div>';
     if (m.unknown) h += '<div class="wk-note">' + esc(plural(m.unknown, 'עובד/ת אחד/ת ללא תאריך התחלה', 'עובדים ללא תאריך התחלה')) + ' — סמנו «בוצע» אחרי המשוב הבא.</div>';
-    return h + '<button type="button" class="dash-go" data-go-sub="team">לכל המשובים ←</button></div>';
+    return h + '<button type="button" class="dash-go" data-go-sub="team" data-go-card="wk-feedback">לכל המשובים ←</button></div>';
   }
   /* «צוות ומשמרות»: every employee, with «בוצע» + date (max = today). */
   function feedbackListHtml(d) {
@@ -412,9 +422,12 @@
     var st = committeesState(d);
     // 22 Oct 2026: the coordinators feed also carries recent past rows (for the week view) and a
     // status + notes. This sub-tab lists today and later; a cancelled one is shown struck through.
-    var items = st.ok ? st.items.filter(function (c) { return c && isRealIso(c.date) && (!st.today || c.date >= st.today); }) : [];
+    // Soonest first (16 Nov 2026) — the tab answers one question: when is there a committee.
+    var items = st.ok ? st.items.filter(function (c) { return c && isRealIso(c.date) && (!st.today || c.date >= st.today); }).slice().sort(function (a, b) {
+      return (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''));
+    }) : [];
     var h = '<div class="card work-card wk-committees"><div class="card-title">ועדות קרובות' + (st.ok ? ' (' + items.length + ')' : '') + '</div>';
-    h += '<div class="wk-note">את הוועדות קובעים הרכזים באפליקציית הרכזים. כאן — לקריאה בלבד.</div>';
+    h += '<div class="wk-note">את הוועדות קובעים הרכזים באפליקציית הרכזים. כאן רואים מתי יש ועדה — לקריאה בלבד.</div>';
     if (!st.ok) return h + '<div class="wk-empty">' + esc(st.text) + '</div></div>';
     if (!items.length) return h + '<div class="wk-empty">אין ועדות קרובות</div></div>';
     h += '<ul class="wk-list">' + items.map(function (c) {
@@ -423,33 +436,10 @@
         (c.patientName ? ' · ' + esc(c.patientName) : '') + '</span>' +
         (status !== 'scheduled' ? '<span class="wk-cm-status">' + esc(COMMITTEE_STATUS[status]) + '</span>' : '') +
         (c.participants ? '<span class="wk-meta">משתתפים: ' + esc(c.participants) + '</span>' : '') +
-        (c.notes ? '<span class="wk-meta">הערות: ' + esc(c.notes) + '</span>' : '') +
-        (status !== 'cancelled' && c.date <= (st.today || c.date) ? noteBtn(c) : '') + '</li>';
+        (c.notes ? '<span class="wk-meta">הערות: ' + esc(c.notes) + '</span>' : '') + '</li>';
     }).join('') + '</ul>';
     return h + '</div>';
   }
-  /* «📝 מה היה» on a committee that is today or has passed (14 Nov 2026). */
-  function noteBtn(c) {
-    return '<button type="button" class="wk-link cn-for" data-cn-for="' + esc([c.id || '', c.patientName || '', c.date || ''].join('|')) + '">📝 מה היה בוועדה</button>';
-  }
-  /* Committees that already took place (from the feed's recent past rows) and
-   * have no «מה היה» yet — the manager's to-do. */
-  function pastCommitteesHtml(d) {
-    var st = committeesState(d);
-    if (!st.ok) return '';
-    var notes = (d.logs && d.logs.committeeNotes) || [];
-    var noted = {};
-    notes.forEach(function (n) { if (n.committeeId) noted[n.committeeId] = true; });
-    var past = st.items.filter(function (c) {
-      return c && isRealIso(c.date) && st.today && c.date < st.today && c.status !== 'cancelled' && !(c.id && noted[c.id]);
-    });
-    if (!past.length) return '';
-    return '<div class="card work-card wk-cm-past"><div class="card-title">ועדות שהתקיימו — עוד לא נרשם מה היה (' + past.length + ')</div><ul class="wk-list">' +
-      past.map(function (c) {
-        return '<li><span class="wk-shift">' + esc(committeeWhen(c)) + '</span><span class="wk-name">' + esc(c.type) + (c.patientName ? ' · ' + esc(c.patientName) : '') + '</span>' + noteBtn(c) + '</li>';
-      }).join('') + '</ul></div>';
-  }
-
   /* The visits that belong to the selected month (26 Oct 2026). The Dashboard marks next-month look-ahead
      rows (today .. today+14) with inSelectedMonth: false; only that exact boolean drops a row, so an absent
      field (older backend) or any other value keeps today's behaviour. Week / upcoming views use ALL visits. */
@@ -568,7 +558,8 @@
     h += '<div class="card work-card wk-staff"><div class="card-title">עובדי הבית (' + staff.length + ')</div>';
     if (!staff.length) h += '<div class="wk-empty">אין עובדים רשומים בבית</div>';
     if (guides.length) h += '<div class="card-subtitle">מדריכים (' + guides.length + ')</div><ul class="wk-list">' + guides.map(staffLine).join('') + '</ul>';
-    if (ther.length) h += '<div class="card-subtitle">מטפלים (' + ther.length + ')</div><ul class="wk-list">' + ther.map(staffLine).join('') + '</ul>';
+    // Therapists are listed ONCE, in «מטפלים» (with workdays, phone and the card) — 16 Nov 2026.
+    if (ther.length) h += '<button type="button" class="dash-go" data-go-sub="therapists">' + esc(plural(ther.length, 'מטפל/ת אחד/ת', 'מטפלים')) + ' — בלשונית «מטפלים» ←</button>';
     h += '</div>';
     return h;
   }
@@ -583,7 +574,8 @@
       var tel = telHref(s.phone);
       return '<li><span class="wk-name">' + esc(s.name) + '</span><span class="wk-meta">' + esc(s.role) +
         (days.length ? ' · ימי עבודה: ' + esc(days.join(', ')) : '') + (s.onLeave ? ' · בחופשה' : '') + '</span>' +
-        (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') + '</li>';
+        (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') +
+        '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(s.name) + '">כרטיס ←</button></li>';
     }).join('') + '</ul>' : '<div class="wk-empty">אין מטפלים רשומים בבית</div>';
     h += '</div>';
     h += '<div class="card work-card wk-ther-week"><div class="card-title">לוז טיפולים שבועי</div>';
@@ -660,16 +652,9 @@
       }).join('') + '</ul>'
       : '<div class="wk-empty">אין טיפולים משובצים להיום</div>';
   }
-  function todayRequestsHtml(m) {
-    return m.requests.length
-      ? '<ul class="wk-list">' + m.requests.map(function (r) {
-        return '<li' + (r.overdue ? ' class="wk-soon"' : '') + '><span class="wk-name">' + esc(r.kind) + (r.head ? ' · ' + esc(r.head) : '') +
-          '</span><span class="wk-meta">' + esc(fmtDate(r.date)) + (r.overdue ? ' · באיחור' : '') + '</span></li>';
-      }).join('') + '</ul>'
-      : '<div class="wk-empty">אין בקשות פתוחות</div>';
-  }
   function todayCardHtml(m) {
-    var h = '<div class="card dash-card dash-today"><div class="card-title">הבית היום — יום ' + esc(m.weekday) + ' ' + esc(fmtDate(m.today)) + '</div>';
+    // data-default-open: the main card of the tab — open when the tab opens (collapsible cards, 16 Nov 2026).
+    var h = '<div class="card dash-card dash-today" data-default-open><div class="card-title">הבית היום — יום ' + esc(m.weekday) + ' ' + esc(fmtDate(m.today)) + '</div>';
     h += '<div class="dash-tiles">' +
       tile('t-teal', m.patients, 'מטופלים בבית') +
       tile('t-blue', m.teamAvailable ? m.onShiftCount : '—', 'במשמרת היום') +
@@ -682,7 +667,8 @@
       h += '<div class="card-subtitle">במשמרת היום</div>' + todayShiftsHtml(m);
       h += '<div class="card-subtitle">טיפולים היום</div>' + todaySessionsHtml(m);
     }
-    h += '<div class="card-subtitle">בקשות פתוחות</div>' + todayRequestsHtml(m);
+    // The open reminders themselves are the «🔔» strip above every tab (with «בוצע») —
+    // listed once, not again here (16 Nov 2026); the tile above keeps the count.
     return h + '</div>';
   }
   /* Admin landing tab: one «הבית היום» card per house, from the cached
@@ -748,19 +734,14 @@
           (v.time ? ' ' + esc(v.time) : '') + (v.meetingWith ? ' · עם ' + esc(v.meetingWith) : '') + '</span></li>';
       }).join('') + '</ul>'
       : '<div class="wk-empty">אין ביקורים קרובים ברשימה</div>');
-    if (adm.length) {
-      h += '<div class="card-subtitle">נקלטו לאחרונה</div><ul class="wk-list">' + adm.slice(0, 3).map(function (a) {
-        return '<li><span class="wk-name">' + esc(a.name) + '</span><span class="wk-meta">' + esc(fmtDate(a.date)) + '</span></li>';
-      }).join('') + '</ul>';
-    }
-    h += '</div>';
+    h += '<button type="button" class="dash-go" data-go-sub="patients" data-go-card="wk-visits">לכל הביקורים והקליטות ←</button></div>';
 
-    h += '<div class="card dash-card dash-events"><div class="card-title">אירועים חריגים אחרונים</div>' + (events.length
+    h += '<div class="card dash-card dash-events"><div class="card-title">סוגיות תפעוליות למעקב — אחרונות</div>' + (events.length
       ? '<ul class="wk-list">' + events.map(function (r) {
         return '<li><span class="wk-name">' + esc(LOGS.events.head(r)) + '</span><span class="wk-meta">' + esc(fmtDate(r.eventDate)) + '</span></li>';
       }).join('') + '</ul>'
-      : '<div class="wk-empty">אין אירועים חריגים רשומים</div>') +
-      '<button type="button" class="dash-go" data-go-sub="events">לאירועים החריגים ←</button></div>';
+      : '<div class="wk-empty">אין סוגיות תפעוליות רשומות</div>') +
+      '<button type="button" class="dash-go" data-go-sub="events">לכל הסוגיות התפעוליות ←</button></div>';
     return h;
   }
 
@@ -806,7 +787,7 @@
       ? 'חלק מהעלות כבר לפי דוח השכר, והשאר הערכה.'
       : 'עדיין אין דוח שכר לחודש הזה — כל הסכום הוא הערכה.') +
       (c.stale ? ' ' + esc('(הנתון לא התעדכן לאחרונה)') : '') + '</div>';
-    return h;
+    return h + '<button type="button" class="dash-go" data-go-sub="budget">לעובדים, לסימולציה ולתקציב ←</button>';
   }
 
   function formHtml(logKey, d, today) {
@@ -870,6 +851,55 @@
       formHtml(logKey, d, d && d.today) + '</div>' +
       '<div class="card work-card"><div class="card-title">' + esc(listTitle(logKey, rows)) + '</div>' + logListHtml(logKey, rows, me, d && d.today) + '</div>';
   }
+  /* «שיחות עם משפחה» (16 Nov 2026): the contacts table (crm.js), the form and the calls
+   * list. st = { filter } — the patient the list is narrowed to ('' = everyone). */
+  function familyListInner(rows, filter) {
+    if (!CV) return '';
+    return (rows.length ? CV.familyFilterHtml(rows, filter) : '') + CV.familyCallsListHtml(rows, { filter: filter });
+  }
+  function familyPanelHtml(d, st) {
+    var rows = (d && d.logs && d.logs.familyCalls) || [];
+    return (CV ? CV.familyContactsHtml(d) : '') +
+      '<div class="card work-card wk-familyCalls"><div class="card-title">+ רישום שיחה עם בן/בת משפחה</div>' +
+      '<div class="wk-note">' + esc(LOGS.familyCalls.note) + '</div><div class="wk-note fam-hint" data-fam-hint hidden></div>' +
+      formHtml('familyCalls', d, d && d.today) + '</div>' +
+      '<div class="card work-card wk-fam-list" data-default-open><div class="card-title">השיחות המתועדות (' + rows.length + ')</div>' +
+      '<div data-fam-list>' + familyListInner(rows, st && st.filter) + '</div></div>';
+  }
+  /* The contact line shown when a patient is picked in the form — plain text. */
+  function familyHintText(d, patientName) {
+    var n = String(patientName || '').replace(/\s+/g, ' ').trim();
+    var p = n && CV ? ((d && d.patients) || []).filter(function (x) { return String(x.name || '').replace(/\s+/g, ' ').trim() === n; })[0] : null;
+    if (!p) return { text: '', contact: null };
+    var ct = CV.contactOf(p);
+    if (!ct) return { text: d && d.contactsSupported === true ? 'אין איש קשר רשום בדשבורד למטופל/ת — רשמו עם מי דיברת.' : '', contact: null };
+    return { text: 'איש הקשר בדשבורד: ' + (ct.name || '—') + (ct.relation ? ' (' + ct.relation + ')' : '') + (ct.phone || ct.updatesPhone ? ' · ' + (ct.phone || ct.updatesPhone) : ''), contact: ct };
+  }
+
+  /* ── collapsible cards (16 Nov 2026) ────────────────────
+   * Sandra: «בעמוד שיש בו הרבה נתונים צריך כותרות עם חץ ושיפתח תפריט עם המידע,
+   * אחרת מגוללים כל הזמן לחפש משהו». Every card of a work tab is a header with
+   * an arrow; a tap opens / closes it. A tab with 3+ cards opens with only its
+   * main card(s) open (data-default-open, else the first; an alert card that
+   * has alerts is always open); a tab with 1–2 cards opens fully. What a person
+   * opened or closed is remembered while the page is open, per house and card.
+   * collapseKeyOf: the card's own class (wk-patients, dash-today …), else its
+   * title without the numbers — stable across redraws. */
+  var NO_COLLAPSE_SUBS = { bonus: 1, summaries: 1, shiftUpdates: 1 };
+  var GENERIC_CARD_CLASSES = { card: 1, 'work-card': 1, 'dash-card': 1, 'is-collapsible': 1, 'is-collapsed': 1 };
+  function collapseKeyOf(className, titleText) {
+    var own = String(className || '').split(/\s+/).filter(function (c) { return c && !GENERIC_CARD_CLASSES[c] && /^[a-zA-Z][\w-]{1,40}$/.test(c); })[0];
+    if (own) return own;
+    return String(titleText || '').replace(/[0-9()\/.:·—–-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) || 'card';
+  }
+  /* open? — stored choice first, then the tab's default. */
+  function collapseDefaultOpen(info) {
+    if (info.stored === true || info.stored === false) return info.stored;
+    if (info.total < 3) return true;
+    if (info.hasAlerts) return true;
+    return info.anyMarked ? !!info.marked : info.index === 0;
+  }
+
   function listTitle(logKey, rows) {
     if (logKey === 'staffTalks' && CV) {
       var th = CV.talkThreads(rows || []);
@@ -922,6 +952,7 @@
     WORK_ERRORS: WORK_ERRORS, dischargeErrorText: dischargeErrorText, setDischargeBusy: setDischargeBusy,
     teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml, costHtml: costHtml,
     visitsInSelectedMonth: visitsInSelectedMonth,
+    familyPanelHtml: familyPanelHtml, familyHintText: familyHintText, collapseKeyOf: collapseKeyOf, collapseDefaultOpen: collapseDefaultOpen,
     todayModel: todayModel, todayCardHtml: todayCardHtml, todayAllHtml: todayAllHtml, SHIFT_ORDER: SHIFT_ORDER,
     logListHtml: logListHtml, logPanelHtml: logPanelHtml, followUpsHtml: followUpsHtml, entryFromForm: entryFromForm };
 
@@ -988,13 +1019,13 @@
     var hostEl = panel.querySelector('[data-dash-cost]');
     if (!hostEl) return;
     var c = costCache[key];
-    if (c && Date.now() - c.at < 600000) { hostEl.innerHTML = costHtml(c.data); return; }
+    if (c && Date.now() - c.at < 600000) { hostEl.innerHTML = costHtml(c.data); applyCollapse(panel, key); return; }
     post({ op: 'houseCost', house: key }).then(function (r) {
       costCache[key] = { at: Date.now(), data: r };
       hostEl.innerHTML = costHtml(r);
     }).catch(function () {
       hostEl.innerHTML = costHtml({ cost: { available: false, reason: 'error' } });
-    });
+    }).then(function () { applyCollapse(panel, key); });
   }
 
   function host(panel, sub) { return panel.querySelector('[data-sub-panel="' + sub + '"]'); }
@@ -1022,18 +1053,15 @@
     var th = host(panel, 'therapists');
     if (th) th.innerHTML = therapistsHtml(d);
     var cmt = host(panel, 'committees');
-    // «ועדות»: the read-only list + the committees still to be summarised +
-    // «מה היה בוועדה». A half-typed summary is never wiped by a redraw.
-    if (cmt && !cmt.querySelector('[data-wk-form][data-wk-dirty="1"]')) {
-      cmt.innerHTML = committeesHtml(d) + pastCommitteesHtml(d) + (CV ? CV.committeeNotesPanelHtml(d) : '');
-    }
+    // «ועדות»: information only (16 Nov 2026) — when there is a committee. Nothing is entered here.
+    if (cmt) cmt.innerHTML = committeesHtml(d);
     if (pendingEdit[key] != null) {
       var pi = pendingEdit[key]; delete pendingEdit[key];
       if (pi === 'list') showSub(panel, 'patients'); else openDischargeEdit(panel, pi);
     }
     renderAdminAlerts();
     Object.keys(LOGS).forEach(function (k) {
-      if (LOGS[k].inCommittees) return;   // drawn inside «ועדות» above
+      if (LOGS[k].custom) { renderFamily(panel, key, d); return; }   // «שיחות עם משפחה» has its own panel
       var h = host(panel, k);
       if (!h) return;
       // Keep a half-typed form: only the list is redrawn when the main form
@@ -1049,10 +1077,120 @@
       }
     });
     renderDrawerIfOpen(key, d);
+    applyCollapse(panel, key);
+  }
+
+  /* «שיחות עם משפחה»: a half-typed call is never wiped by a redraw — then only
+   * the contacts table and the calls list are redrawn. */
+  var famState = {};   // houseKey → { filter }
+  function renderFamily(panel, key, d) {
+    var h = host(panel, 'familyCalls');
+    if (!h) return;
+    var st = famState[key] || (famState[key] = { filter: '' });
+    var rows = (d && d.logs && d.logs.familyCalls) || [];
+    var form = h.querySelector('form[data-wk-form="familyCalls"]');
+    if (form && form.getAttribute('data-wk-dirty') === '1') {
+      var list = h.querySelector('[data-fam-list]');
+      if (list) list.innerHTML = familyListInner(rows, st.filter);
+      var ct = h.querySelector('.wk-fam-contacts');
+      if (ct && CV) ct.outerHTML = CV.familyContactsHtml(d);
+      return;
+    }
+    h.innerHTML = familyPanelHtml(d, st);
+  }
+  /* The picked patient's contact person → the hint line, and (when asked, or when
+   * the fields are still empty) the «עם מי דיברת» / «קרבה» fields. Text only. */
+  function applyFamilyContact(form, d, overwrite) {
+    if (!form || !form.elements.patientName) return;
+    var x = familyHintText(d, form.elements.patientName.value);
+    var card = form.closest && form.closest('.card');
+    var hint = card && card.querySelector('[data-fam-hint]');
+    if (hint) { hint.textContent = x.text; hint.hidden = !x.text; }
+    if (!x.contact) return;
+    var cn = form.elements.contactName, rl = form.elements.relation;
+    if (cn && (overwrite || !cn.value)) cn.value = x.contact.name || '';
+    if (rl && (overwrite || !rl.value)) rl.value = x.contact.relation || '';
+  }
+  /* Opens «שיחות עם משפחה» with the form filled for patient i of the house. */
+  function prefillFamilyCall(panel, key, i) {
+    showSub(panel, 'familyCalls');
+    var c = cache[key] && cache[key].data;
+    var p = c && (c.patients || [])[Number(i)];
+    var f = panel.querySelector('form[data-wk-form="familyCalls"]');
+    if (!f || !p) return;
+    f.elements.patientName.value = p.name;
+    applyFamilyContact(f, c, true);
+    f.setAttribute('data-wk-dirty', '1');
+    expandCardOf(panel, key, f);
+    if (f.scrollIntoView) f.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    var first = f.elements.contactName && !f.elements.contactName.value ? f.elements.contactName : f.elements.summary;
+    if (first && first.focus) first.focus();
+  }
+
+  /* ── collapsible cards: the DOM side ── */
+  /* What a person opened / closed: this page's memory only (house|tab|card → open?). Nothing is
+   * written to the device — the same rule as the rest of this file — so a reload starts from the defaults. */
+  var collapseMem = {};
+  function collapseLoad() { return collapseMem; }
+  function collapseSave() { /* memory only */ }
+  function cardTitleOf(card) {
+    var t = card.querySelector('.card-title');
+    return t && t.closest('.card') === card ? t : null;
+  }
+  function setCardOpen(card, open) {
+    card.classList.toggle('is-collapsed', !open);
+    var t = cardTitleOf(card);
+    if (t) t.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  function applyCollapse(panel, key) {
+    if (!panel || !panel.querySelectorAll) return;
+    var mem = collapseLoad();
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-sub-panel]'), function (sec) {
+      var sub = sec.getAttribute('data-sub-panel');
+      if (NO_COLLAPSE_SUBS[sub]) return;
+      var cards = Array.prototype.filter.call(sec.querySelectorAll('.card'), function (c) { return !!cardTitleOf(c); });
+      var anyMarked = cards.some(function (c) { return c.hasAttribute('data-default-open'); });
+      cards.forEach(function (card, index) {
+        var title = cardTitleOf(card);
+        var ck = key + '|' + sub + '|' + collapseKeyOf(card.className, title.textContent);
+        var busy = !!card.querySelector('[data-wk-dirty="1"], [data-dis-form]:not([hidden]), [data-thread-form]:not([hidden])');
+        var open = busy || collapseDefaultOpen({
+          stored: mem[ck], total: cards.length, index: index, anyMarked: anyMarked, marked: card.hasAttribute('data-default-open'),
+          hasAlerts: !!card.querySelector('.cm-alert, .dis-alert, [data-alert-edit]')
+        });
+        card.setAttribute('data-ck', ck);
+        card.classList.add('is-collapsible');
+        title.setAttribute('role', 'button');
+        title.setAttribute('tabindex', '0');
+        setCardOpen(card, open);
+      });
+      var bar = sec.querySelector('.collapse-bar');
+      if (cards.length >= 3 && !bar) {
+        bar = root.document.createElement('div');
+        bar.className = 'collapse-bar';
+        [['open', 'פתיחת הכול'], ['close', 'סגירת הכול']].forEach(function (x) {
+          var b = root.document.createElement('button');
+          b.type = 'button'; b.className = 'wk-link'; b.setAttribute('data-collapse-all', x[0]); b.textContent = x[1];
+          bar.appendChild(b);
+        });
+        sec.insertBefore(bar, sec.firstChild);
+      } else if (cards.length < 3 && bar) bar.remove();
+    });
+  }
+  function toggleCard(card, open) {
+    var next = open === undefined ? card.classList.contains('is-collapsed') : !!open;
+    setCardOpen(card, next);
+    var ck = card.getAttribute('data-ck');
+    if (ck) { collapseLoad()[ck] = next; collapseSave(); }
+  }
+  /* Make sure the card around `el` is open (a link jumped into it). */
+  function expandCardOf(panel, key, el) {
+    var card = el && el.closest ? el.closest('.card.is-collapsible') : null;
+    if (card && card.classList.contains('is-collapsed')) toggleCard(card, true);
   }
 
   async function refresh(panel, key, force) {
-    var subs = ['patients', 'team', 'therapists', 'committees'].concat(Object.keys(LOGS).filter(function (k) { return !LOGS[k].inCommittees; }));
+    var subs = ['patients', 'team', 'therapists', 'committees'].concat(Object.keys(LOGS));
     try {
       var d = await load(key, force);
       renderAll(panel, key, d);
@@ -1112,6 +1250,7 @@
     showSub(panel, 'patients');
     var b = panel.querySelector('[data-dis-edit="' + Number(i) + '"]');
     if (!b) return;
+    expandCardOf(panel, panel.getAttribute('data-house-key'), b);
     b.click();
     var row = b.closest && b.closest('li');
     if (row && row.scrollIntoView) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -1318,8 +1457,24 @@
         loadShiftUpdates(panel, key);
         return;
       }
+      // Collapsible cards: the header (never a control inside it) opens / closes its card.
+      var allBtn = t.closest && t.closest('[data-collapse-all]');
+      if (allBtn) {
+        var secAll = allBtn.closest('[data-sub-panel]');
+        var openAll = allBtn.getAttribute('data-collapse-all') === 'open';
+        if (secAll) Array.prototype.forEach.call(secAll.querySelectorAll('.card.is-collapsible'), function (c) { toggleCard(c, openAll); });
+        return;
+      }
+      var ctitle = t.closest && t.closest('.card-title[role="button"]');
+      if (ctitle && !(t.closest('button, a, select, input, label, textarea'))) {
+        var ccard = ctitle.closest('.card');
+        if (ccard && ccard.classList.contains('is-collapsible')) { toggleCard(ccard); return; }
+      }
       var ptOpen = t.closest && t.closest('[data-pt-open]');
-      if (ptOpen) { openDrawer(key, 'patient', ptOpen.getAttribute('data-pt-open')); return; }
+      if (ptOpen) { openDrawer(key, 'patient', ptOpen.getAttribute('data-pt-open'), ptOpen.getAttribute('data-pt-tab') || ''); return; }
+      var famAdd = t.closest && t.closest('[data-fam-add]');
+      if (famAdd) { prefillFamilyCall(panel, key, famAdd.getAttribute('data-fam-add')); return; }
+      if (t.closest && t.closest('[data-sim-reset]')) { simState[key] = {}; paintBudget(panel, key); return; }
       var empOpen = t.closest && t.closest('[data-emp-open]');
       if (empOpen) { openDrawer(key, 'employee', empOpen.getAttribute('data-emp-open')); return; }
       var thOpen = t.closest && t.closest('[data-thread-open]');
@@ -1336,12 +1491,6 @@
         if (shown && shown.elements.summary) shown.elements.summary.focus();
         return;
       }
-      var cnFor = t.closest && t.closest('[data-cn-for]');
-      if (cnFor) {
-        var cp = cnFor.getAttribute('data-cn-for').split('|');
-        prefillCommitteeNote(panel, { id: cp[0], patientName: cp[1], date: cp[2] });
-        return;
-      }
       if (t.closest && t.closest('[data-budget-retry]')) { loadBudget(panel, key, true); return; }
       var cmOpen = t.closest && t.closest('[data-cm-alert-open]');
       if (cmOpen) { if (cmOpen.getAttribute('data-cm-alert-open') === key) showSub(panel, 'committees'); return; }
@@ -1350,7 +1499,10 @@
       var go = t.closest && t.closest('[data-go-sub]');
       if (go) {
         showSub(panel, go.getAttribute('data-go-sub'));
-        var nav = panel.querySelector('[data-subtabs]');
+        // data-go-card: the card the link is about — opened, and scrolled to.
+        var goCard = /^[\w-]{1,40}$/.test(go.getAttribute('data-go-card') || '') ? panel.querySelector('[data-sub-panel="' + go.getAttribute('data-go-sub') + '"] .' + go.getAttribute('data-go-card')) : null;
+        if (goCard) expandCardOf(panel, key, goCard.firstElementChild || goCard);
+        var nav = goCard || panel.querySelector('[data-subtabs]');
         if (nav && nav.scrollIntoView) nav.scrollIntoView({ block: 'start', behavior: 'smooth' });
         return;
       }
@@ -1387,7 +1539,48 @@
       } catch (e) { root.alert('הפעולה נכשלה: ' + (e && e.message ? e.message : '')); }
       refresh(panel, key, true);
     });
+    panel.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var ct = ev.target && ev.target.matches && ev.target.matches('.card-title[role="button"]') ? ev.target : null;
+      var cc = ct && ct.closest('.card');
+      if (cc && cc.classList.contains('is-collapsible')) { ev.preventDefault(); toggleCard(cc); }
+    });
     panel.addEventListener('change', function (ev) {
+      // The budget simulation (16 Nov 2026): in memory only — never sent anywhere.
+      var simKind = ev.target.closest && ev.target.closest('[data-sim-kind]');
+      var simAmt = ev.target.closest && ev.target.closest('[data-sim-amount]');
+      if (simKind || simAmt) {
+        var sm = simState[key] || (simState[key] = {});
+        var who = (simKind || simAmt).getAttribute(simKind ? 'data-sim-kind' : 'data-sim-amount');
+        var bst0 = budgetState[key];
+        var known = bst0 && bst0.staff && bst0.staff.available && (bst0.staff.workers || []).some(function (w) { return w.name === who; });
+        if (!known) return;   // only a worker of the list on screen
+        if (simKind) {
+          if (simKind.value === 'end') sm[who] = { kind: 'end' };
+          else if (simKind.value === 'cost') sm[who] = { kind: 'cost', amount: null };
+          else delete sm[who];
+        } else {
+          var n = Number(simAmt.value);
+          sm[who] = { kind: 'cost', amount: simAmt.value !== '' && isFinite(n) && n >= 0 ? Math.min(CV ? CV.SIM_MAX : 1000000, Math.round(n)) : null };
+        }
+        paintBudget(panel, key);
+        if (simKind && simKind.value === 'cost') {
+          var inp = Array.prototype.filter.call(panel.querySelectorAll('[data-sim-amount]'), function (x) { return x.getAttribute('data-sim-amount') === who; })[0];
+          if (inp && inp.focus) inp.focus();
+        }
+        return;
+      }
+      var famSel = ev.target.closest && ev.target.closest('[data-fam-filter]');
+      if (famSel) {
+        var fst = famState[key] || (famState[key] = { filter: '' });
+        var frows = (cache[key] && cache[key].data && cache[key].data.logs && cache[key].data.logs.familyCalls) || [];
+        fst.filter = frows.some(function (r) { return r.patientName === famSel.value; }) ? famSel.value : '';   // only a listed patient
+        var fl = panel.querySelector('[data-fam-list]');
+        if (fl) fl.innerHTML = familyListInner(frows, fst.filter);
+        return;
+      }
+      var famForm = ev.target.name === 'patientName' && ev.target.closest ? ev.target.closest('form[data-wk-form="familyCalls"]') : null;
+      if (famForm) { applyFamilyContact(famForm, cache[key] && cache[key].data, false); return; }
       var suSel = ev.target.closest && ev.target.closest('[data-su-shift]');
       if (suSel && suState[key]) {
         suState[key].shift = SU_SHIFTS.indexOf(suSel.value) >= 0 ? suSel.value : '';   // only a listed shift
@@ -1507,12 +1700,11 @@
       if (t.closest && t.closest('[data-drawer-close]')) { closeDrawer(); return; }
       var dis = t.closest && t.closest('[data-pt-discharge]');
       if (dis && panel) { closeDrawer(); showSub(panel, 'patients'); openDischargeEdit(panel, dis.getAttribute('data-pt-discharge')); return; }
-      var note = t.closest && t.closest('[data-pt-note]');
-      if (note && panel) {
-        var c = cache[drawer.key] && cache[drawer.key].data;
-        var p = c && (c.patients || [])[Number(note.getAttribute('data-pt-note'))];
+      var fam = t.closest && t.closest('[data-pt-family]');
+      if (fam && panel) {
+        var famKey = drawer.key, famIdx = fam.getAttribute('data-pt-family');
         closeDrawer();
-        prefillCommitteeNote(panel, { id: '', patientName: p ? p.name : '', date: (c && c.today) || '' });
+        prefillFamilyCall(panel, famKey, famIdx);
         return;
       }
       var talk = t.closest && t.closest('[data-emp-talk]');
@@ -1520,28 +1712,18 @@
         closeDrawer();
         showSub(panel, 'staffTalks');
         var f = panel.querySelector('[data-sub-panel="staffTalks"] form[data-wk-form="staffTalks"]:not([data-thread-form])');
-        if (f && f.elements.employeeName) { f.elements.employeeName.value = talk.getAttribute('data-emp-talk'); f.setAttribute('data-wk-dirty', '1'); if (f.elements.summary) f.elements.summary.focus(); }
+        if (f && f.elements.employeeName) { f.elements.employeeName.value = talk.getAttribute('data-emp-talk'); f.setAttribute('data-wk-dirty', '1'); expandCardOf(panel, drawer.key, f); if (f.elements.summary) f.elements.summary.focus(); }
       }
     });
   }
-  /* Opens «ועדות» with the «מה היה בוועדה» form filled for one committee. */
-  function prefillCommitteeNote(panel, c) {
-    showSub(panel, 'committees');
-    var f = panel.querySelector('form[data-wk-form="committeeNotes"]');
-    if (!f) return;
-    if (f.elements.committeeId) f.elements.committeeId.value = /^[A-Za-z0-9_-]{1,64}$/.test(String(c.id || '')) ? c.id : '';
-    if (f.elements.patientName && c.patientName) f.elements.patientName.value = c.patientName;
-    if (f.elements.heldDate && isRealIso(c.date)) f.elements.heldDate.value = c.date;
-    f.setAttribute('data-wk-dirty', '1');
-    if (f.scrollIntoView) f.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    if (f.elements.summary && f.elements.summary.focus) f.elements.summary.focus();
-  }
-
   /* ── «תקציב כוח אדם» + the quarterly budget bonus (14 Nov 2026) ──
    * One load per house (10 minutes): houseStaffCost for this month and
    * houseCost for every month of the calendar quarter up to next month (the
    * staffing feed's limit). The quarter math is BonusEligibility.budgetBonusQuarter. */
-  var budgetState = {};   // houseKey → { at, staff, quarter, loading }
+  var budgetState = {};   // houseKey → { at, staff, nextStaff, quarter, loading }
+  /* The simulation (16 Nov 2026): houseKey → { workerName: { kind, amount } }. Lives in this
+   * page's memory only — gone on reload, never stored, never sent to the server. */
+  var simState = {};
   function ymIndex(ym) {
     var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
     return m ? (+m[1]) * 12 + (+m[2]) - 1 : NaN;
@@ -1556,7 +1738,10 @@
   function paintBudget(panel, key) {
     var st = budgetState[key];
     var hb = host(panel, 'budget');
-    if (hb && CV) hb.innerHTML = CV.budgetHtml(st && !st.loading ? st : { staff: { loading: true } });
+    if (hb && CV) {
+      hb.innerHTML = CV.budgetHtml(st && !st.loading ? Object.assign({}, st, { sim: simState[key] || {} }) : { staff: { loading: true } });
+      applyCollapse(panel, key);
+    }
     var bb = panel.querySelector('[data-budget-bonus]');
     if (bb && CV) bb.innerHTML = CV.budgetBonusHtml(st && !st.loading ? (st.quarter || { error: 'לא הצלחנו לחשב את הרבעון — נסו שוב מאוחר יותר.' }) : { loading: true }, st && st.monthBonuses);
     if (drawer.open && drawer.key === key && drawer.type === 'employee') renderDrawerIfOpen(key);
@@ -1569,7 +1754,7 @@
     var ym = String(today || '').slice(0, 7);
     var q = BE && BE.calendarQuarterOf ? BE.calendarQuarterOf(ym) : null;
     var cap = nextYM(ym);
-    st = budgetState[key] = { at: Date.now(), loading: true, staff: null, quarter: null, monthBonuses: [], octoberTarget: null, octoberCost: null };
+    st = budgetState[key] = { at: Date.now(), loading: true, staff: null, nextStaff: null, quarter: null, monthBonuses: [], octoberTarget: null, octoberCost: null, nowYM: ym };
     paintBudget(panel, key);
     var months = q ? q.months.filter(function (m) { return m <= cap; }) : [];
     // One-off monthly budget bonuses (15 Nov 2026: December 2026) are shown
@@ -1586,9 +1771,13 @@
       post({ op: 'houseStaffCost', house: key, month: ym }).then(function (r) { st.octoberTarget = (r && r.octoberTarget) || null; return r && r.staff; }).catch(function () { return { available: false, reason: 'unreachable' }; }),
       Promise.all(months.map(function (m) {
         return post({ op: 'houseCost', house: key, month: m }).then(function (r) { return { ym: m, cost: r && r.cost }; }).catch(function () { return { ym: m, cost: null }; });
-      }))
+      })),
+      // Next month's per-worker cost (16 Nov 2026): staffing already prices it without the days after
+      // a worker's end date — so who is leaving, and by how much the cost drops, is read from it.
+      cap ? post({ op: 'houseStaffCost', house: key, month: cap }).then(function (r) { return r && r.staff; }).catch(function () { return null; }) : Promise.resolve(null)
     ]).then(function (res) {
       st.staff = res[0] || { available: false, reason: 'unreachable' };
+      st.nextStaff = res[2] && res[2].available ? res[2] : null;
       var octGot = res[1].filter(function (x) { return x.ym === OCT; })[0];
       st.octoberCost = (octGot && octGot.cost) || null;
       if (q && BE) {

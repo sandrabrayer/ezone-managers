@@ -175,15 +175,17 @@ test('personal-code access', async (t) => {
     assert.deepEqual(JSON.parse(calls.at(-1).body.patch), { followUpDone: true, deleted: false }, 'only the two known flags pass');
   });
 
-  await t.test('house cost: a manager only ever gets their OWN house cost; the family-calls log is refused', async () => {
+  await t.test('house cost: a manager only ever gets their OWN house cost; an unknown log is refused', async () => {
     mockUpstream(() => '{"ok":true,"cost":{"available":false,"reason":"not_configured"}}');
     const cookie = await auth.login(server, auth.ORAN_CODE);
     const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseCost', house: 'raanana', month: '2026-10' } });
     assert.equal(r.status, 200);
     assert.deepEqual([calls[0].body.op, calls[0].body.house, calls[0].body.role, calls[0].body.month], ['houseCost', 'ramot', 'manager', '2026-10']);
     assert.equal(calls[0].body.log, undefined, 'no log field on a read op');
-    const fc = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'logAdd', log: 'familyCalls', entry: {} } });
-    assert.equal(fc.status, 400);
+    const before = calls.length;
+    const bad = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'logAdd', log: 'salaries', entry: {} } });
+    assert.equal(bad.status, 400);
+    assert.equal(calls.length, before, 'refused before anything is forwarded');
   });
 
   await t.test('manpower budget (14 Nov 2026): houseStaffCost — a manager only ever gets their OWN house; a bad month is refused before upstream', async () => {
@@ -224,13 +226,24 @@ test('personal-code access', async (t) => {
     assert.ok(!anon.text.includes('octoberTarget'));
   });
 
-  await t.test('«מה היה בוועדה» (14 Nov 2026): the committeeNotes log is allowed, scoped to the manager\'s house', async () => {
+  await t.test('«שיחות עם משפחה» (16 Nov 2026): the familyCalls log is allowed, scoped to the manager\'s house; committeeNotes is refused', async () => {
     mockUpstream(() => '{"ok":true,"id":"x1"}');
     const cookie = await auth.login(server, auth.ORAN_CODE);
-    const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'logAdd', log: 'committeeNotes', house: 'raanana', entry: { patientName: 'דנה', heldDate: '2026-11-12', summary: 'x' } } });
+    const entry = { patientName: 'דנה', contactName: 'רות', relation: 'אמא', callDate: '2026-11-16', callTime: '', summary: 'x' };
+    const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'logAdd', log: 'familyCalls', house: 'raanana', entry } });
     assert.equal(r.status, 200);
-    assert.deepEqual([calls[0].body.op, calls[0].body.log, calls[0].body.house], ['logAdd', 'committeeNotes', 'ramot']);
-    assert.deepEqual(JSON.parse(calls[0].body.entry), { patientName: 'דנה', heldDate: '2026-11-12', summary: 'x' });
+    assert.deepEqual([calls[0].body.op, calls[0].body.log, calls[0].body.house, calls[0].body.role], ['logAdd', 'familyCalls', 'ramot', 'manager'], 'the house is the server\'s decision');
+    assert.deepEqual(JSON.parse(calls[0].body.entry), entry);
+    // «מה היה בוועדה» was removed (16 Nov 2026): the write is refused here and never reaches the Dashboard.
+    const before = calls.length;
+    for (const op of ['logAdd', 'logUpdate']) {
+      const cn = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op, log: 'committeeNotes', id: 'n1', entry: { patientName: 'דנה', heldDate: '2026-11-12', summary: 'x' }, patch: { deleted: true } } });
+      assert.equal(cn.status, 400);
+      assert.equal(JSON.parse(cn.text).error, 'unknown_log');
+    }
+    assert.equal(calls.length, before, 'nothing forwarded');
+    const anon = await req(server, '/api/work', { method: 'POST', body: { op: 'logAdd', log: 'familyCalls', house: 'ramot', entry } });
+    assert.ok(anon.status === 401 || anon.status === 403, 'no session, no write');
     const thread = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'logAdd', log: 'staffTalks', entry: { employeeName: 'רינה', talkDate: '2026-11-12', summary: 'y', talkKind: 'outcome', parentId: 'p1', outcome: 'improved' } } });
     assert.equal(thread.status, 200, 'a talk-thread entry passes through; the Dashboard validates the thread');
   });

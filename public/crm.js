@@ -2,11 +2,16 @@
  *
  * Sandra: «לשנות את כל המראה … הרבה יותר כלי לניהול למנהל … פרטים מלאים הכל
  * בלשוניות כמו CRM». Pure view builders (no DOM, no fetch) for:
- *   - the patient card   («כרטיס מטופל/ת») — פרטים · טיפול · ועדות · אירועים
+ *   - the patient card   («כרטיס מטופל/ת») — פרטים · טיפול · משפחה · ועדות · סוגיות
  *   - the employee card  («כרטיס עובד/ת») — פרטים · עלות · שיחות · משוב
  *   - staff-talk THREADS — a first talk, follow-up talks and an outcome
- *   - «מה היה בוועדה»    — the committee-notes form and history
- *   - «תקציב כוח אדם»     — month cost vs budget, the workers, the quarter
+ *   - «שיחות עם משפחה»   — the contact person (from the Dashboard) and the
+ *                          documented calls, per patient (16 Nov 2026)
+ *   - «תקציב כוח אדם»     — month cost vs budget, the saving from ends of
+ *                          employment (staffing's forecast), the workers with the
+ *                          per-worker SIMULATION and next month's cost, the quarter
+ * «מה היה בוועדה» (14 Nov 2026) was removed on 16 Nov 2026 — the therapists
+ * document a committee, not the managers; committees are information only.
  *   - the quarterly budget-adherence bonus card (math: lib/bonus-eligibility.js)
  *
  * Every value from a feed is escaped (esc) before it reaches markup. Wiring
@@ -37,6 +42,9 @@
   var WEEKDAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
   function norm(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
   function chip(cls, text) { return '<span class="crm-chip ' + cls + '">' + esc(text) + '</span>'; }
+  /* A cell that carries its column's name (data-label): on a phone a wide table is shown one
+   * block per row, each value with its label (styles.css .stack-tbl). `html` is already escaped. */
+  function td(label, html, cls) { return '<td data-label="' + esc(label) + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + html + '</td>'; }
 
   /* ── allowlists (the backend keeps the same keys) ───────── */
   var TALK_OUTCOMES = {
@@ -44,10 +52,6 @@
     hr: 'הועבר למשאבי אנוש', termination: 'סיום העסקה', closed: 'נסגר'
   };
   var TALK_OUTCOME_TONE = { improved: 'ok', no_change: 'wait', warning: 'warn', hr: 'warn', termination: 'bad', closed: 'ok' };
-  var DECISIONS = {
-    continue: 'המשך שהייה', extend: 'הארכת שהייה', discharge: 'שחרור',
-    outpatient: 'מעבר לאמבולטורי', other: 'אחר'
-  };
 
   /* ── patients: who treats whom, the next committee, the events ── */
   function therapistsOf(d, name) {
@@ -81,9 +85,23 @@
     return list[0] || null;
   }
   function logsOf(d, key) { return (d && d.logs && Array.isArray(d.logs[key])) ? d.logs[key] : []; }
-  function notesOf(d, name) {
+  function familyCallsOf(d, name) {
     var n = norm(name);
-    return logsOf(d, 'committeeNotes').filter(function (r) { return norm(r.patientName) === n; });
+    return logsOf(d, 'familyCalls').filter(function (r) { return norm(r.patientName) === n; });
+  }
+  /* The patient's contact person, as the Dashboard holds it (the lead the
+   * patient came from): { name, relation, phone, updatesPhone } or null. A
+   * phone is kept only when it is a plain local number (it becomes a tel: link). */
+  function okPhone(v) { var p = String(v == null ? '' : v).replace(/[\s-]/g, ''); return /^0\d{8,9}$/.test(p) ? p : ''; }
+  function contactOf(p) {
+    var c = p && p.contact;
+    if (!c || typeof c !== 'object') return null;
+    var out = { name: norm(c.name), relation: norm(c.relation), phone: okPhone(c.phone), updatesPhone: okPhone(c.updatesPhone) };
+    if (out.updatesPhone === out.phone) out.updatesPhone = '';
+    return (out.name || out.relation || out.phone || out.updatesPhone) ? out : null;
+  }
+  function telLink(phone, label) {
+    return phone ? '<a class="wk-tel" href="tel:' + esc(phone) + '" aria-label="' + esc(label || 'התקשרות') + '">📞 ' + esc(phone) + '</a>' : '';
   }
   function eventsOf(d, name) {
     var n = norm(name);
@@ -146,26 +164,116 @@
           '</span><span class="wk-meta">' + esc(r.time || 'ללא שעה') + '</span></li>';
       }).join('') + '</ul>' : '<div class="wk-empty">אין טיפולים משובצים השבוע</div>';
     var upcoming = committeeItems(d).filter(function (c) { return norm(c.patientName) === norm(p.name) && (!d.today || c.date >= d.today); });
-    var notes = notesOf(d, p.name);
-    var cm = '<div class="card-subtitle">ועדות קרובות</div>' + (upcoming.length ? '<ul class="wk-list">' + upcoming.map(function (c) {
+    // Committees are information only (16 Nov 2026): when there is one.
+    var cm = upcoming.length ? '<ul class="wk-list">' + upcoming.map(function (c) {
       return '<li><span class="wk-shift">' + esc(fmtDate(c.date) + (c.time ? ' ' + c.time : '')) + '</span><span class="wk-name">' + esc(c.type || 'ועדה') + '</span>' +
         (c.participants ? '<span class="wk-meta">' + esc(c.participants) + '</span>' : '') + '</li>';
-    }).join('') + '</ul>' : '<div class="wk-empty">אין ועדה קרובה</div>') +
-      '<div class="card-subtitle">מה היה בוועדות</div>' + (notes.length ? notesListHtml(notes, true) : '<div class="wk-empty">עוד לא נרשם סיכום ועדה</div>') +
-      '<div class="crm-actions"><button type="button" class="wk-btn" data-pt-note="' + esc(i) + '">📝 רישום מה היה בוועדה</button></div>';
+    }).join('') + '</ul>' : '<div class="wk-empty">אין ועדה קרובה</div>';
     var ev = eventsOf(d, p.name);
     var evHtml = ev.length ? '<ul class="wk-log">' + ev.map(function (r) {
       return '<li class="wk-entry"><div class="wk-entry-head"><span class="wk-name">' + esc(fmtDate(r.eventDate) + (r.eventTime ? ' ' + r.eventTime : '')) +
         '</span><span class="wk-meta">' + esc(r.author || '') + '</span></div><div class="wk-text">' + esc(r.whatHappened) + '</div>' +
         (r.actionTaken ? '<div class="wk-text">מה נעשה: ' + esc(r.actionTaken) + '</div>' : '') + '</li>';
-    }).join('') + '</ul>' : '<div class="wk-empty">אין אירועים חריגים רשומים</div>';
+    }).join('') + '</ul>' : '<div class="wk-empty">אין סוגיות תפעוליות רשומות</div>';
+    // «משפחה» (16 Nov 2026): the contact person from the Dashboard + the documented calls.
+    var ct = contactOf(p);
+    var calls = familyCallsOf(d, p.name);
+    var fam = (ct ? fieldsHtml([
+      ['איש/אשת קשר', ct.name],
+      ['קרבה', ct.relation],
+      ['טלפון', ct.phone ? telLink(ct.phone, 'התקשרות ל' + (ct.name || 'איש הקשר')) : '—', !!ct.phone],
+      ct.updatesPhone ? ['טלפון לעדכונים', telLink(ct.updatesPhone, 'התקשרות לטלפון העדכונים'), true] : null
+    ]) : '<div class="wk-empty">' + esc(d.contactsSupported === true ? 'אין איש קשר רשום בדשבורד למטופל/ת' : 'פרטי איש הקשר מהדשבורד עוד לא מחוברים') + '</div>') +
+      '<div class="card-subtitle">שיחות עם המשפחה (' + calls.length + ')</div>' +
+      (calls.length ? familyCallsListHtml(calls, { readOnly: true, flat: true }) : '<div class="wk-empty">עוד לא תועדה שיחה</div>') +
+      '<div class="crm-actions"><button type="button" class="wk-btn" data-pt-family="' + esc(i) + '">📞 רישום שיחה עם המשפחה</button></div>';
     return '<div class="crm-card-sub">' + esc('בבית מ-' + fmtDate(p.entryDate) + ' · יום ' + p.days) + '</div>' +
       cardTabsHtml('patient', [
         { key: 'details', label: 'פרטים', html: details },
         { key: 'treatment', label: 'טיפול', html: treat },
-        { key: 'committees', label: 'ועדות (' + (upcoming.length + notes.length) + ')', html: cm },
-        { key: 'events', label: 'אירועים (' + ev.length + ')', html: evHtml }
+        { key: 'family', label: 'משפחה (' + calls.length + ')', html: fam },
+        { key: 'committees', label: 'ועדות (' + upcoming.length + ')', html: cm },
+        { key: 'events', label: 'סוגיות (' + ev.length + ')', html: evHtml }
       ], active);
+  }
+
+  /* ── «שיחות עם משפחה» (16 Nov 2026) ────────────────────
+   * Sandra: «תוסיף שדה אחרי מטופלים לשיחות עם בני משפחה שתהיה מתועדת כמו ב-CRM.
+   * תיקח את הנתונים מדשבורד, יש שם את כל המידע של איש הקשר».
+   * familyContactsHtml: one row per patient in the house — the contact person
+   * (Dashboard), the last documented call, how many, and «רישום שיחה».
+   * familyCallsListHtml: the calls, grouped by patient, newest first. */
+  function lastCallOf(rows) {
+    var best = null;
+    rows.forEach(function (r) {
+      var k = String(r.callDate || '') + (r.callTime || '');
+      if (!best || k > best.k) best = { k: k, r: r };
+    });
+    return best ? best.r : null;
+  }
+  function familyContactsHtml(d) {
+    var pats = (d && d.patients) || [];
+    var supported = !!d && d.contactsSupported === true;
+    var h = '<div class="card work-card wk-fam-contacts" data-default-open><div class="card-title">אנשי קשר לפי מטופל/ת (' + pats.length + ')</div>';
+    h += '<div class="wk-note">' + esc(supported
+      ? 'פרטי איש הקשר מגיעים מהדשבורד (הליד של המטופל/ת). לתיקון פרט — מעדכנים בדשבורד.'
+      : 'פרטי איש הקשר מהדשבורד עוד לא מחוברים — אפשר כבר לתעד שיחות, ולרשום עם מי דיברת.') + '</div>';
+    if (!pats.length) return h + '<div class="wk-empty">אין מטופלים רשומים בבית</div></div>';
+    h += '<div class="tbl-wrap"><table class="crm-tbl fam-tbl stack-tbl"><thead><tr><th>מטופל/ת</th><th>איש/אשת קשר</th><th>טלפון</th><th>שיחה אחרונה</th><th>שיחות</th><th></th></tr></thead><tbody>' +
+      pats.map(function (p, i) {
+        var ct = contactOf(p);
+        var calls = familyCallsOf(d, p.name);
+        var last = lastCallOf(calls);
+        return '<tr>' + td('מטופל/ת', '<button type="button" class="link-cell" data-pt-open="' + i + '" data-pt-tab="family">' + esc(p.name) + '</button>') +
+          td('איש/אשת קשר', ct && (ct.name || ct.relation) ? esc(ct.name || '—') + (ct.relation ? ' <span class="wk-meta">(' + esc(ct.relation) + ')</span>' : '') : '<span class="wk-meta">—</span>') +
+          td('טלפון', ct && (ct.phone || ct.updatesPhone) ? telLink(ct.phone || ct.updatesPhone, 'התקשרות לאיש הקשר של ' + p.name) : '<span class="wk-meta">—</span>') +
+          td('שיחה אחרונה', last ? esc(fmtDate(last.callDate)) : '<span class="wk-meta">עוד לא</span>') +
+          td('שיחות', String(calls.length)) +
+          td('', '<button type="button" class="wk-link fam-add" data-fam-add="' + i + '">+ רישום שיחה</button>') + '</tr>';
+      }).join('') + '</tbody></table></div>';
+    return h + '</div>';
+  }
+  function familyEntryHtml(r, readOnly) {
+    var fu = '';
+    if (r.followUpDate) {
+      fu = r.followUpDone ? '<span class="wk-fu done">מעקב בוצע</span>'
+        : '<span class="wk-fu">מעקב: ' + esc(fmtDate(r.followUpDate)) + '</span>' +
+          (r.canEdit === true && !readOnly ? '<button type="button" class="wk-link" data-wk-done="familyCalls|' + esc(r.id) + '">סמן כבוצע</button>' : '');
+    }
+    return '<li class="wk-entry" data-wk-id="' + esc(r.id) + '"><div class="wk-entry-head"><span class="talk-step">' +
+      esc(fmtDate(r.callDate) + (r.callTime ? ' ' + r.callTime : '')) + '</span><span class="wk-name">' + esc(r.contactName || '') +
+      (r.relation ? ' <span class="wk-meta">(' + esc(r.relation) + ')</span>' : '') + '</span><span class="wk-meta">' + esc(r.author || '') + '</span></div>' +
+      '<div class="wk-text">' + esc(r.summary) + '</div><div class="wk-entry-foot">' + fu +
+      (r.canEdit === true && !readOnly ? '<button type="button" class="wk-link danger" data-wk-del="familyCalls|' + esc(r.id) + '">מחיקה</button>' : '') + '</div></li>';
+  }
+  /* opts: { filter: patient name | '', readOnly, flat (no patient grouping — the patient card) }. */
+  function familyCallsListHtml(rows, opts) {
+    opts = opts || {};
+    var list = (Array.isArray(rows) ? rows : []).filter(function (r) { return r && (!opts.filter || norm(r.patientName) === norm(opts.filter)); });
+    if (!list.length) return '<div class="wk-empty">' + (opts.filter ? 'אין שיחות מתועדות למטופל/ת' : 'עדיין אין שיחות מתועדות') + '</div>';
+    var byKey = function (a, b) { return (String(b.callDate || '') + (b.callTime || '') + (b.createdAt || '')).localeCompare(String(a.callDate || '') + (a.callTime || '') + (a.createdAt || '')); };
+    if (opts.flat) return '<ul class="wk-log talk-steps">' + list.slice().sort(byKey).map(function (r) { return familyEntryHtml(r, opts.readOnly); }).join('') + '</ul>';
+    var groups = {}, order = [];
+    list.slice().sort(byKey).forEach(function (r) {
+      var k = norm(r.patientName);
+      if (!groups[k]) { groups[k] = { name: r.patientName, rows: [] }; order.push(k); }
+      groups[k].rows.push(r);
+    });
+    return '<div class="talk-threads">' + order.map(function (k) {
+      var g = groups[k];
+      var open = g.rows.filter(function (r) { return r.followUpDate && !r.followUpDone; }).length;
+      return '<article class="talk-thread fam-thread"><header class="talk-thread-head"><span class="wk-name">' + esc(g.name) + '</span>' +
+        chip('open', g.rows.length === 1 ? 'שיחה אחת' : g.rows.length + ' שיחות') + (open ? chip('warn', open === 1 ? 'מעקב פתוח' : open + ' מעקבים פתוחים') : '') + '</header>' +
+        '<ul class="wk-log talk-steps">' + g.rows.map(function (r) { return familyEntryHtml(r, opts.readOnly); }).join('') + '</ul></article>';
+    }).join('') + '</div>';
+  }
+  /* The filter of the calls list: every patient that has a documented call. */
+  function familyFilterHtml(rows, value) {
+    var seen = {}, names = [];
+    (Array.isArray(rows) ? rows : []).forEach(function (r) { var k = norm(r && r.patientName); if (k && !seen[k]) { seen[k] = true; names.push(r.patientName); } });
+    names.sort(function (a, b) { return String(a).localeCompare(String(b), 'he'); });
+    return '<label class="month-picker fam-filter"><span>מטופל/ת</span><select data-fam-filter aria-label="סינון השיחות לפי מטופל/ת"><option value="">כל המטופלים</option>' +
+      names.map(function (n) { return '<option value="' + esc(n) + '"' + (norm(n) === norm(value) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></label>';
   }
 
   /* ── staff-talk THREADS ───────────────────────────────── */
@@ -245,48 +353,6 @@
           talkFormHtml('followup', t, today) + talkFormHtml('outcome', t, today) : '') +
         '</article>';
     }).join('') + '</div>';
-  }
-
-  /* ── «מה היה בוועדה» ───────────────────────────────────── */
-  function notesListHtml(rows, readOnly) {
-    return '<ul class="wk-log">' + rows.map(function (r) {
-      var fu = r.followUpDate ? (r.followUpDone ? '<span class="wk-fu done">מעקב בוצע</span>'
-        : '<span class="wk-fu">מעקב: ' + esc(fmtDate(r.followUpDate)) + '</span>' +
-          (r.canEdit === true && !readOnly ? '<button type="button" class="wk-link" data-wk-done="committeeNotes|' + esc(r.id) + '">סמן כבוצע</button>' : '')) : '';
-      return '<li class="wk-entry" data-wk-id="' + esc(r.id) + '"><div class="wk-entry-head"><span class="wk-name">' + esc(r.patientName) + '</span>' +
-        (DECISIONS[r.decision] ? chip('decision', DECISIONS[r.decision]) : '') +
-        '<span class="wk-meta">' + esc(fmtDate(r.heldDate)) + ' · ' + esc(r.author || '') + '</span></div>' +
-        '<div class="wk-text">' + esc(r.summary) + '</div>' +
-        (r.participants ? '<div class="wk-text wk-dim">משתתפים: ' + esc(r.participants) + '</div>' : '') +
-        (r.nextDate ? '<div class="wk-text wk-dim">ועדה הבאה מומלצת: ' + esc(fmtDate(r.nextDate)) + '</div>' : '') +
-        '<div class="wk-entry-foot">' + fu + (r.canEdit === true && !readOnly ? '<button type="button" class="wk-link danger" data-wk-del="committeeNotes|' + esc(r.id) + '">מחיקה</button>' : '') + '</div></li>';
-    }).join('') + '</ul>';
-  }
-  function committeeNoteFormHtml(d) {
-    var pats = (d && d.patients) || [];
-    var today = (d && d.today) || '';
-    return '<form class="wk-form" data-wk-form="committeeNotes" novalidate>' +
-      '<input type="hidden" name="committeeId" value="">' +
-      '<div class="wk-field wk-f-patient"><label for="cn-patient">מטופל/ת *</label><input id="cn-patient" name="patientName" maxlength="80" list="cn-patient-list" autocomplete="off" required>' +
-      '<datalist id="cn-patient-list">' + pats.map(function (p) { return '<option value="' + esc(p.name) + '">'; }).join('') + '</datalist></div>' +
-      '<div class="wk-field wk-f-date"><label for="cn-held">תאריך הוועדה *</label><input id="cn-held" name="heldDate" type="date" value="' + esc(today) + '" required></div>' +
-      '<div class="wk-field wk-f-text"><label for="cn-part">משתתפים</label><input id="cn-part" name="participants" maxlength="300"></div>' +
-      '<div class="wk-field wk-f-select"><label for="cn-dec">החלטה</label><select id="cn-dec" name="decision"><option value="">—</option>' +
-        Object.keys(DECISIONS).map(function (k) { return '<option value="' + k + '">' + esc(DECISIONS[k]) + '</option>'; }).join('') + '</select></div>' +
-      '<div class="wk-field wk-f-textarea"><label for="cn-sum">מה היה בוועדה *</label><textarea id="cn-sum" name="summary" maxlength="1500" rows="4" required></textarea></div>' +
-      '<div class="wk-field wk-f-date"><label for="cn-next">ועדה הבאה מומלצת</label><input id="cn-next" name="nextDate" type="date"></div>' +
-      '<div class="wk-field wk-f-date"><label for="cn-fu">תזכורת למעקב (לא חובה)</label><input id="cn-fu" name="followUpDate" type="date"></div>' +
-      '<div class="wk-actions"><button type="submit" class="wk-btn">שמירת סיכום הוועדה</button><span class="wk-msg" data-wk-msg></span></div></form>';
-  }
-  /* The «ועדות» sub-tab below the read-only list: a «📝 מה היה» button per
-   * committee is drawn by committeesHtml (work.js); here the form + history. */
-  function committeeNotesPanelHtml(d) {
-    var rows = logsOf(d, 'committeeNotes');
-    return '<div class="card work-card wk-committeeNotes" data-cn-card><div class="card-title">📝 מה היה בוועדה</div>' +
-      '<div class="wk-note">את מועד הוועדה קובעים הרכזים. כאן רושמים מה היה בה — ההחלטה, מי השתתף ומה הלאה. נראה לך, לסנדרה ולרון.</div>' +
-      committeeNoteFormHtml(d) + '</div>' +
-      '<div class="card work-card wk-cn-list"><div class="card-title">סיכומי ועדות (' + rows.length + ')</div>' +
-      (rows.length ? notesListHtml(rows) : '<div class="wk-empty">עדיין אין סיכומי ועדות</div>') + '</div>';
   }
 
   /* ── «כרטיס עובד/ת» ─────────────────────────────────── */
@@ -396,7 +462,7 @@
     var who = (s.workers || []).filter(function (w) { return w && w.name && endOf(w); })
       .sort(function (a, b) { return endOf(a) < endOf(b) ? -1 : endOf(a) > endOf(b) ? 1 : 0; });
     var next = nextMonth(s.month);
-    return '<div class="card work-card wk-budget-ending"><div class="card-title">חיסכון צפוי מסיומי עבודה — הערכה</div>' +
+    return '<div class="card work-card wk-budget-ending" data-default-open><div class="card-title">חיסכון צפוי מסיומי עבודה — הערכה</div>' +
       '<div class="budget-kpis">' +
         '<div class="budget-kpi"><b>' + esc(count) + '</b><span>' + esc(count === 1 ? 'עובד/ת מסיים/ת' : 'עובדים מסיימים') + '</span></div>' +
         '<div class="budget-kpi"><b>' + esc(ils(e.savingThisMonth)) + '</b><span>' + esc('חיסכון ב' + monthHe(s.month)) + '</span></div>' +
@@ -409,64 +475,179 @@
       }).join('') + '</ul>' : '') +
       '<div class="wk-note">הערכה מאפליקציית כוח האדם. עלות החודש שלמעלה כבר מחושבת עד תאריך הסיום, ומהחודש שאחרי הסיום העלות של העובד/ת יורדת מהבית במלואה.</div></div>';
   }
-  /* st = { staff: houseStaffCost.staff | {loading}, quarter: budgetBonusQuarter() | null, octoberTarget, octoberCost } */
+
+  /* ── the per-worker SIMULATION (16 Nov 2026) ─────────────
+   * Sandra: «ברשימת עובדים ועלות שכר ותקציב צריך לאפשר סימולציה ליד כל עובד עם
+   * אפשרויות: סגירת העובד, שינוי שכר עם סכום. הנתון מהסימולציה צריך להופיע במקום
+   * הנתון הקיים ולהשפיע על הסה"כ שרשום למטה. ככה המנהלים יראו איך לעשות שינויים».
+   * A what-if in the browser's memory ONLY: nothing is saved, nothing is sent,
+   * the staffing app is not touched. sim = { workerName: { kind: 'end' } |
+   * { kind: 'cost', amount } } — amount = the worker's NEW monthly cost. */
+  var SIM_MAX = 1000000;
+  function simOf(sim, name) {
+    if (!sim || !name || !Object.prototype.hasOwnProperty.call(sim, name)) return null;
+    var x = sim[name];
+    if (!x || typeof x !== 'object') return null;
+    if (x.kind === 'end') return { kind: 'end' };
+    if (x.kind === 'cost') {
+      var has = x.amount !== '' && x.amount != null && isFinite(Number(x.amount)) && Number(x.amount) >= 0;
+      return { kind: 'cost', amount: has ? Math.min(SIM_MAX, Math.round(Number(x.amount))) : null };
+    }
+    return null;
+  }
+  /* → { workers: [{ …w, simKind, simCost, simDelta }], total, delta, active, count } */
+  function simulateStaff(staff, sim) {
+    var s = staff || {};
+    var base = Math.max(0, Number(s.total) || 0);
+    var delta = 0, count = 0;
+    var workers = (s.workers || []).map(function (w) {
+      var cost = Math.round(Number(w.cost) || 0);
+      var x = simOf(sim, w.name);
+      var simCost = cost, kind = '', typed = null;
+      if (x && x.kind === 'end') { simCost = 0; kind = 'end'; }
+      else if (x && x.kind === 'cost') { kind = 'cost'; if (x.amount !== null) { simCost = x.amount; typed = x.amount; } }
+      if (kind) count++;
+      delta += simCost - cost;
+      var o = {};
+      Object.keys(w).forEach(function (k) { o[k] = w[k]; });
+      o.cost = cost; o.simKind = kind; o.simCost = simCost; o.simDelta = simCost - cost; o.simAmount = typed;
+      return o;
+    });
+    return { workers: workers, base: base, total: Math.max(0, base + delta), delta: delta, active: count > 0, count: count };
+  }
+  function signedIls(n) {
+    var v = Math.round(Number(n) || 0);
+    return (v > 0 ? '+' : v < 0 ? '‎-' : '') + Math.abs(v).toLocaleString('en-US') + ' ₪';
+  }
+  function simCellHtml(w) {
+    var name = esc(w.name);
+    return '<div class="sim-cell"><select class="sim-kind" data-sim-kind="' + name + '" aria-label="' + esc('סימולציה — ' + w.name) + '">' +
+      '<option value=""' + (w.simKind ? '' : ' selected') + '>ללא שינוי</option>' +
+      '<option value="end"' + (w.simKind === 'end' ? ' selected' : '') + '>סיום העסקה</option>' +
+      '<option value="cost"' + (w.simKind === 'cost' ? ' selected' : '') + '>שינוי שכר</option></select>' +
+      (w.simKind === 'cost' ? '<input class="sim-amount" type="number" inputmode="numeric" min="0" max="' + SIM_MAX + '" step="100" data-sim-amount="' + name +
+        '" value="' + (w.simAmount === null || w.simAmount === undefined ? '' : esc(w.simAmount)) + '" placeholder="עלות חודשית חדשה ₪" aria-label="' + esc('עלות חודשית חדשה — ' + w.name) + '">' : '') + '</div>';
+  }
+
+  /* st = { staff: houseStaffCost.staff | {loading}, nextStaff: next month's houseStaffCost.staff | null,
+   *        quarter: budgetBonusQuarter() | null, octoberTarget, octoberCost, monthBonuses, sim, nowYM } */
   function budgetHtml(st) {
     var s = st && st.staff;
     var h = octoberTargetHtml(st && st.octoberTarget, st && st.octoberCost);
-    if (!s || s.loading) return h +  '<div class="card work-card"><div class="wk-empty">טוען את נתוני התקציב…</div></div>';
+    if (!s || s.loading) return h +  '<div class="card work-card" data-default-open><div class="wk-empty">טוען את נתוני התקציב…</div></div>';
+    var simNow = null, simNext = null;
     if (!s.available) {
-      h += '<div class="card work-card wk-budget-sum"><div class="card-title">תקציב כוח אדם</div><div class="wk-empty">' +
+      h += '<div class="card work-card wk-budget-sum" data-default-open><div class="card-title">תקציב כוח אדם</div><div class="wk-empty">' +
         esc(STAFF_REASON[s.reason] || 'לא הצלחנו לקרוא את נתוני כוח האדם. נסו שוב מאוחר יותר.') + '</div>' +
         '<div class="crm-actions"><button type="button" class="wk-btn ghost" data-budget-retry>נסו שוב</button></div></div>';
     } else {
+      var next = st.nextStaff && st.nextStaff.available ? st.nextStaff : null;
+      simNow = simulateStaff(s, st.sim);
+      simNext = next ? simulateStaff(next, st.sim) : null;
+      // A worker «ended» in the simulation who is not in next month's list changes nothing there —
+      // simulateStaff(next) already handles it (the delta is taken from next month's own list).
       var total = Math.max(0, Number(s.total) || 0), budget = s.budget ? Math.max(0, Number(s.budget) || 0) : 0;
       var bst = budgetStatus(total, budget);
-      h += '<div class="card work-card wk-budget-sum"><div class="card-title">תקציב כוח אדם — ' + esc(monthHe(s.month)) + '</div>' +
+      var nextTotal = next ? Math.max(0, Number(next.total) || 0) : null;
+      var nextBudget = next && next.budget ? Math.max(0, Number(next.budget) || 0) : 0;
+      h += '<div class="card work-card wk-budget-sum" data-default-open><div class="card-title">תקציב כוח אדם — ' + esc(monthHe(s.month)) + '</div>' +
         '<div class="budget-kpis">' +
           '<div class="budget-kpi"><b>' + esc(ils(total)) + '</b><span>עלות החודש</span></div>' +
           '<div class="budget-kpi"><b>' + esc(budget ? ils(budget) : '—') + '</b><span>תקציב החודש</span></div>' +
           '<div class="budget-kpi ' + bst.cls + '"><b>' + esc(bst.pct === null ? '—' : bst.pct + '%') + '</b><span>' + esc(bst.text) + '</span></div>' +
-          '<div class="budget-kpi"><b>' + esc(budget ? ils(budget - total) : '—') + '</b><span>' + esc(budget && total > budget ? 'חריגה' : 'נשאר') + '</span></div>' +
+          '<div class="budget-kpi"><b>' + esc(budget ? ils(Math.abs(budget - total)) : '—') + '</b><span>' + esc(budget && total > budget ? 'חריגה' : 'נשאר') + '</span></div>' +
+          (nextTotal !== null ? '<div class="budget-kpi ' + budgetStatus(nextTotal, nextBudget).cls + '"><b>' + esc(ils(nextTotal)) + '</b><span>' +
+            esc('צפי ' + monthHe(next.month) + (s.ending && Number(s.ending.count) > 0 ? ' · אחרי סיומי העבודה' : '')) + '</span></div>' : '') +
         '</div>' + barHtml(total, budget) +
         '<div class="wk-note">' + esc(s.hasActuals ? 'חלק מהעלות כבר לפי דוח השכר, והשאר הערכה.' : 'עדיין אין דוח שכר לחודש הזה — הסכומים הם הערכה.') +
         (s.stale ? ' (הנתון לא התעדכן לאחרונה)' : '') + '</div></div>';
+      // «חיסכון צפוי מסיומי עבודה» — the staffing app's forecast, shown only when someone finishes.
       h += endingHtml(s);
+
+      // The simulation result — only while something is simulated.
+      if (simNow.active) {
+        var sst = budgetStatus(simNow.total, budget);
+        var nst = simNext ? budgetStatus(simNext.total, nextBudget) : null;
+        h += '<div class="card work-card wk-budget-sim" data-default-open><div class="card-title">🧪 סימולציה — ' + esc(simNow.count === 1 ? 'שינוי אחד' : simNow.count + ' שינויים') + '</div>' +
+          '<div class="wk-note">בדיקת «מה אם» בלבד: שום דבר לא נשמר, ושום דבר לא משתנה באפליקציית כוח האדם. הסכום הוא לחודש מלא.</div>' +
+          '<div class="budget-kpis">' +
+            '<div class="budget-kpi"><b>' + esc(ils(simNow.total)) + '</b><span>עלות חודשית בסימולציה</span></div>' +
+            '<div class="budget-kpi ' + (simNow.delta < 0 ? 'ok' : simNow.delta > 0 ? 'bad' : '') + '"><b>' + esc(signedIls(simNow.delta)) + '</b><span>' + esc(simNow.delta < 0 ? 'חיסכון לחודש' : simNow.delta > 0 ? 'תוספת לחודש' : 'ללא שינוי בעלות') + '</span></div>' +
+            '<div class="budget-kpi ' + sst.cls + '"><b>' + esc(sst.pct === null ? '—' : sst.pct + '%') + '</b><span>' + esc(sst.pct === null ? sst.text : sst.text + ' — מול תקציב ' + ils(budget)) + '</span></div>' +
+            '<div class="budget-kpi"><b>' + esc(budget ? ils(Math.abs(budget - simNow.total)) : '—') + '</b><span>' + esc(budget && simNow.total > budget ? 'עדיין חריגה' : 'נשאר') + '</span></div>' +
+            (simNext ? '<div class="budget-kpi ' + nst.cls + '"><b>' + esc(ils(simNext.total)) + '</b><span>' + esc(monthHe(next.month) + ' בסימולציה' + (nst.pct === null ? '' : ' · ' + nst.pct + '% · ' + nst.text)) + '</span></div>' : '') +
+          '</div>' + barHtml(simNow.total, budget) +
+          '<div class="crm-actions"><button type="button" class="wk-btn ghost" data-sim-reset>איפוס הסימולציה</button></div></div>';
+      }
+
+      var workers = simNow.workers;
+      var simTotal = simNow.total;
+      h += '<div class="card work-card wk-budget-workers" data-default-open><div class="card-title">העובדים ועלות השכר (' + workers.filter(function (w) { return w.name; }).length + ')</div>' +
+        '<div class="wk-note">רשימה מעודכנת מאפליקציית כוח האדם. נראית רק לך, לסנדרה ולרון. <b>סימולציה:</b> בחרו ליד עובד/ת «סיום העסקה» או «שינוי שכר» (ואז עלות חודשית חדשה) — הסכום מתחלף והסה״כ למטה מתעדכן. לא נשמר.</div>' +
+        (workers.length ? '<div class="tbl-wrap"><table class="crm-tbl sim-tbl stack-tbl"><thead><tr><th>עובד/ת</th><th>תפקיד</th><th>עלות החודש</th>' +
+          (next ? '<th>' + esc('צפי ' + monthHe(next.month)) + '</th>' : '') + '<th>% מהבית</th><th>מקור</th><th>סימולציה</th></tr></thead><tbody>' +
+          workers.map(function (w) {
+            var pct = simTotal ? Math.round((w.simCost / simTotal) * 100) : 0;
+            var end = endOf(w);
+            var nw = next && w.name ? (simNext.workers.filter(function (x) { return norm(x.name) === norm(w.name); })[0] || null) : null;
+            var costCell = w.simKind && w.simCost !== w.cost
+              ? '<s class="sim-old">' + esc(ils(w.cost)) + '</s> <b class="sim-new">' + esc(ils(w.simCost)) + '</b>'
+              : esc(ils(w.cost));
+            var nextCell = !next ? '' : td('צפי ' + monthHe(next.month), !w.name ? '—' : nw
+              ? (nw.simKind && nw.simCost !== nw.cost ? '<s class="sim-old">' + esc(ils(nw.cost)) + '</s> <b class="sim-new">' + esc(ils(nw.simCost)) + '</b>' : esc(ils(nw.cost)))
+              : esc(ils(0)));
+            return '<tr class="' + (w.name ? '' : 'muted') + (w.simKind ? ' is-sim' : '') + '">' + td('עובד/ת',
+              (w.name ? '<button type="button" class="link-cell" data-emp-open="' + esc(w.name) + '">' + esc(w.name) + '</button>' : 'אחר (ללא שם)') +
+              (end ? ' ' + chip('warn', 'מסיים/ת ' + fmtDate(end)) : '') + (w.simKind === 'end' ? ' ' + chip('bad', 'סימולציה: סיום') : w.simKind === 'cost' ? ' ' + chip('open', 'סימולציה: שכר') : '')) +
+              td('תפקיד', esc((w.roles || []).join(', ') || '—')) + td('עלות החודש', costCell) + nextCell + td('% מהבית', esc(pct + '%')) +
+              td('מקור', w.estimated ? chip('wait', 'הערכה') : chip('ok', 'דוח שכר')) +
+              (w.name ? td('סימולציה', simCellHtml(w)) : '<td></td>') + '</tr>';
+          }).join('') + '</tbody><tfoot><tr>' + td('', 'סה״כ' + (simNow.active ? ' בסימולציה' : '')) + '<td></td>' + td('עלות החודש',
+          (simNow.active && simNow.delta ? '<s class="sim-old">' + esc(ils(total)) + '</s> <b class="sim-new">' + esc(ils(simTotal)) + '</b>' : esc(ils(total)))) +
+          (next ? td('צפי ' + monthHe(next.month), simNow.active && simNext.delta ? '<s class="sim-old">' + esc(ils(nextTotal)) + '</s> <b class="sim-new">' + esc(ils(simNext.total)) + '</b>' : esc(ils(nextTotal))) : '') +
+          td('% מהבית', '100%') + '<td></td>' + (simNow.active ? td('שינוי', esc(signedIls(simNow.delta))) : '<td></td>') + '</tr></tfoot></table></div>'
+          : '<div class="wk-empty">אין עובדים עם עלות בחודש הזה</div>') + '</div>';
+
       var lines = (s.budgetLines || []).filter(function (l) { return l && (l.budget || l.cost); });
       if (lines.length) {
-        h += '<div class="card work-card wk-budget-lines"><div class="card-title">לפי סעיף תקציב</div><div class="tbl-wrap"><table class="crm-tbl"><thead><tr><th>סעיף</th><th>תקציב</th><th>עלות</th><th>הפרש</th></tr></thead><tbody>' +
+        h += '<div class="card work-card wk-budget-lines"><div class="card-title">לפי סעיף תקציב</div><div class="tbl-wrap"><table class="crm-tbl stack-tbl"><thead><tr><th>סעיף</th><th>תקציב</th><th>עלות</th><th>הפרש</th></tr></thead><tbody>' +
           lines.map(function (l) {
             var has = l.budget !== null && l.budget !== undefined;
             var diff = has ? l.budget - l.cost : null;
-            return '<tr><td>' + esc(l.label || l.key) + '</td><td>' + esc(has ? ils(l.budget) : '—') + '</td><td>' + esc(ils(l.cost)) + '</td><td class="' +
-              (diff === null ? '' : diff < 0 ? 'neg' : 'pos') + '">' + esc(diff === null ? '—' : ils(diff)) + '</td></tr>';
+            return '<tr>' + td('סעיף', esc(l.label || l.key)) + td('תקציב', esc(has ? ils(l.budget) : '—')) + td('עלות', esc(ils(l.cost))) +
+              td('הפרש', esc(diff === null ? '—' : ils(diff)), diff === null ? '' : diff < 0 ? 'neg' : 'pos') + '</tr>';
           }).join('') + '</tbody></table></div></div>';
       }
-      var workers = s.workers || [];
-      h += '<div class="card work-card wk-budget-workers"><div class="card-title">העובדים ועלות השכר (' + workers.filter(function (w) { return w.name; }).length + ')</div>' +
-        '<div class="wk-note">רשימה מעודכנת מאפליקציית כוח האדם. נראית רק לך, לסנדרה ולרון.</div>' +
-        (workers.length ? '<div class="tbl-wrap"><table class="crm-tbl"><thead><tr><th>עובד/ת</th><th>תפקיד</th><th>עלות החודש</th><th>% מהבית</th><th></th></tr></thead><tbody>' +
-          workers.map(function (w) {
-            var pct = total ? Math.round((w.cost / total) * 100) : 0;
-            return '<tr' + (w.name ? '' : ' class="muted"') + '><td>' + (w.name ? '<button type="button" class="link-cell" data-emp-open="' + esc(w.name) + '">' + esc(w.name) + '</button>' : 'אחר (ללא שם)') + '</td>' +
-              '<td>' + esc((w.roles || []).join(', ') || '—') + '</td><td>' + esc(ils(w.cost)) + '</td><td>' + esc(pct + '%') + '</td>' +
-              '<td>' + (w.estimated ? chip('wait', 'הערכה') : chip('ok', 'דוח שכר')) +
-              (endOf(w) ? ' ' + chip('warn', 'מסיים/ת ' + fmtDate(endOf(w))) : '') + '</td></tr>';
-          }).join('') + '</tbody><tfoot><tr><td>סה״כ</td><td></td><td>' + esc(ils(total)) + '</td><td>100%</td><td></td></tr></tfoot></table></div>'
-          : '<div class="wk-empty">אין עובדים עם עלות בחודש הזה</div>') + '</div>';
+    }
+    if (st.quarter) {
+      h += quarterHtml(st.quarter, simNow && simNow.active ? {
+        nowYM: st.nowYM || (s && s.month) || '', delta: simNow.delta,
+        nextYM: simNext ? st.nextStaff.month : '', nextDelta: simNext ? simNext.delta : simNow.delta
+      } : null);
     }
     (st.monthBonuses || []).forEach(function (mb) { h += monthBonusCardHtml(mb); });
-    if (st.quarter) h += quarterHtml(st.quarter);
     return h;
   }
-  function quarterHtml(q) {
+  /* simq (only while a simulation is on) = { nowYM, delta, nextYM, nextDelta }: the running month
+   * and the months after it get a «בסימולציה» column — a full-month what-if, never a settled month. */
+  function quarterHtml(q, simq) {
     if (!q || !q.quarter) return '';
     var rows = q.months.map(function (m) {
       var stt = m.available ? budgetStatus(m.cost, m.budget) : null;
-      return '<tr><td>' + esc(monthHe(m.ym)) + '</td><td>' + esc(m.budget ? ils(m.budget) : '—') + '</td><td>' +
-        esc(m.available ? ils(m.cost) : m.future ? 'עוד לא' : 'לא זמין') + '</td><td>' + (stt && stt.pct !== null ? chip(stt.cls, stt.pct + '%') : '—') + '</td></tr>';
+      var simCell = '';
+      if (simq) {
+        var live = simq.nowYM && m.ym >= simq.nowYM && m.available;
+        var sc = live ? Math.max(0, m.cost + (m.ym === simq.nowYM ? simq.delta : simq.nextDelta)) : null;
+        var sstt = sc === null ? null : budgetStatus(sc, m.budget);
+        simCell = td('בסימולציה', sc === null ? '—' : '<b class="sim-new">' + esc(ils(sc)) + '</b>' + (sstt.pct !== null ? ' ' + chip(sstt.cls, sstt.pct + '%') : ''));
+      }
+      return '<tr>' + td('חודש', esc(monthHe(m.ym))) + td('תקציב', esc(m.budget ? ils(m.budget) : '—')) +
+        td('עלות', esc(m.available ? ils(m.cost) : m.future ? 'עוד לא' : 'לא זמין')) + td('ניצול', stt && stt.pct !== null ? chip(stt.cls, stt.pct + '%') : '—') + simCell + '</tr>';
     }).join('');
     return '<div class="card work-card wk-budget-quarter"><div class="card-title">' + esc(q.quarter.label) + ' — מבט רבעוני</div>' +
-      '<div class="tbl-wrap"><table class="crm-tbl"><thead><tr><th>חודש</th><th>תקציב</th><th>עלות</th><th>ניצול</th></tr></thead><tbody>' + rows +
+      '<div class="wk-note">חודש שהסתיים — לפי דוח השכר. החודש הנוכחי והבאים — הערכה של אפליקציית כוח האדם, שכבר מורידה עובדים עם תאריך סיום.' +
+      (simq ? ' העמודה «בסימולציה» מראה חודש מלא עם השינויים שסימנת.' : '') + '</div>' +
+      '<div class="tbl-wrap"><table class="crm-tbl stack-tbl"><thead><tr><th>חודש</th><th>תקציב</th><th>עלות</th><th>ניצול</th>' + (simq ? '<th>בסימולציה</th>' : '') + '</tr></thead><tbody>' + rows +
       '</tbody></table></div>' + budgetBonusLineHtml(q) + '</div>';
   }
   var BB_TEXT = {
@@ -532,12 +713,14 @@
 
   var CrmView = {
     esc: esc, fmtDate: fmtDate, ils: ils, monthHe: monthHe,
-    TALK_OUTCOMES: TALK_OUTCOMES, DECISIONS: DECISIONS, STAFF_REASON: STAFF_REASON,
+    TALK_OUTCOMES: TALK_OUTCOMES, STAFF_REASON: STAFF_REASON,
     therapistsOf: therapistsOf, sessionsOf: sessionsOf, nextCommitteeOf: nextCommitteeOf,
     patientRowExtras: patientRowExtras, patientCardHtml: patientCardHtml, cardTabsHtml: cardTabsHtml,
     talkThreads: talkThreads, talksListHtml: talksListHtml,
-    committeeNoteFormHtml: committeeNoteFormHtml, committeeNotesPanelHtml: committeeNotesPanelHtml, notesListHtml: notesListHtml,
-    employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, endingHtml: endingHtml, octoberTargetHtml: octoberTargetHtml, quarterHtml: quarterHtml,
+    contactOf: contactOf, familyCallsOf: familyCallsOf, familyContactsHtml: familyContactsHtml,
+    familyCallsListHtml: familyCallsListHtml, familyFilterHtml: familyFilterHtml,
+    employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, octoberTargetHtml: octoberTargetHtml, quarterHtml: quarterHtml,
+    endingHtml: endingHtml, simulateStaff: simulateStaff, SIM_MAX: SIM_MAX,
     budgetBonusHtml: budgetBonusHtml, monthBonusCardHtml: monthBonusCardHtml
   };
   root.CrmView = CrmView;

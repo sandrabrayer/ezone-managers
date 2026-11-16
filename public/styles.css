@@ -2138,6 +2138,7 @@ body { background: var(--bg); }
 .subtab.is-active { background: var(--tab); color: #FFFFFF; border-color: var(--tab); box-shadow: 0 4px 12px color-mix(in srgb, var(--tab) 30%, transparent); }
 .subtab[data-sub="home"]         { --tab: var(--c-plum); }
 .subtab[data-sub="patients"]     { --tab: var(--c-teal); }
+.subtab[data-sub="familyCalls"]  { --tab: var(--c-gold); }
 .subtab[data-sub="team"]         { --tab: var(--c-blue); }
 .subtab[data-sub="therapists"]   { --tab: var(--c-violet); }
 .subtab[data-sub="budget"]       { --tab: var(--c-green); }
@@ -2151,6 +2152,7 @@ body { background: var(--bg); }
 /* Work sections: white cards with a coloured top accent per tab. */
 [data-sub-panel] { --sec: var(--c-plum); }
 [data-sub-panel="patients"]     { --sec: var(--c-teal); }
+[data-sub-panel="familyCalls"]  { --sec: var(--c-gold); }
 [data-sub-panel="team"]         { --sec: var(--c-blue); }
 [data-sub-panel="therapists"]   { --sec: var(--c-violet); }
 [data-sub-panel="budget"]       { --sec: var(--c-green); }
@@ -2327,3 +2329,74 @@ body.drawer-on { overflow: hidden; }
 }
 /* One-off monthly budget bonus inside the «בונוס עמידה בתקציב» card (15 Nov 2026). */
 .bb-month { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px dashed var(--line-strong); }
+
+/* ── 16 Nov 2026: collapsible cards, the budget simulation, «שיחות עם משפחה» ── */
+/* A card header with an arrow: a tap opens / closes the card (work.js applyCollapse). */
+.card.is-collapsible .card-title[role="button"] {
+  cursor: pointer; display: flex; align-items: center; gap: 8px; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.card.is-collapsible .card-title[role="button"]::after {
+  content: ''; flex: 0 0 auto; margin-inline-start: auto; width: 9px; height: 9px;
+  border-left: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor;
+  transform: rotate(-45deg) translate(2px, -2px); transition: transform 0.15s ease; opacity: 0.75;   /* open: ⌄ */
+}
+.card.is-collapsed .card-title[role="button"]::after { transform: rotate(45deg); }   /* closed: ‹ */
+.card.is-collapsible > .cm-alerts-head > .card-title, .card.is-collapsible > .dis-alerts-head > .card-title { flex: 1 1 auto; }
+@media (prefers-reduced-motion: reduce) { .card.is-collapsible .card-title[role="button"]::after { transition: none; } }
+.card.is-collapsible .card-title[role="button"]:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
+.card.is-collapsed .card-title { margin-bottom: 0; }
+.card.is-collapsed > :not(.card-title):not(.cm-alerts-head):not(.dis-alerts-head) { display: none !important; }
+.card.is-collapsed > .cm-alerts-head > :not(.card-title), .card.is-collapsed > .dis-alerts-head > :not(.card-title) { display: none !important; }
+.card.is-collapsed { padding-bottom: 14px; }
+.collapse-bar { display: flex; gap: 14px; justify-content: flex-end; margin: 0 2px 8px; }
+.collapse-bar .wk-link { font-size: 13px; }
+@media print { .card.is-collapsed > * { display: revert !important; } .collapse-bar { display: none; } }
+
+/* The per-worker simulation in «תקציב כוח אדם». */
+.sim-cell { display: flex; flex-direction: column; gap: 5px; align-items: stretch; width: 138px; }
+.sim-kind, .sim-amount { font: inherit; font-size: 13.5px; padding: 5px 8px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: #FFFFFF; color: var(--text); }
+.sim-amount { width: 100%; box-sizing: border-box; }
+.sim-kind { width: 100%; box-sizing: border-box; }
+.sim-kind:focus, .sim-amount:focus { outline: 2px solid color-mix(in srgb, var(--c-green) 45%, transparent); outline-offset: 1px; }
+.sim-old { color: var(--text-dim); font-weight: 400; }
+.sim-new { color: #5B21B6; font-weight: 800; }
+.crm-tbl tbody tr.is-sim td { background: #F5F3FF; }
+.wk-budget-sim { border-top-color: #7C3AED; background: #FBFAFF; }
+[data-sub-panel] .wk-budget-sim .card-title { color: #5B21B6; }
+
+/* «שיחות עם משפחה». */
+.fam-tbl td { vertical-align: middle; }
+.wk-link.fam-add {
+  font-weight: 700; color: color-mix(in srgb, var(--sec, var(--primary)) 85%, #000000);
+  background: color-mix(in srgb, var(--sec, var(--primary)) 9%, #FFFFFF);
+  border: 1px solid color-mix(in srgb, var(--sec, var(--primary)) 30%, #FFFFFF);
+  border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; white-space: nowrap;
+}
+.fam-hint { background: var(--card-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; font-weight: 600; color: var(--text); }
+.fam-hint[hidden] { display: none; }
+.fam-thread { border-inline-start-color: var(--c-gold); }
+.fam-filter { margin-bottom: 10px; }
+
+/* Wide tables on a phone (workers + simulation, leavers, family contacts): one block per row,
+   every value with its own label — nothing hides behind a sideways scroll. */
+@media (max-width: 640px) {
+  .stack-tbl thead { display: none; }
+  .stack-tbl, .stack-tbl tbody, .stack-tbl tfoot, .stack-tbl tr { display: block; width: 100%; }
+  .stack-tbl tr { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 10px; margin-bottom: 8px; background: #FFFFFF; }
+  .stack-tbl tbody tr:nth-child(even) td, .stack-tbl tbody tr:hover td { background: none; }
+  .stack-tbl td { display: flex; justify-content: space-between; align-items: center; gap: 10px; white-space: normal; border-bottom: 0; padding: 4px 0; text-align: start; }
+  .stack-tbl td::before { content: attr(data-label); color: var(--text-dim); font-size: 13px; font-weight: 600; flex: 0 0 auto; }
+  .stack-tbl td:first-child { font-size: 16px; font-weight: 800; flex-wrap: wrap; justify-content: flex-start; }
+  .stack-tbl td:first-child::before, .stack-tbl td[data-label=""]::before { content: none; }
+  .stack-tbl td:empty { display: none; }
+  .stack-tbl tr.is-sim { background: #F5F3FF; border-color: #C4B5FD; }
+  .stack-tbl tfoot tr { background: var(--card-2); border-width: 2px; }
+  .stack-tbl tfoot td { border-top: 0; }
+  .stack-tbl .sim-cell { width: 170px; }
+}
+
+/* The link buttons under the home cards were white text on pale grey (left over from the dark theme). */
+.dash-go { color: var(--text); background: #FFFFFF; border: 1px solid var(--line-strong); }
+.dash-go:hover { background: var(--card-2); }
+.dash-go[disabled] { color: var(--text-dim); cursor: default; }
+.dash-go[aria-pressed="true"] { background: var(--card-2); font-weight: 800; }
