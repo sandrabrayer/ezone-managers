@@ -2224,6 +2224,7 @@ body { background: var(--bg); }
 .ending-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
 .ending-list li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--card-2); border: 1px solid var(--line); border-radius: var(--r-sm); }
 .ending-list li span { font-size: 13px; color: var(--text-dim); }
+.ending-name { font-weight: 700; color: var(--text); }
 .crm-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
 /* The card drawer («כרטיס»): slides in from the left on desktop, full

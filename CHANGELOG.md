@@ -3,6 +3,23 @@
 
 ## Unreleased
 
+### Fixed — «חיסכון צפוי מסיומי עבודה» names every finishing worker, with the end date (November 16, 2026)
+
+- **Why**: Sandra, 16 Nov 2026, on the live card — «כתוב 2 עובדים אבל יש רק שם של 1, צריך גם נתון מתי הסיום עבודה
+  של עובד כזה».
+- **Cause**: the number counted placements, so a person with two roles that end was 2; and a finishing freelancer
+  was counted but had no dated row, because the money is on the invoice. Fixed at the source in ezone-staffing
+  PR #137 and passed on by E-Zone-Dashboard PR #404.
+- **What**: the card reads `staff.ending.people` — `[{ name, endDate, monthlySaving }]`, one entry for each counted
+  person — and lists each with the date and the saving in a full month.
+  - A name that has a row in the workers table opens the employee card; a name with no row is plain text.
+  - A worker's row gets the «מסיים/ת» chip from the list when the row itself has no date.
+  - If a number ever arrives above the names (an older Dashboard), the card says in words how many have no name
+    and date and where to look. It never shows an unexplained number.
+- Nothing is computed here. No new endpoint, env var or secret.
+- **Docs**: `docs/crm-redesign.md`, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
+- **Tests**: 521 → 522 (`test/crm-view.test.js`). SW v47 → v48.
+
 ### Changed — committees for information only, «סוגיות תפעוליות למעקב», collapsible cards, budget simulation, the people who are leaving, family calls (November 16, 2026)
 
 - **Why**: Sandra, 16 Nov 2026, after looking at the redesigned app — the full request is quoted in

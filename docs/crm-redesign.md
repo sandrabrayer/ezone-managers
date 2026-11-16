@@ -96,6 +96,10 @@ Sandra, 14 Nov 2026:
 - The month cost above the card is already charged to the end date. From the month after the end, the
   worker's cost leaves the house in full.
 - `crm.js` computes nothing: `endingHtml` prints what came. `ending` missing, `null` or with `count` 0 → no card.
+- **Who finishes** comes from `staff.ending.people` — `[{ name, endDate, monthlySaving }]`, one entry for each
+  counted person, so the number and the names always match. It includes a finishing freelancer, whose row in the
+  workers table has no date. Without the list, the card falls back to the workers that carry an end date and says
+  in words how many are counted without a name.
 - The workers table adds a «מסיים/ת» chip with the date; the employee card adds «סיום עבודה בבית».
 
 ### Security

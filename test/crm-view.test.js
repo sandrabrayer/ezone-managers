@@ -254,6 +254,43 @@ test('«תקציב כוח אדם»: KPIs, the bar status, budget lines, workers 
   assert.match(C.budgetHtml({ staff: { loading: true } }), /טוען/);
 });
 
+test('«חיסכון צפוי מסיומי עבודה»: every counted person is named with the end date — also a freelancer with no dated row (16 Nov 2026, later)', () => {
+  const staff = { available: true, month: '2026-11', hasActuals: false, total: 50000, budget: 60000,
+    ending: { count: 3, monthlySaving: 15907, savingThisMonth: 13511, savingNextMonth: 15907, people: [
+      { name: 'פרילנסרית שסיימה', endDate: '2026-11-15', monthlySaving: 4000 },
+      { name: 'ניר אדלר', endDate: '2026-11-01', monthlySaving: 11907 },
+      { name: XSS, endDate: '2026-11-20', monthlySaving: 0 },
+      { name: 'בלי תאריך', endDate: 'soon', monthlySaving: 5 }, { name: '', endDate: '2026-11-02' }, null] },
+    workers: [{ name: 'ניר אדלר', roles: ['רכז/ת'], cost: 397, estimated: true, endDate: '2026-11-01' },
+      // the freelancer's money sits on the invoice row: a name and a cost, no end date
+      { name: 'פרילנסרית  שסיימה', roles: ['מטפל/ת'], cost: 2000, estimated: true, endDate: '' },
+      { name: 'נשארת', roles: ['מדריך/ה'], cost: 47603, estimated: false, endDate: '' }],
+    budgetLines: [] };
+  assert.deepEqual(C.endingPeople(staff).map((p) => [p.name, p.endDate, p.monthlySaving]),
+    [['ניר אדלר', '2026-11-01', 11907], ['פרילנסרית שסיימה', '2026-11-15', 4000], [XSS, '2026-11-20', 0]], 'soonest first; a name and a real date required');
+  const h = C.budgetHtml({ staff });
+  const from = h.indexOf('<div class="card work-card wk-budget-ending"');
+  const card = h.slice(from, h.indexOf('<div class="card work-card', from + 10));
+  assert.match(card, /<b>3<\/b><span>עובדים מסיימים/);
+  assert.equal((card.match(/<li>/g) || []).length, 3, 'three counted, three named');
+  assert.match(card, /data-emp-open="ניר אדלר">ניר אדלר<\/button><span>מסיים\/ת ב-1\/11\/26 · חיסכון 11,907 ₪ בחודש מלא/);
+  assert.match(card, /data-emp-open="פרילנסרית  שסיימה">פרילנסרית שסיימה<\/button><span>מסיים\/ת ב-15\/11\/26 · חיסכון 4,000 ₪ בחודש מלא/, 'opens the card by the row\'s own name');
+  assert.match(card, /<b class="ending-name">&lt;img[^<]*<\/b><span>מסיים\/ת ב-20\/11\/26<\/span>/, 'a name with no row is text, not a button; no saving → no amount');
+  assert.doesNotMatch(card, /ending-unnamed/);
+  assert.ok(!h.includes('<img') && !card.includes('בלי תאריך'));
+  // the freelancer's row in the workers table gets the date from the list
+  const table = h.slice(h.indexOf('wk-budget-workers'));
+  assert.match(table, /פרילנסרית  שסיימה<\/button> <span class="crm-chip warn">מסיים\/ת 15\/11\/26/);
+  assert.equal((table.match(/crm-chip warn">מסיים\/ת /g) || []).length, 2);
+  // a count above the names is said in words — the case Sandra saw: «2» and one name
+  const older = Object.assign({}, staff, { ending: { count: 2, monthlySaving: 11907, savingThisMonth: 11511, savingNextMonth: 11907 } });
+  const oc = C.endingHtml(older);
+  assert.equal((oc.match(/<li>/g) || []).length, 1, 'without the list: the workers that carry a date');
+  assert.match(oc, /ending-unnamed">לעובד\/ת נוסף\/ת אין שם ותאריך סיום ברשימה/);
+  assert.match(C.endingHtml(Object.assign({}, older, { ending: Object.assign({}, older.ending, { count: 4 }) })), /ל-3 עובדים נוספים אין שם/);
+  assert.doesNotMatch(card + oc, /[(][^<]*[\u0590-\u05FF]|[\u0590-\u05FF][^<]*[)]/, 'no parentheses in the Hebrew text');
+});
+
 test('«חיסכון צפוי מסיומי עבודה» (16 Nov 2026): the staffing forecast as it came — the card, the chip in the table, the field in the employee card', () => {
   const staff = { available: true, month: '2026-12', hasActuals: false, total: 50000, budget: 60000,
     ending: { count: 2, monthlySaving: 21250, savingThisMonth: 7500, savingNextMonth: 21250 },
