@@ -41,7 +41,7 @@ test('log form: the defined fields, required marks, today as the default date, p
   assert.match(f, /name="eventDate" type="date" value="2026-10-13" required/);
   assert.match(f, /<option value="דנה">/);
   assert.match(f, /<option value="&lt;img src=x onerror=alert\(1\)&gt;">/);
-  assert.match(f, /מה קרה \*/);
+  assert.match(f, /מה הסוגיה \*/);
   assert.match(W.formHtml('staffTalks', DATA, '2026-10-13'), /name="employeeName"/);
   assert.match(W.formHtml('events', DATA, '2026-10-13'), /name="whatHappened"[\s\S]*name="actionTaken"/);
 });
@@ -64,15 +64,17 @@ test('staff-talks panel says who can read it', () => {
 
 test('follow-ups strip: one line per due item, with a done button for the author', () => {
   const h = W.followUpsHtml(DATA, ORAN);
-  assert.match(h, /תזכורת אחת למעקב/, 'the removed family-calls log never shows');
+  assert.match(h, /2 תזכורות למעקב/, 'a staff talk and a family call (back since 16 Nov 2026)');
   assert.match(h, /שיחה עם עובד\/ת · נועה · 13\/10\/26[\s\S]*data-wk-done="staffTalks\|s1"/);
-  assert.doesNotMatch(h, /familyCalls|שיחת משפחה/);
+  assert.match(h, /שיחה עם משפחה · דנה — רות · 13\/10\/26[\s\S]*data-wk-done="familyCalls\|f1"/);
+  // A follow-up of a log the app does not have (the removed committee notes) never shows.
+  assert.match(W.followUpsHtml(Object.assign({}, DATA, { followUps: [{ log: 'committeeNotes', id: 'n1', date: '2026-10-13' }] }), ORAN), /^$/);
   assert.equal(W.followUpsHtml({ followUps: [] }, ORAN), '');
 });
 
 test('entryFromForm: only defined fields, trimmed and capped; missing required fields named in Hebrew', () => {
   const r = W.entryFromForm('events', { patientName: ' דנה ', eventDate: '2026-10-12', whatHappened: '', actionTaken: 'x'.repeat(2000), extra: 'drop me', followUpDate: '' });
-  assert.deepEqual(r.missing, ['מה קרה']);
+  assert.deepEqual(r.missing, ['מה הסוגיה']);
   assert.equal(r.entry.patientName, 'דנה');
   assert.equal(r.entry.actionTaken.length, 1500);
   assert.equal('extra' in r.entry, false);
@@ -114,12 +116,15 @@ test('team tab: today grouped by shift in order, escaped; the next days by date;
   assert.ok(!/יום שלישי 13\/10\/26/.test(h), 'today is not repeated in the next-days list');
 });
 
-test('team tab: staff list split by role; tel: links only for a valid phone', () => {
+test('team tab: the guides with their cards; therapists are listed ONCE, in «מטפלים» (16 Nov 2026); tel: links only for a valid phone', () => {
   const h = W.teamHtml(WITH_TEAM);
-  assert.match(h, /עובדי הבית \(2\)[\s\S]*מדריכים \(1\)[\s\S]*מטפלים \(1\)/);
+  assert.match(h, /עובדי הבית \(2\)[\s\S]*מדריכים \(1\)[\s\S]*data-go-sub="therapists">מטפל\/ת אחד\/ת — בלשונית «מטפלים» ←/);
+  assert.doesNotMatch(h, /פסיכיאטר\/ית/, 'the therapist is not repeated in the team tab');
   assert.match(h, /href="tel:0501234567"/);
   assert.ok(!h.includes('javascript:'), 'never a non-tel link');
-  assert.match(h, /פסיכיאטר\/ית · בחופשה/);
+  const th = W.therapistsHtml(WITH_TEAM);
+  assert.match(th, /פסיכיאטר\/ית[\s\S]*בחופשה/);
+  assert.match(th, /data-emp-open="[^"]+">כרטיס ←/, 'the employee card opens from «מטפלים» too');
   assert.equal(W.telHref('0501234567'), 'tel:0501234567');
   assert.equal(W.telHref('+972501234567'), '');
 });
@@ -154,9 +159,11 @@ test('staff-talk form offers the house staff as suggestions (escaped)', () => {
 });
 
 /* ---- Dashboard (14 Oct 2026) ---- */
-test('family calls are gone from the app (no log definition)', () => {
-  assert.equal(W.LOGS.familyCalls, undefined);
-  assert.deepEqual(Object.keys(W.LOGS), ['staffTalks', 'events', 'committeeNotes']);
+test('the logs of the app: family calls (back, 16 Nov 2026), staff talks, operational issues — no committee notes', () => {
+  assert.deepEqual(Object.keys(W.LOGS), ['familyCalls', 'staffTalks', 'events']);
+  assert.equal(W.LOGS.committeeNotes, undefined);
+  assert.equal(W.LOGS.events.title, 'סוגיות תפעוליות למעקב');
+  for (const k of Object.keys(W.LOGS)) assert.doesNotMatch(JSON.stringify(W.LOGS[k]), /אירועים חריגים|אירוע חריג/, k);
 });
 
 test('dashboard: today in the house — patients, on shift, today\'s therapy sessions, open reminders', () => {
@@ -165,7 +172,8 @@ test('dashboard: today in the house — patients, on shift, today\'s therapy ses
   assert.match(h, /הבית היום — יום שלישי 13\/10\/26/);
   assert.match(h, /<b>2<\/b><span>מטופלים בבית/);
   assert.match(h, /<b>3<\/b><span>במשמרת היום/);
-  assert.match(h, /<b>1<\/b><span>טיפולים היום[\s\S]*<b>1<\/b><span>תזכורות פתוחות/);
+  assert.match(h, /<b>1<\/b><span>טיפולים היום[\s\S]*<b>2<\/b><span>תזכורות פתוחות/);
+  assert.doesNotMatch(h, /בקשות פתוחות/, 'the reminders are listed once — in the strip above the tabs — not again in the card');
   assert.match(h, /טיפולים היום<\/div><ul[\s\S]*10:00[\s\S]*ד&quot;ר כהן[\s\S]*עם דנה/);
   assert.ok(!h.includes('<b>x</b>'), 'escaped');
 });
@@ -184,8 +192,11 @@ test('dashboard: visits this week / month, admissions, outpatients, upcoming vis
   assert.match(h, /<b>2<\/b><span>ביקורים השבוע/, 'Sun 11/10 – Sat 17/10');
   assert.match(h, /<b>4<\/b><span>ביקורים החודש[\s\S]*<b>1<\/b><span>נקלטו החודש/);
   assert.match(h, /ביקורים קרובים[\s\S]*ביקור קרוב[\s\S]*15\/10\/26 11:00[\s\S]*שבוע הבא/);
-  assert.ok(!/ביקורים קרובים[\s\S]*ביקור ישן/.test(h.split('נקלטו לאחרונה')[0]), 'past visits are not "upcoming"');
-  assert.match(h, /אירועים חריגים אחרונים[\s\S]*הצפה במטבח|אירועים חריגים אחרונים[\s\S]*אירוע/);
+  assert.ok(!/ביקורים קרובים[\s\S]*ביקור ישן/.test(h.split('סוגיות תפעוליות למעקב')[0]), 'past visits are not "upcoming"');
+  assert.doesNotMatch(h, /נקלטו לאחרונה/, '«נקלטו» is listed once, in «מטופלים»');
+  assert.match(h, /data-go-sub="patients" data-go-card="wk-visits"/);
+  assert.match(h, /סוגיות תפעוליות למעקב — אחרונות[\s\S]*סוגיה<\/span>/);
+  assert.doesNotMatch(h, /אירועים חריגים|אירוע חריג/);
   assert.match(h, /data-go-sub="events"/);
 });
 

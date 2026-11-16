@@ -19,6 +19,13 @@ a table, and print / PDF.
 8. Meeting summaries: read-only, own house, a month filter. «בקרוב» until PR 4.
 9. Half-yearly feedback reminders. «בקרוב» until PR 5.
 10. Login and privacy.
+11. The manpower budget and the budget bonuses.
+12. «שיחות עם משפחה»: the contact person from the Dashboard, documenting a call (16 Nov 2026).
+13. Headers with an arrow: opening and closing a card (16 Nov 2026).
+14. The simulation and the people who are leaving (16 Nov 2026).
+
+Section 6 is «שיחות עם עובדים, סוגיות תפעוליות ותזכורות» since 16 Nov 2026 («אירועים חריגים» was renamed).
+Section 7 says committees are information only: nothing is recorded here.
 
 Each later PR removes the «בקרוב» tag of the section it ships and updates the text
 when the behaviour differs.

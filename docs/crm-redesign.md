@@ -11,6 +11,13 @@ Sandra, 14 Nov 2026:
 > עובדים צריך גם אפשרות לשיחה שניה או תוצאה … בבונוסים אני רוצה להוסיף אפשרות לבונוס עמידה בתקציב,
 > שיבדק פעם ברבעון.»
 
+> **16 Nov 2026 — changed since this was written** (`docs/simulation-family-collapse.md`):
+> «מה היה בוועדה» was removed (committees are information only); «אירועים חריגים» is now «סוגיות תפעוליות למעקב»;
+> «שיחות עם משפחה» was added after «מטופלים»; every card is collapsible; «תקציב כוח אדם» has a per-worker
+> simulation and «עובדים שמסיימים». The house sub-tab order is now: הבית היום · מטופלים · שיחות עם משפחה ·
+> צוות ומשמרות · מטפלים · תקציב כוח אדם · ועדות · שיחות עם עובדים · סוגיות תפעוליות למעקב · סיכומי ישיבות ·
+> עדכון משמרת · בונוס.
+
 ## What changed
 
 ### Look

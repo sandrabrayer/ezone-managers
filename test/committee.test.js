@@ -74,10 +74,11 @@ test('B: «ועדות» sub-tab — every upcoming committee: weekday, date, tim
   assert.match(h, /את הוועדות קובעים הרכזים באפליקציית הרכזים/);
   assert.match(h, /wk-shift">יום חמישי 15\/10\/26 · 10:00<\/span><span class="wk-name">ועדת השמה · דנה &lt;img src=x&gt;<\/span><span class="wk-meta">משתתפים: רופא, &lt;b&gt;משפחה&lt;\/b&gt;/);
   assert.match(h, /wk-shift">יום שלישי 20\/10\/26<\/span><span class="wk-name">ועדה רפואית<\/span>/);
-  // 14 Nov 2026: today's committee carries «📝 מה היה בוועדה» (opens the notes form); the
-  // committee itself stays read-only — no form, no input, no other button.
-  assert.doesNotMatch(h, /<(img|b)[ >]|<form|<input/, 'no markup from the feed, no editor');
-  assert.equal((h.match(/<button/g) || []).length, (h.match(/data-cn-for=/g) || []).length, 'the only buttons are «מה היה בוועדה»');
+  // 16 Nov 2026: information only — «מה היה בוועדה» is gone (the therapists document a committee,
+  // not the managers). No form, no input, no button at all.
+  assert.doesNotMatch(h, /<(img|b)[ >]|<form|<input|<button|<textarea/, 'no markup from the feed, no editor, nothing to enter');
+  assert.doesNotMatch(h, /מה היה בוועדה|data-cn-for/);
+  assert.match(h, /כאן רואים מתי יש ועדה — לקריאה בלבד/);
   assert.match(W.committeesHtml(DATA({ available: true, today: TODAY, items: [] })), /אין ועדות קרובות/);
 });
 
@@ -201,8 +202,10 @@ test('D: wiring — «ועדות» sub-tab after «מטופלים»; alerts on �
   assert.ok(Number(/const CACHE = 'ezone-managers-v(\d+)';/.exec(sw)[1]) >= 35, 'SW cache only moves forward');
   assert.match(sw, /'\/committee-alerts\.js'/);
   const w = pub('work.js');
-  // 14 Nov 2026: the list + the committees to summarise + «מה היה בוועדה», never over a half-typed form.
-  assert.match(w, /var cmt = host\(panel, 'committees'\);[\s\S]{0,200}if \(cmt && !cmt\.querySelector\('\[data-wk-form\]\[data-wk-dirty="1"\]'\)\) \{\s*cmt\.innerHTML = committeesHtml\(d\) \+ pastCommitteesHtml\(d\)/);
+  // 16 Nov 2026: the sub-tab is the read-only list alone — no «מה היה בוועדה», no to-do list of past committees.
+  assert.match(w, /var cmt = host\(panel, 'committees'\);[\s\S]{0,200}if \(cmt\) cmt\.innerHTML = committeesHtml\(d\);/);
+  assert.doesNotMatch(w + pub('crm.js'), /pastCommitteesHtml|committeeNotes|data-cn-for|data-pt-note|prefillCommitteeNote/);
+  assert.doesNotMatch(html, /מה היה בוועדה/, 'the guide no longer tells anyone to record a committee here');
   assert.match(w, /\['patients', 'team', 'therapists', 'committees'\]/, 'the error path covers the sub-tab');
   assert.doesNotMatch(pub('committee-alerts.js').replace(/\/\*[\s\S]*?\*\//g, ''), /innerHTML|console\./);
   assert.match(pub('styles.css'), /\.cm-alert-btn \{[^}]*min-height: 44px/);

@@ -53,7 +53,12 @@ test('house page: «הבית היום» is the first, active sub-tab; «בונו
   const subs = [...tpl.matchAll(/<button type="button" class="subtab( is-active)?" data-sub="(\w+)"[^>]*>([^<]+)</g)].map((m) => [m[2], m[3].replace(/^\S+\s/, ''), !!m[1]]);
   assert.deepEqual(subs[0], ['home', 'הבית היום', true]);
   assert.deepEqual(subs[subs.length - 1], ['bonus', 'בונוס', false]);
-  assert.deepEqual(subs.map((s) => s[0]), ['home', 'patients', 'team', 'therapists', 'budget', 'committees', 'staffTalks', 'events', 'summaries', 'shiftUpdates', 'bonus']);
+  // 16 Nov 2026: «שיחות עם משפחה» right after «מטופלים»; «אירועים חריגים» is now «סוגיות תפעוליות למעקב».
+  assert.deepEqual(subs.map((s) => s[0]), ['home', 'patients', 'familyCalls', 'team', 'therapists', 'budget', 'committees', 'staffTalks', 'events', 'summaries', 'shiftUpdates', 'bonus']);
+  assert.equal(subs.filter((s) => s[0] === 'familyCalls')[0][1], 'שיחות עם משפחה');
+  assert.equal(subs.filter((s) => s[0] === 'events')[0][1], 'סוגיות תפעוליות למעקב');
+  assert.doesNotMatch(tpl, /אירועים חריגים/);
+  assert.match(tpl, /<section data-sub-panel="familyCalls" hidden><\/section>/);
   assert.match(tpl, /<section data-sub-panel="home">/, 'home is shown on open');
   assert.match(tpl, /<section data-sub-panel="bonus" hidden>/);
 });
@@ -126,18 +131,21 @@ test('today model: date + weekday, patients, the three shifts in order (even emp
   assert.equal(m.onShiftCount, 3);
   assert.deepEqual(m.shifts.map((s) => [s.shift, s.names, s.draft]), [['בוקר', ['אבי', '<b>x</b>'], true], ['ערב', [], false], ['לילה', ['גל'], false]]);
   assert.deepEqual(m.sessions.map((r) => r.therapistName), ['ד"ר כהן', 'רות', 'ללא'], 'today only, by time, untimed last');
-  assert.deepEqual(m.requests.map((r) => [r.kind, r.head, r.overdue]), [['שיחה עם עובד/ת', 'נועה <i>', false], ['אירוע חריג', 'אירוע — דנה', true]], 'retired logs are skipped');
+  assert.deepEqual(m.requests.map((r) => [r.kind, r.head, r.overdue]), [['שיחה עם עובד/ת', 'נועה <i>', false], ['סוגיה תפעולית', 'סוגיה — דנה', true], ['שיחה עם משפחה', '', true]], 'every log of the app counts');
+  assert.equal(W.todayModel(Object.assign({}, DAY, { followUps: [{ log: 'committeeNotes', id: 'n', date: '2026-10-01' }] })).requests.length, 0, 'a log the app does not have is skipped');
 });
 
-test('today card: title with the weekday and date, tiles, «אין שיבוץ» for an empty shift, sessions, requests — all escaped, no bonus word', () => {
+test('today card: title with the weekday and date, tiles, «אין שיבוץ» for an empty shift, sessions — all escaped, no bonus word; reminders are NOT listed again', () => {
   const h = W.todayCardHtml(W.todayModel(DAY));
   assert.match(h, /הבית היום — יום שלישי 20\/10\/26/);
-  assert.match(h, /<b>3<\/b><span>מטופלים בבית[\s\S]*<b>3<\/b><span>במשמרת היום[\s\S]*<b>3<\/b><span>טיפולים היום[\s\S]*<b>2<\/b><span>תזכורות פתוחות/);
+  assert.match(h, /<b>3<\/b><span>מטופלים בבית[\s\S]*<b>3<\/b><span>במשמרת היום[\s\S]*<b>3<\/b><span>טיפולים היום[\s\S]*<b>3<\/b><span>תזכורות פתוחות/);
   assert.match(h, /wk-shift">בוקר<\/span><span class="wk-name">אבי, &lt;b&gt;x&lt;\/b&gt;<\/span><span class="wk-meta">טיוטה/);
   assert.match(h, /<li class="wk-shift-empty"><span class="wk-shift">ערב<\/span><span class="wk-name">אין שיבוץ<\/span>/);
   assert.match(h, /wk-shift">לילה<\/span><span class="wk-name">גל</);
   assert.match(h, /טיפולים היום<\/div><ul[\s\S]*09:30[\s\S]*ד&quot;ר כהן[\s\S]*עם &lt;img src=x&gt;[\s\S]*14:00[\s\S]*ללא שעה/);
-  assert.match(h, /בקשות פתוחות<\/div><ul[\s\S]*נועה &lt;i&gt;[\s\S]*<li class="wk-soon">[\s\S]*18\/10\/26 · באיחור/);
+  // 16 Nov 2026: the reminders are the «🔔» strip above every tab (with «בוצע») — the card keeps the count only.
+  assert.doesNotMatch(h, /בקשות פתוחות|נועה/);
+  assert.match(W.followUpsHtml(DAY, { name: 'אורן', role: 'manager' }), /שיחה עם עובד\/ת · נועה &lt;i&gt; · 20\/10\/26/);
   assert.ok(!/<(b|i|img)[ >]/.test(h.replace(/<b>\d+<\/b>/g, '')), 'no feed value becomes markup');
   assert.doesNotMatch(h, BONUS_WORDS);
 });
@@ -147,7 +155,6 @@ test('today card: no coordinators feed → explicit message and dashes, never fa
   assert.match(h, /<b>—<\/b><span>במשמרת היום[\s\S]*<b>—<\/b><span>טיפולים היום/);
   assert.match(h, /הנתונים מאפליקציית הרכזים עוד לא מחוברים/);
   assert.doesNotMatch(h, /אין שיבוץ|בוקר|ערב|לילה/, 'no shift rows without data');
-  assert.match(h, /אין בקשות פתוחות/);
   const empty = W.todayCardHtml(W.todayModel({ today: '2026-10-20', team: { ...TEAM, today: [], therapistWeek: [] } }));
   assert.equal((empty.match(/אין שיבוץ/g) || []).length, 3, 'each shift says it has nobody');
   assert.match(empty, /אין טיפולים משובצים להיום/);

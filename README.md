@@ -88,6 +88,23 @@ Light look like the newer E-ZONE apps, one colour per tab, «בונוס» last. 
 
 Details and the kept-features checklist: `docs/crm-redesign.md`.
 
+## Work tabs, 16 Nov 2026
+
+`docs/simulation-family-collapse.md`. The house sub-tabs are now:
+הבית היום · מטופלים · **שיחות עם משפחה** · צוות ומשמרות · מטפלים · תקציב כוח אדם · ועדות · שיחות עם עובדים ·
+**סוגיות תפעוליות למעקב** (was «אירועים חריגים») · סיכומי ישיבות · עדכון משמרת · בונוס.
+
+- **«ועדות» is information only**: when there is a committee. «מה היה בוועדה» and the `committeeNotes` log are removed
+  from this app; the server refuses the write.
+- **Collapsible cards**: every card of a work tab is a header with an arrow; state in page memory only.
+- **Simulation** in «תקציב כוח אדם»: «סיום העסקה» / «שינוי שכר» per worker. Replaces the figure and the total on screen.
+  Never saved, never sent.
+- **«עובדים שמסיימים»**: the end date from staffing (`endDate`) and next month's per-worker cost.
+- **«שיחות עם משפחה»**: the contact person from the Dashboard (`houseData.patients[].contact`) and the documented
+  calls (`familyCalls` log), also in the patient card.
+- Needs E-Zone-Dashboard #402 (contact, `endDate` pass-through) and ezone-staffing #136 (`endDate`). The app
+  degrades honestly without them.
+
 ## Access and work tabs (13 Oct 2026)
 
 **Tabs (20 Oct 2026, `docs/home-and-bonus-tabs.md`)**: the app opens on «הבית היום».

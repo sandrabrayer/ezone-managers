@@ -410,8 +410,10 @@ function mergeCommittees(data, feed) {
 // their app; the managers see them in houseData.committees. The old write op is GONE (410), refused
 // before anything is forwarded — never reaches the Dashboard.
 const RETIRED_WORK_OPS = new Set(['committeeSet']);
-// family calls removed from the app (14 Oct 2026); committeeNotes «מה היה בוועדה» added 14 Nov 2026.
-const WORK_LOGS = new Set(['staffTalks', 'events', 'committeeNotes']);
+// 16 Nov 2026: family calls are BACK («שיחות עם משפחה», CRM-style — removed 14 Oct 2026); committeeNotes
+// «מה היה בוועדה» (14 Nov 2026) is REMOVED — the therapists document a committee, not the managers, so a
+// committeeNotes write is refused here (unknown_log) and never forwarded.
+const WORK_LOGS = new Set(['staffTalks', 'events', 'familyCalls']);
 const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // Writes get their own, tighter bucket on top of the shared one.
