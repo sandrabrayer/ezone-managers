@@ -354,27 +354,32 @@
     if (st.pct === null) return '';
     return '<div class="budget-bar ' + st.cls + '" role="img" aria-label="' + esc(st.pct + '% מהתקציב') + '"><div class="budget-fill" style="width:' + Math.min(100, Math.max(0, st.pct)) + '%"></div></div>';
   }
-  /* «עלות אוקטובר 2026 מול היעד» (15 Nov 2026). ot = the server's octoberTarget for THIS house:
-   * { table, shared, total, target, gap, gapPct }. Fixed numbers, the same as the staffing app. */
-  function octoberTargetHtml(ot) {
-    if (!ot || !(Number(ot.target) > 0) || !(Number(ot.total) > 0)) return '';
-    var total = Number(ot.total), target = Number(ot.target), gap = Number(ot.gap) || 0;
-    var table = Number(ot.table) || 0, shared = Number(ot.shared) || 0;
+  /* «עלות אוקטובר 2026 מול היעד» (16 Nov 2026: the REAL October cost).
+   * ot = the server's octoberTarget for THIS house: { target }.
+   * oct = the staffing feed's houseCost for October 2026: { available, total } — the same number
+   * the staffing app shows. No October cost → the target alone, never an invented number. */
+  function octoberTargetHtml(ot, oct) {
+    if (!ot || !(Number(ot.target) > 0)) return '';
+    var target = Number(ot.target);
+    var has = !!(oct && oct.available && typeof oct.total === 'number' && isFinite(oct.total) && oct.total >= 0);
+    var total = has ? Math.round(oct.total) : null;
+    var gap = has ? total - target : 0;
     var gapText = gap > 0 ? 'חיסכון נדרש' : gap < 0 ? 'מתחת ליעד' : 'בדיוק ביעד';
-    var pct = gap > 0 && ot.gapPct !== null && ot.gapPct !== undefined ? ' · ' + Number(ot.gapPct) + '% מעלות אוקטובר' : '';
+    var pct = has && gap > 0 && total > 0 ? ' · ' + (Math.round((gap / total) * 1000) / 10) + '% מעלות אוקטובר' : '';
     return '<div class="card work-card wk-budget-october"><div class="card-title">עלות אוקטובר 2026 מול היעד החודשי</div>' +
       '<div class="budget-kpis">' +
-        '<div class="budget-kpi"><b>' + esc(ils(total)) + '</b><span>עלות כוח אדם — אוקטובר 2026</span></div>' +
+        '<div class="budget-kpi"><b>' + esc(has ? ils(total) : '—') + '</b><span>עלות כוח אדם בפועל — אוקטובר 2026</span></div>' +
         '<div class="budget-kpi"><b>' + esc(ils(target)) + '</b><span>יעד תקציב חודשי — מנובמבר 2026</span></div>' +
-        '<div class="budget-kpi ' + (gap > 0 ? 'bad' : 'ok') + '"><b>' + esc(ils(Math.abs(gap))) + '</b><span>' + esc(gapText + pct) + '</span></div>' +
+        (has ? '<div class="budget-kpi ' + (gap > 0 ? 'bad' : 'ok') + '"><b>' + esc(ils(Math.abs(gap))) + '</b><span>' + esc(gapText + pct) + '</span></div>' : '') +
       '</div>' +
-      '<div class="wk-note">' + esc('אוקטובר לפי טבלת תוכנית הפעולה' + (shared > 0 ? ': ' + ils(table) + ' ועוד פרילנסרים משותפים ' + ils(shared) + ', ללא מע״מ.' : '.') +
-        ' אלה מספרים קבועים — הם לא משתנים עם החודש.') + '</div></div>';
+      '<div class="wk-note">' + esc(has
+        ? 'אוקטובר לפי דוח השכר והחשבוניות, כולל פרילנסרים משותפים, בלי בונוסי מנהלים ורכזים. היעד לפי טבלת תוכנית הפעולה.'
+        : 'עלות אוקטובר לא זמינה כרגע מאפליקציית כוח האדם. היעד לפי טבלת תוכנית הפעולה.') + '</div></div>';
   }
-  /* st = { staff: houseStaffCost.staff | {loading}, quarter: budgetBonusQuarter() | null, octoberTarget } */
+  /* st = { staff: houseStaffCost.staff | {loading}, quarter: budgetBonusQuarter() | null, octoberTarget, octoberCost } */
   function budgetHtml(st) {
     var s = st && st.staff;
-    var h = octoberTargetHtml(st && st.octoberTarget);
+    var h = octoberTargetHtml(st && st.octoberTarget, st && st.octoberCost);
     if (!s || s.loading) return h +  '<div class="card work-card"><div class="wk-empty">טוען את נתוני התקציב…</div></div>';
     if (!s.available) {
       h += '<div class="card work-card wk-budget-sum"><div class="card-title">תקציב כוח אדם</div><div class="wk-empty">' +

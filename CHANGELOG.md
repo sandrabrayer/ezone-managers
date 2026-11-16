@@ -3,6 +3,22 @@
 
 ## Unreleased
 
+### Changed — «עלות אוקטובר 2026 מול היעד החודשי» shows October's REAL cost (November 16, 2026)
+
+- **Why**: Sandra, 16 Nov 2026 — «טעיתי. תתקן את המספרים לעלות האמיתית שהיתה באוקטובר, הערכה לנובמבר לפי מה שאתה
+  יודע שעובדים שכבר מסיימים, ותקציב לפי הטבלה». The table's rounded October figures made November look higher
+  than October.
+- **What**: the October number on the card is now the staffing feed's `houseCost` for 2026-10 — payroll report
+  and invoices, shared freelancers included — the same number the staffing app shows on its card. The target
+  stays the action-plan table's. The page asks for October 2026 in every quarter.
+- **No October cost** from the feed → the card shows the target and «עלות אוקטובר לא זמינה כרגע», never a number.
+- **Server**: `lib/october-target.js` holds the targets only; `octoberTarget` on the `houseStaffCost` reply is
+  `{ baselineMonth, targetFrom, target }`. No new endpoint, env var or secret.
+- **November**: unchanged — the staffing estimate already leaves out people with no live placement and prorates
+  a placement by its end date.
+- **Docs**: `docs/crm-redesign.md`, guide §11, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
+- **Tests**: 512, no count change (`october-target`, `crm-view`, `access` rewritten). SW v44 → v45.
+
 ### Added — «עלות אוקטובר 2026 מול היעד החודשי» card in «תקציב כוח אדם» (November 15, 2026)
 
 - **Why**: Sandra, 15 Nov 2026 — «Add the "October cost vs target" card to the managers app, per house, with the
