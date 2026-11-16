@@ -210,12 +210,12 @@ test('personal-code access', async (t) => {
     const r = await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseStaffCost', house: 'raanana', month: '2026-11' } });
     assert.equal(r.status, 200);
     const j = JSON.parse(r.text);
-    assert.deepEqual([j.octoberTarget.table, j.octoberTarget.shared, j.octoberTarget.total, j.octoberTarget.target, j.octoberTarget.gap], [310000, 12537, 322537, 265000, 57537]);
+    assert.deepEqual(j.octoberTarget, { baselineMonth: '2026-10', targetFrom: '2026-11', target: 265000 }, 'the ramot target; no stored October cost');
     assert.equal(r.headers['cache-control'], 'no-store');
-    assert.ok(!r.text.includes('168785') && !r.text.includes('163000'), 'another house\'s figures never leave the server');
+    assert.ok(!r.text.includes('80000'), 'another house\'s target never leaves the server');
     // a second (cached) read still carries it
     const again = JSON.parse((await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseStaffCost', month: '2026-11' } })).text);
-    assert.equal(again.octoberTarget.total, 322537);
+    assert.equal(again.octoberTarget.target, 265000);
     const cost = JSON.parse((await req(server, '/api/work', { method: 'POST', headers: { Cookie: cookie }, body: { op: 'houseCost', month: '2026-11' } })).text);
     assert.equal(cost.octoberTarget, undefined, 'only on houseStaffCost');
     // not signed in → nothing

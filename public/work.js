@@ -1569,7 +1569,7 @@
     var ym = String(today || '').slice(0, 7);
     var q = BE && BE.calendarQuarterOf ? BE.calendarQuarterOf(ym) : null;
     var cap = nextYM(ym);
-    st = budgetState[key] = { at: Date.now(), loading: true, staff: null, quarter: null, monthBonuses: [], octoberTarget: null };
+    st = budgetState[key] = { at: Date.now(), loading: true, staff: null, quarter: null, monthBonuses: [], octoberTarget: null, octoberCost: null };
     paintBudget(panel, key);
     var months = q ? q.months.filter(function (m) { return m <= cap; }) : [];
     // One-off monthly budget bonuses (15 Nov 2026: December 2026) are shown
@@ -1579,6 +1579,9 @@
       return d >= -2 && d <= 3;
     });
     monthRules.forEach(function (r) { if (r.month <= cap && months.indexOf(r.month) < 0) months.push(r.month); });
+    // October 2026 is the baseline of «עלות אוקטובר מול היעד» (16 Nov 2026): always asked for, in any quarter.
+    var OCT = '2026-10';
+    if (months.indexOf(OCT) < 0) months.push(OCT);
     st.promise = Promise.all([
       post({ op: 'houseStaffCost', house: key, month: ym }).then(function (r) { st.octoberTarget = (r && r.octoberTarget) || null; return r && r.staff; }).catch(function () { return { available: false, reason: 'unreachable' }; }),
       Promise.all(months.map(function (m) {
@@ -1586,6 +1589,8 @@
       }))
     ]).then(function (res) {
       st.staff = res[0] || { available: false, reason: 'unreachable' };
+      var octGot = res[1].filter(function (x) { return x.ym === OCT; })[0];
+      st.octoberCost = (octGot && octGot.cost) || null;
       if (q && BE) {
         st.quarter = BE.budgetBonusQuarter(q.months.map(function (m) {
           var got = res[1].filter(function (x) { return x.ym === m; })[0];
