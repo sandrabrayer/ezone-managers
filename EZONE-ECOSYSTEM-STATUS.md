@@ -370,6 +370,15 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
 
+## Managers: «חיסכון צפוי מסיומי עבודה» in «תקציב כוח אדם» (November 16, 2026)
+
+- Chain: ezone-staffing `getHouseWorkerCostsForManagers` (`ending` per house, `endDate` per worker, PR #135)
+  → E-Zone-Dashboard `managersWork` op `houseStaffCost` (`staff.ending`, worker `endDate`, PR #403) → this app.
+- `public/crm.js` `endingHtml`: a card under the month cost — how many finish, the saving this month, next
+  month and in a full month, who and when. A «מסיים/ת» chip in the workers table, «סיום עבודה בבית» in the
+  employee card. Shown only when someone finishes; nothing is computed in this app.
+- No new endpoint, env var or secret. SW cache v46. Details: `docs/crm-redesign.md`.
+
 ## Managers: month visit counters ignore look-ahead visits (October 26, 2026)
 
 - Dashboard `houseData.visits` items may carry an optional boolean `inSelectedMonth`; it is `false` only on

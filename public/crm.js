@@ -315,7 +315,8 @@
       cost = w ? fieldsHtml([
         ['עלות ' + monthHe(staffCost.month), ils(w.cost)],
         ['מקור', w.estimated ? 'הערכה (עוד אין דוח שכר)' : 'לפי דוח השכר'],
-        ['חלק מעלות הבית', staffCost.total ? Math.round((w.cost / staffCost.total) * 100) + '%' : '—']
+        ['חלק מעלות הבית', staffCost.total ? Math.round((w.cost / staffCost.total) * 100) + '%' : '—'],
+        endOf(w) ? ['סיום עבודה בבית', fmtDate(endOf(w))] : null
       ]) : '<div class="wk-empty">אין לעובד/ת עלות רשומה בבית בחודש הזה</div>';
     }
     var talks = (d.logs && d.logs.staffTalks) ? talksListHtml(d.logs.staffTalks, d.today, name, true) : '<div class="wk-empty">עדיין אין רישומים</div>';
@@ -376,6 +377,38 @@
         ? 'אוקטובר לפי דוח השכר והחשבוניות, כולל פרילנסרים משותפים, בלי בונוסי מנהלים ורכזים. היעד לפי טבלת תוכנית הפעולה.'
         : 'עלות אוקטובר לא זמינה כרגע מאפליקציית כוח האדם. היעד לפי טבלת תוכנית הפעולה.') + '</div></div>';
   }
+  /* «חיסכון צפוי מסיומי עבודה» (16 Nov 2026, Sandra: «לגבי עובד שמסיים, לחזות את קיזוז השכר העתידי שלו
+   * מהיום שהוא מסיים»). The staffing app's forecast, as it came: staff.ending { count, monthlySaving,
+   * savingThisMonth, savingNextMonth } and endDate per worker. Nothing is computed here; no `ending`
+   * or nobody finishing → no card. */
+  function endOf(w) { return w && ISO_RE.test(String(w.endDate || '')) ? String(w.endDate) : ''; }
+  function nextMonth(ym) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
+    if (!m) return '';
+    var y = +m[1], mo = +m[2] + 1;
+    if (mo > 12) { mo = 1; y += 1; }
+    return y + '-' + (mo < 10 ? '0' + mo : mo);
+  }
+  function endingHtml(s) {
+    var e = s && s.ending;
+    var count = e ? Math.max(0, Math.round(Number(e.count) || 0)) : 0;
+    if (!e || typeof e !== 'object' || !count) return '';
+    var who = (s.workers || []).filter(function (w) { return w && w.name && endOf(w); })
+      .sort(function (a, b) { return endOf(a) < endOf(b) ? -1 : endOf(a) > endOf(b) ? 1 : 0; });
+    var next = nextMonth(s.month);
+    return '<div class="card work-card wk-budget-ending"><div class="card-title">חיסכון צפוי מסיומי עבודה — הערכה</div>' +
+      '<div class="budget-kpis">' +
+        '<div class="budget-kpi"><b>' + esc(count) + '</b><span>' + esc(count === 1 ? 'עובד/ת מסיים/ת' : 'עובדים מסיימים') + '</span></div>' +
+        '<div class="budget-kpi"><b>' + esc(ils(e.savingThisMonth)) + '</b><span>' + esc('חיסכון ב' + monthHe(s.month)) + '</span></div>' +
+        (next ? '<div class="budget-kpi"><b>' + esc(ils(e.savingNextMonth)) + '</b><span>' + esc('חיסכון ב' + monthHe(next)) + '</span></div>' : '') +
+        '<div class="budget-kpi ok"><b>' + esc(ils(e.monthlySaving)) + '</b><span>חיסכון בחודש מלא</span></div>' +
+      '</div>' +
+      (who.length ? '<ul class="ending-list">' + who.map(function (w) {
+        return '<li><button type="button" class="link-cell" data-emp-open="' + esc(w.name) + '">' + esc(w.name) + '</button><span>' +
+          esc('מסיים/ת ב-' + fmtDate(endOf(w))) + '</span></li>';
+      }).join('') + '</ul>' : '') +
+      '<div class="wk-note">הערכה מאפליקציית כוח האדם. עלות החודש שלמעלה כבר מחושבת עד תאריך הסיום, ומהחודש שאחרי הסיום העלות של העובד/ת יורדת מהבית במלואה.</div></div>';
+  }
   /* st = { staff: houseStaffCost.staff | {loading}, quarter: budgetBonusQuarter() | null, octoberTarget, octoberCost } */
   function budgetHtml(st) {
     var s = st && st.staff;
@@ -397,6 +430,7 @@
         '</div>' + barHtml(total, budget) +
         '<div class="wk-note">' + esc(s.hasActuals ? 'חלק מהעלות כבר לפי דוח השכר, והשאר הערכה.' : 'עדיין אין דוח שכר לחודש הזה — הסכומים הם הערכה.') +
         (s.stale ? ' (הנתון לא התעדכן לאחרונה)' : '') + '</div></div>';
+      h += endingHtml(s);
       var lines = (s.budgetLines || []).filter(function (l) { return l && (l.budget || l.cost); });
       if (lines.length) {
         h += '<div class="card work-card wk-budget-lines"><div class="card-title">לפי סעיף תקציב</div><div class="tbl-wrap"><table class="crm-tbl"><thead><tr><th>סעיף</th><th>תקציב</th><th>עלות</th><th>הפרש</th></tr></thead><tbody>' +
@@ -415,7 +449,8 @@
             var pct = total ? Math.round((w.cost / total) * 100) : 0;
             return '<tr' + (w.name ? '' : ' class="muted"') + '><td>' + (w.name ? '<button type="button" class="link-cell" data-emp-open="' + esc(w.name) + '">' + esc(w.name) + '</button>' : 'אחר (ללא שם)') + '</td>' +
               '<td>' + esc((w.roles || []).join(', ') || '—') + '</td><td>' + esc(ils(w.cost)) + '</td><td>' + esc(pct + '%') + '</td>' +
-              '<td>' + (w.estimated ? chip('wait', 'הערכה') : chip('ok', 'דוח שכר')) + '</td></tr>';
+              '<td>' + (w.estimated ? chip('wait', 'הערכה') : chip('ok', 'דוח שכר')) +
+              (endOf(w) ? ' ' + chip('warn', 'מסיים/ת ' + fmtDate(endOf(w))) : '') + '</td></tr>';
           }).join('') + '</tbody><tfoot><tr><td>סה״כ</td><td></td><td>' + esc(ils(total)) + '</td><td>100%</td><td></td></tr></tfoot></table></div>'
           : '<div class="wk-empty">אין עובדים עם עלות בחודש הזה</div>') + '</div>';
     }
@@ -502,7 +537,7 @@
     patientRowExtras: patientRowExtras, patientCardHtml: patientCardHtml, cardTabsHtml: cardTabsHtml,
     talkThreads: talkThreads, talksListHtml: talksListHtml,
     committeeNoteFormHtml: committeeNoteFormHtml, committeeNotesPanelHtml: committeeNotesPanelHtml, notesListHtml: notesListHtml,
-    employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, octoberTargetHtml: octoberTargetHtml, quarterHtml: quarterHtml,
+    employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, endingHtml: endingHtml, octoberTargetHtml: octoberTargetHtml, quarterHtml: quarterHtml,
     budgetBonusHtml: budgetBonusHtml, monthBonusCardHtml: monthBonusCardHtml
   };
   root.CrmView = CrmView;

@@ -3,6 +3,22 @@
 
 ## Unreleased
 
+### Added — «חיסכון צפוי מסיומי עבודה» in «תקציב כוח אדם» (November 16, 2026)
+
+- **Why**: Sandra, 16 Nov 2026 — «לגבי עובד שמסיים, לחזות את קיזוז השכר העתידי שלו מהיום שהוא מסיים. זה חשוב
+  כשמנהלים תקציב … על מנת שכל האפליקציות יהיו מעודכנות». The staffing app now forecasts it (ezone-staffing
+  PR #135) and the Dashboard passes it on (E-Zone-Dashboard PR #403).
+- **What**: a card right under the month cost — how many finish, the saving this month, next month and in a
+  full month, and who finishes on which date. It is shown only when someone in the house finishes.
+- The workers table marks a finishing worker with «מסיים/ת» and the date. The employee card's «עלות» tab adds
+  «סיום עבודה בבית».
+- Nothing is computed here: the numbers are `staff.ending` and `endDate` as the staffing app sent them. No
+  `ending`, an older Dashboard, or nobody finishing → no card, never a 0.
+- No new endpoint, env var or secret. The same `houseStaffCost` reply, the same access rule: the house's
+  manager, Sandra and Ron.
+- **Docs**: `docs/crm-redesign.md`, guide §11, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
+- **Tests**: 512 → 513 (`test/crm-view.test.js`). SW v45 → v46.
+
 ### Changed — «עלות אוקטובר 2026 מול היעד החודשי» shows October's REAL cost (November 16, 2026)
 
 - **Why**: Sandra, 16 Nov 2026 — «טעיתי. תתקן את המספרים לעלות האמיתית שהיתה באוקטובר, הערכה לנובמבר לפי מה שאתה
