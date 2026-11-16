@@ -382,7 +382,7 @@
         ['עלות ' + monthHe(staffCost.month), ils(w.cost)],
         ['מקור', w.estimated ? 'הערכה (עוד אין דוח שכר)' : 'לפי דוח השכר'],
         ['חלק מעלות הבית', staffCost.total ? Math.round((w.cost / staffCost.total) * 100) + '%' : '—'],
-        endOf(w) ? ['סיום עבודה בבית', fmtDate(endOf(w))] : null
+        endOfRow(staffCost, w) ? ['סיום עבודה בבית', fmtDate(endOfRow(staffCost, w))] : null
       ]) : '<div class="wk-empty">אין לעובד/ת עלות רשומה בבית בחודש הזה</div>';
     }
     var talks = (d.logs && d.logs.staffTalks) ? talksListHtml(d.logs.staffTalks, d.today, name, true) : '<div class="wk-empty">עדיין אין רישומים</div>';
@@ -448,6 +448,25 @@
    * savingThisMonth, savingNextMonth } and endDate per worker. Nothing is computed here; no `ending`
    * or nobody finishing → no card. */
   function endOf(w) { return w && ISO_RE.test(String(w.endDate || '')) ? String(w.endDate) : ''; }
+  /* Who finishes, each with the end date (16 Nov 2026, later — Sandra: «כתוב 2 עובדים אבל יש רק שם של 1,
+   * צריך גם נתון מתי הסיום»). staff.ending.people names EVERY counted person — a finishing freelancer
+   * too, whose row in the workers table carries no date. Without that list (an older Dashboard): the
+   * workers that carry an end date. → [{ name, endDate, monthlySaving | null }], soonest first. */
+  function endingPeople(s) {
+    var e = s && s.ending;
+    var list = e && Array.isArray(e.people)
+      ? e.people.filter(function (p) { return p && typeof p === 'object' && norm(p.name) && endOf(p); })
+        .map(function (p) { return { name: norm(p.name), endDate: endOf(p), monthlySaving: Math.max(0, Math.round(Number(p.monthlySaving) || 0)) }; })
+      : ((s && s.workers) || []).filter(function (w) { return w && w.name && endOf(w); })
+        .map(function (w) { return { name: norm(w.name), endDate: endOf(w), monthlySaving: null }; });
+    return list.sort(function (a, b) { return a.endDate < b.endDate ? -1 : a.endDate > b.endDate ? 1 : 0; });
+  }
+  /* The end date of a row of the workers table: its own, else the list's entry of the same name. */
+  function endOfRow(s, w) {
+    if (endOf(w)) return endOf(w);
+    var hit = w && w.name ? endingPeople(s).filter(function (p) { return p.name === norm(w.name); })[0] : null;
+    return hit ? hit.endDate : '';
+  }
   function nextMonth(ym) {
     var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
     if (!m) return '';
@@ -459,8 +478,11 @@
     var e = s && s.ending;
     var count = e ? Math.max(0, Math.round(Number(e.count) || 0)) : 0;
     if (!e || typeof e !== 'object' || !count) return '';
-    var who = (s.workers || []).filter(function (w) { return w && w.name && endOf(w); })
-      .sort(function (a, b) { return endOf(a) < endOf(b) ? -1 : endOf(a) > endOf(b) ? 1 : 0; });
+    var who = endingPeople(s);
+    // Nobody is counted without a name: a number above the list is said in words, never left unexplained.
+    var unnamed = Math.max(0, count - who.length);
+    var known = {};
+    (s.workers || []).forEach(function (w) { if (w && w.name) known[norm(w.name)] = w.name; });
     var next = nextMonth(s.month);
     return '<div class="card work-card wk-budget-ending" data-default-open><div class="card-title">חיסכון צפוי מסיומי עבודה — הערכה</div>' +
       '<div class="budget-kpis">' +
@@ -469,10 +491,14 @@
         (next ? '<div class="budget-kpi"><b>' + esc(ils(e.savingNextMonth)) + '</b><span>' + esc('חיסכון ב' + monthHe(next)) + '</span></div>' : '') +
         '<div class="budget-kpi ok"><b>' + esc(ils(e.monthlySaving)) + '</b><span>חיסכון בחודש מלא</span></div>' +
       '</div>' +
-      (who.length ? '<ul class="ending-list">' + who.map(function (w) {
-        return '<li><button type="button" class="link-cell" data-emp-open="' + esc(w.name) + '">' + esc(w.name) + '</button><span>' +
-          esc('מסיים/ת ב-' + fmtDate(endOf(w))) + '</span></li>';
+      (who.length ? '<ul class="ending-list">' + who.map(function (p) {
+        // The name opens the employee card only when the workers table has that name.
+        return '<li>' + (known[p.name] ? '<button type="button" class="link-cell" data-emp-open="' + esc(known[p.name]) + '">' + esc(p.name) + '</button>'
+          : '<b class="ending-name">' + esc(p.name) + '</b>') + '<span>' +
+          esc('מסיים/ת ב-' + fmtDate(p.endDate) + (p.monthlySaving ? ' · חיסכון ' + ils(p.monthlySaving) + ' בחודש מלא' : '')) + '</span></li>';
       }).join('') + '</ul>' : '') +
+      (unnamed ? '<div class="wk-note ending-unnamed">' + esc(unnamed === 1 ? 'לעובד/ת נוסף/ת אין שם ותאריך סיום ברשימה. הפרטים באפליקציית כוח האדם.'
+        : 'ל-' + unnamed + ' עובדים נוספים אין שם ותאריך סיום ברשימה. הפרטים באפליקציית כוח האדם.') + '</div>' : '') +
       '<div class="wk-note">הערכה מאפליקציית כוח האדם. עלות החודש שלמעלה כבר מחושבת עד תאריך הסיום, ומהחודש שאחרי הסיום העלות של העובד/ת יורדת מהבית במלואה.</div></div>';
   }
 
@@ -588,7 +614,7 @@
           (next ? '<th>' + esc('צפי ' + monthHe(next.month)) + '</th>' : '') + '<th>% מהבית</th><th>מקור</th><th>סימולציה</th></tr></thead><tbody>' +
           workers.map(function (w) {
             var pct = simTotal ? Math.round((w.simCost / simTotal) * 100) : 0;
-            var end = endOf(w);
+            var end = endOfRow(s, w);
             var nw = next && w.name ? (simNext.workers.filter(function (x) { return norm(x.name) === norm(w.name); })[0] || null) : null;
             var costCell = w.simKind && w.simCost !== w.cost
               ? '<s class="sim-old">' + esc(ils(w.cost)) + '</s> <b class="sim-new">' + esc(ils(w.simCost)) + '</b>'
@@ -720,7 +746,7 @@
     contactOf: contactOf, familyCallsOf: familyCallsOf, familyContactsHtml: familyContactsHtml,
     familyCallsListHtml: familyCallsListHtml, familyFilterHtml: familyFilterHtml,
     employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, octoberTargetHtml: octoberTargetHtml, quarterHtml: quarterHtml,
-    endingHtml: endingHtml, simulateStaff: simulateStaff, SIM_MAX: SIM_MAX,
+    endingHtml: endingHtml, endingPeople: endingPeople, simulateStaff: simulateStaff, SIM_MAX: SIM_MAX,
     budgetBonusHtml: budgetBonusHtml, monthBonusCardHtml: monthBonusCardHtml
   };
   root.CrmView = CrmView;
