@@ -2218,6 +2218,10 @@ body { background: var(--bg); }
 }
 .link-cell { font: inherit; font-weight: 700; color: var(--c-blue); background: none; border: 0; padding: 0; cursor: pointer; text-align: start; }
 .link-cell:hover { text-decoration: underline; }
+/* «חיסכון צפוי מסיומי עבודה» (16 Nov 2026): who finishes and when. */
+.ending-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.ending-list li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--card-2); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.ending-list li span { font-size: 13px; color: var(--text-dim); }
 .crm-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 
 /* The card drawer («כרטיס»): slides in from the left on desktop, full
