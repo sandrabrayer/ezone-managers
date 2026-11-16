@@ -14,7 +14,7 @@ Sandra, 14 Nov 2026:
 > **16 Nov 2026 — changed since this was written** (`docs/simulation-family-collapse.md`):
 > «מה היה בוועדה» was removed (committees are information only); «אירועים חריגים» is now «סוגיות תפעוליות למעקב»;
 > «שיחות עם משפחה» was added after «מטופלים»; every card is collapsible; «תקציב כוח אדם» has a per-worker
-> simulation and «עובדים שמסיימים». The house sub-tab order is now: הבית היום · מטופלים · שיחות עם משפחה ·
+> simulation and next month's cost per worker. The house sub-tab order is now: הבית היום · מטופלים · שיחות עם משפחה ·
 > צוות ומשמרות · מטפלים · תקציב כוח אדם · ועדות · שיחות עם עובדים · סוגיות תפעוליות למעקב · סיכומי ישיבות ·
 > עדכון משמרת · בונוס.
 
@@ -85,6 +85,18 @@ Sandra, 14 Nov 2026:
   reply for the session's house.
 - No October cost from the feed → the target and a plain note, never a number.
 - To change a target, change it in ezone-staffing first, then here, and update `test/october-target.test.js`.
+
+### «חיסכון צפוי מסיומי עבודה» (16 Nov 2026)
+
+- A card under the month cost of «תקציב כוח אדם», shown only when someone in the house finishes.
+- It reads `staff.ending { count, monthlySaving, savingThisMonth, savingNextMonth }` and `endDate` on each
+  worker from the `houseStaffCost` reply. The staffing app computes them (`CostEngine.endingForecast`,
+  ezone-staffing `docs/house-split-and-ending-forecast.md`); the Dashboard re-validates and passes on the
+  caller's house only.
+- The month cost above the card is already charged to the end date. From the month after the end, the
+  worker's cost leaves the house in full.
+- `crm.js` computes nothing: `endingHtml` prints what came. `ending` missing, `null` or with `count` 0 → no card.
+- The workers table adds a «מסיים/ת» chip with the date; the employee card adds «סיום עבודה בבית».
 
 ### Security
 

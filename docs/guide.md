@@ -22,7 +22,7 @@ a table, and print / PDF.
 11. The manpower budget and the budget bonuses.
 12. «שיחות עם משפחה»: the contact person from the Dashboard, documenting a call (16 Nov 2026).
 13. Headers with an arrow: opening and closing a card (16 Nov 2026).
-14. The simulation and the people who are leaving (16 Nov 2026).
+14. The simulation and next month's forecast per worker (16 Nov 2026).
 
 Section 6 is «שיחות עם עובדים, סוגיות תפעוליות ותזכורות» since 16 Nov 2026 («אירועים חריגים» was renamed).
 Section 7 says committees are information only: nothing is recorded here.

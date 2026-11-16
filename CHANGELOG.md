@@ -22,10 +22,12 @@
   - The simulated figure replaces the worker's figure; the total under the table follows, also for next month.
   - A «🧪 סימולציה» card: the simulated cost against the budget. The quarter card gets a «בסימולציה» column.
   - In the browser only: never saved, never sent to the server, nothing changes in the staffing app.
-- **«עובדים שמסיימים»**: the worker's last day (`endDate` from staffing), this month's cost, next month's, the drop.
-  - The month card shows next month's forecast; the workers table has a «צפי <next month>» column.
+- **Next month, per worker**: the workers table has a «צפי <next month>» column and the month card shows next month's
+  forecast (`houseStaffCost` for the next month).
+  - Staffing already prices a month without the days after an end date, so the offset of a worker who leaves is
+    visible per worker, next to «חיסכון צפוי מסיומי עבודה» (PR #73) — which stays the one card about who is leaving.
   - Q4 looked static because staffing had no end date for anyone in the house; once one is recorded there, the
-    following months drop here by themselves.
+    following months drop here by themselves. Until then the simulation shows the effect.
 - **«שיחות עם משפחה»** — a new sub-tab after «מטופלים», CRM-style:
   - the contact person of every patient, from the Dashboard (name, relation, phone);
   - «+ רישום שיחה», the documented calls by patient with a filter, follow-up reminders;
@@ -39,13 +41,28 @@
 - **Security**: house scoping unchanged (the server decides the house). The contact person arrives only inside the
   manager's own `houseData`, `no-store`, never in the SW cache, never logged; a phone is linked only when it is a
   plain local number. Every feed value is escaped. The simulation never leaves the page.
-- **Needs**: E-Zone-Dashboard #402 (`contact`, `endDate` pass-through) and ezone-staffing #136 (`endDate`). Any merge
-  order is safe: without them the contact says «עוד לא מחוברים» and the leavers list relies on next month's cost alone.
+- **Needs**: E-Zone-Dashboard #402 (`contact` per patient). Safe to merge before it: the tab then says the contact is
+  «עוד לא מחוברים», and calls can still be documented.
 - **Docs**: `docs/simulation-family-collapse.md` (new), `docs/crm-redesign.md`, `docs/committee.md`, `docs/guide.md`,
   README, guide §1, §2, §4, §6, §7, §11 and new §12–§14, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
-- **Tests**: 512 → 520. `crm-view` +8 (patient card, family contacts / calls / panel, simulation ×2, leavers, collapse,
+- **Tests**: 513 → 521. `crm-view` +8 (family contacts / calls / panel, simulation ×2, next month per worker, collapse,
   the simulation never leaves the page; the committee-notes test replaced); `access`, `committee`, `work-view`,
-  `home-bonus-tabs`, `guide` updated. SW v45 → v46.
+  `home-bonus-tabs`, `guide` updated. SW v46 → v47.
+### Added — «חיסכון צפוי מסיומי עבודה» in «תקציב כוח אדם» (November 16, 2026)
+
+- **Why**: Sandra, 16 Nov 2026 — «לגבי עובד שמסיים, לחזות את קיזוז השכר העתידי שלו מהיום שהוא מסיים. זה חשוב
+  כשמנהלים תקציב … על מנת שכל האפליקציות יהיו מעודכנות». The staffing app now forecasts it (ezone-staffing
+  PR #135) and the Dashboard passes it on (E-Zone-Dashboard PR #403).
+- **What**: a card right under the month cost — how many finish, the saving this month, next month and in a
+  full month, and who finishes on which date. It is shown only when someone in the house finishes.
+- The workers table marks a finishing worker with «מסיים/ת» and the date. The employee card's «עלות» tab adds
+  «סיום עבודה בבית».
+- Nothing is computed here: the numbers are `staff.ending` and `endDate` as the staffing app sent them. No
+  `ending`, an older Dashboard, or nobody finishing → no card, never a 0.
+- No new endpoint, env var or secret. The same `houseStaffCost` reply, the same access rule: the house's
+  manager, Sandra and Ron.
+- **Docs**: `docs/crm-redesign.md`, guide §11, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
+- **Tests**: 512 → 513 (`test/crm-view.test.js`). SW v45 → v46.
 
 ### Changed — «עלות אוקטובר 2026 מול היעד החודשי» shows October's REAL cost (November 16, 2026)
 

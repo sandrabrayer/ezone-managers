@@ -14,7 +14,7 @@
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 
-## Managers: committees for information, operational issues, collapsible cards, budget simulation, leavers, family calls (November 16, 2026)
+## Managers: committees for information, operational issues, collapsible cards, budget simulation, family calls (November 16, 2026)
 
 Sandra, 16 Nov 2026. Details: `docs/simulation-family-collapse.md` in ezone-managers.
 
@@ -26,15 +26,16 @@ Sandra, 16 Nov 2026. Details: `docs/simulation-family-collapse.md` in ezone-mana
 - **Simulation** in «תקציב כוח אדם»: per worker «סיום העסקה» / «שינוי שכר» (a new monthly cost). The simulated figure
   replaces the worker's and the total follows, also for next month and in the quarter card. In the browser only —
   never saved, never sent, nothing changes in staffing.
-- **«עובדים שמסיימים»**: a worker's `endDate` from staffing (staffing #136 → Dashboard #402 passes it through) and next
-  month's per-worker cost. December equals November only while staffing has no end date recorded for the house.
+- **Next month per worker**: a «צפי <next month>» column and tile, from `houseStaffCost` for the next month, next to
+  «חיסכון צפוי מסיומי עבודה» (staffing #135 → Dashboard #403 → Managers #73), which stays the one card about who is
+  leaving. December equals November only while staffing has no end date recorded for the house.
 - **«שיחות עם משפחה»**, a new sub-tab after «מטופלים»: the contact person from the Dashboard
   (`houseData.patients[].contact`, Dashboard #402 — by `Patients.fromLead` only) and the documented calls
   (`familyCalls` log, back after its removal on 14 Oct). Also a «משפחה» tab in the patient card.
 - **Duplicates removed**: reminders listed once (the strip), therapists once («מטפלים»), «נקלטו» once («מטופלים»).
 - House sub-tabs now: הבית היום · מטופלים · שיחות עם משפחה · צוות ומשמרות · מטפלים · תקציב כוח אדם · ועדות ·
   שיחות עם עובדים · סוגיות תפעוליות למעקב · סיכומי ישיבות · עדכון משמרת · בונוס.
-- No new endpoint, env var or secret. Tests 512 → 520. SW v46.
+- No new endpoint, env var or secret. Tests 513 → 521. SW v47.
 
 ## Managers protocol 2 — prepared October 14, 2026 (not activated)
 
@@ -391,6 +392,15 @@ Both coordinators properties are set and verified (roster line shows «מנוה�
 - Replaces the 1 Oct 2026 `CONTINUITY_BONUS_ENABLED` switch; kill switch now
   `REFERRAL_BONUS_KILL_SWITCH`. Frontend only, no Apps Script change, no new
   endpoint. September 2026 renders byte-identically. Tests 197 → 224, SW v15.
+
+## Managers: «חיסכון צפוי מסיומי עבודה» in «תקציב כוח אדם» (November 16, 2026)
+
+- Chain: ezone-staffing `getHouseWorkerCostsForManagers` (`ending` per house, `endDate` per worker, PR #135)
+  → E-Zone-Dashboard `managersWork` op `houseStaffCost` (`staff.ending`, worker `endDate`, PR #403) → this app.
+- `public/crm.js` `endingHtml`: a card under the month cost — how many finish, the saving this month, next
+  month and in a full month, who and when. A «מסיים/ת» chip in the workers table, «סיום עבודה בבית» in the
+  employee card. Shown only when someone finishes; nothing is computed in this app.
+- No new endpoint, env var or secret. SW cache v46. Details: `docs/crm-redesign.md`.
 
 ## Managers: month visit counters ignore look-ahead visits (October 26, 2026)
 

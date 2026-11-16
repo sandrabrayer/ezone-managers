@@ -1,4 +1,4 @@
-# Work tabs, 16 Nov 2026 — committees for information, operational issues, collapsible cards, the budget simulation, the people who are leaving, family calls
+# Work tabs, 16 Nov 2026 — committees for information, operational issues, collapsible cards, the budget simulation, next month per worker, family calls
 
 ## Why
 
@@ -58,21 +58,19 @@ Sandra, 16 Nov 2026, after looking at the redesigned app:
 - Only a worker of the list on screen can be simulated; an amount is a whole number from 0 to 1,000,000.
 - Code: `crm.js` `simulateStaff`, `budgetHtml`, `quarterHtml`; `work.js` `simState`.
 
-## 5. The people who are leaving
+## 5. The people who are leaving — next month, per worker
 
-- «עובדים שמסיימים» in «תקציב כוח אדם»: the worker, the role, the last day, this month's cost, next month's cost, the drop.
-- Source: the staffing feed through the Dashboard.
-  - `endDate` on a worker — the last day of their placement, once «סיום העסקה» was recorded in the staffing app.
-  - Next month's per-worker cost (`houseStaffCost` for the next month). Staffing already prices a month without the
-    days after an end date, so the drop is read from the two months. This app computes no pay.
-- A worker with no end date who has no cost next month is listed too, as «לא בצפי של החודש הבא».
-- The month card shows «צפי <next month>», with the drop from the people who are leaving. The workers table has a
-  «צפי <next month>» column.
+- **Who is leaving** is one card: «חיסכון צפוי מסיומי עבודה» (PR #73, the same day), the staffing app's own forecast —
+  how many finish, the saving this month, next month and in a full month, and who finishes when. This PR adds no
+  second list. The card is open when the tab opens.
+- **Added here:** next month's cost per worker.
+  - The workers table has a «צפי <next month>» column; the month card has a «צפי <next month>» tile.
+  - Source: `houseStaffCost` for the next month. Staffing prices a month without the days after an end date, so a
+    worker who leaves shows the full cost this month and less, or nothing, next month. This app computes no pay.
+  - The simulation uses the same next-month list, so «<next month> בסימולציה» already leaves out whoever is leaving.
 - **Why Q4 looked static:** December equals November when the staffing app has no end date for anyone in the house.
-  Once an end date is recorded there, December drops here by itself, in this tab and in the quarter card. Until then
-  the simulation shows the effect.
-- Needs ezone-staffing #136 and E-Zone-Dashboard #402 for the end date. Without them the tab still works: the list
-  then relies on next month's cost alone.
+  Once «סיום העסקה» is recorded there with a date, December drops here by itself — in this tab, in the quarter card
+  and in the December bonus card. Until then the simulation shows the effect.
 
 ## 6. «שיחות עם משפחה» — after «מטופלים»
 

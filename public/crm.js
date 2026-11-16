@@ -7,8 +7,9 @@
  *   - staff-talk THREADS — a first talk, follow-up talks and an outcome
  *   - «שיחות עם משפחה»   — the contact person (from the Dashboard) and the
  *                          documented calls, per patient (16 Nov 2026)
- *   - «תקציב כוח אדם»     — month cost vs budget, the workers, the people who
- *                          are leaving, the per-worker SIMULATION, the quarter
+ *   - «תקציב כוח אדם»     — month cost vs budget, the saving from ends of
+ *                          employment (staffing's forecast), the workers with the
+ *                          per-worker SIMULATION and next month's cost, the quarter
  * «מה היה בוועדה» (14 Nov 2026) was removed on 16 Nov 2026 — the therapists
  * document a committee, not the managers; committees are information only.
  *   - the quarterly budget-adherence bonus card (math: lib/bonus-eligibility.js)
@@ -381,7 +382,7 @@
         ['עלות ' + monthHe(staffCost.month), ils(w.cost)],
         ['מקור', w.estimated ? 'הערכה (עוד אין דוח שכר)' : 'לפי דוח השכר'],
         ['חלק מעלות הבית', staffCost.total ? Math.round((w.cost / staffCost.total) * 100) + '%' : '—'],
-        ISO_RE.test(String(w.endDate || '')) ? ['תאריך סיום (מכוח האדם)', fmtDate(w.endDate)] : null
+        endOf(w) ? ['סיום עבודה בבית', fmtDate(endOf(w))] : null
       ]) : '<div class="wk-empty">אין לעובד/ת עלות רשומה בבית בחודש הזה</div>';
     }
     var talks = (d.logs && d.logs.staffTalks) ? talksListHtml(d.logs.staffTalks, d.today, name, true) : '<div class="wk-empty">עדיין אין רישומים</div>';
@@ -442,6 +443,39 @@
         ? 'אוקטובר לפי דוח השכר והחשבוניות, כולל פרילנסרים משותפים, בלי בונוסי מנהלים ורכזים. היעד לפי טבלת תוכנית הפעולה.'
         : 'עלות אוקטובר לא זמינה כרגע מאפליקציית כוח האדם. היעד לפי טבלת תוכנית הפעולה.') + '</div></div>';
   }
+  /* «חיסכון צפוי מסיומי עבודה» (16 Nov 2026, Sandra: «לגבי עובד שמסיים, לחזות את קיזוז השכר העתידי שלו
+   * מהיום שהוא מסיים»). The staffing app's forecast, as it came: staff.ending { count, monthlySaving,
+   * savingThisMonth, savingNextMonth } and endDate per worker. Nothing is computed here; no `ending`
+   * or nobody finishing → no card. */
+  function endOf(w) { return w && ISO_RE.test(String(w.endDate || '')) ? String(w.endDate) : ''; }
+  function nextMonth(ym) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
+    if (!m) return '';
+    var y = +m[1], mo = +m[2] + 1;
+    if (mo > 12) { mo = 1; y += 1; }
+    return y + '-' + (mo < 10 ? '0' + mo : mo);
+  }
+  function endingHtml(s) {
+    var e = s && s.ending;
+    var count = e ? Math.max(0, Math.round(Number(e.count) || 0)) : 0;
+    if (!e || typeof e !== 'object' || !count) return '';
+    var who = (s.workers || []).filter(function (w) { return w && w.name && endOf(w); })
+      .sort(function (a, b) { return endOf(a) < endOf(b) ? -1 : endOf(a) > endOf(b) ? 1 : 0; });
+    var next = nextMonth(s.month);
+    return '<div class="card work-card wk-budget-ending" data-default-open><div class="card-title">חיסכון צפוי מסיומי עבודה — הערכה</div>' +
+      '<div class="budget-kpis">' +
+        '<div class="budget-kpi"><b>' + esc(count) + '</b><span>' + esc(count === 1 ? 'עובד/ת מסיים/ת' : 'עובדים מסיימים') + '</span></div>' +
+        '<div class="budget-kpi"><b>' + esc(ils(e.savingThisMonth)) + '</b><span>' + esc('חיסכון ב' + monthHe(s.month)) + '</span></div>' +
+        (next ? '<div class="budget-kpi"><b>' + esc(ils(e.savingNextMonth)) + '</b><span>' + esc('חיסכון ב' + monthHe(next)) + '</span></div>' : '') +
+        '<div class="budget-kpi ok"><b>' + esc(ils(e.monthlySaving)) + '</b><span>חיסכון בחודש מלא</span></div>' +
+      '</div>' +
+      (who.length ? '<ul class="ending-list">' + who.map(function (w) {
+        return '<li><button type="button" class="link-cell" data-emp-open="' + esc(w.name) + '">' + esc(w.name) + '</button><span>' +
+          esc('מסיים/ת ב-' + fmtDate(endOf(w))) + '</span></li>';
+      }).join('') + '</ul>' : '') +
+      '<div class="wk-note">הערכה מאפליקציית כוח האדם. עלות החודש שלמעלה כבר מחושבת עד תאריך הסיום, ומהחודש שאחרי הסיום העלות של העובד/ת יורדת מהבית במלואה.</div></div>';
+  }
+
   /* ── the per-worker SIMULATION (16 Nov 2026) ─────────────
    * Sandra: «ברשימת עובדים ועלות שכר ותקציב צריך לאפשר סימולציה ליד כל עובד עם
    * אפשרויות: סגירת העובד, שינוי שכר עם סכום. הנתון מהסימולציה צריך להופיע במקום
@@ -495,55 +529,6 @@
         '" value="' + (w.simAmount === null || w.simAmount === undefined ? '' : esc(w.simAmount)) + '" placeholder="עלות חודשית חדשה ₪" aria-label="' + esc('עלות חודשית חדשה — ' + w.name) + '">' : '') + '</div>';
   }
 
-  /* ── the people who are leaving (16 Nov 2026) ───────────
-   * Sandra: «הנתונים על עובדים שמסיימים צריכים גם להופיע מסטאפינג באפליקציה הזו
-   * וזה צריך גם לחשב ולקזז את ההורדה של העובד». From the staffing feed: a worker's
-   * `endDate` (the last day of their placement, when staffing has one), and the
-   * NEXT month's per-worker cost — which staffing already prices without the
-   * days after the end date. A worker with no end date who has no cost next
-   * month is listed too, said as such. → { items, saving, known } */
-  function leaversOf(staff, nextStaff) {
-    var out = { items: [], saving: 0, nextKnown: !!(nextStaff && nextStaff.available), nextMonth: (nextStaff && nextStaff.month) || '' };
-    if (!staff || !staff.available) return out;
-    var nextBy = {};
-    if (out.nextKnown) (nextStaff.workers || []).forEach(function (w) { if (w && w.name) nextBy[norm(w.name)] = Math.round(Number(w.cost) || 0); });
-    (staff.workers || []).forEach(function (w) {
-      if (!w || !w.name) return;
-      var cost = Math.round(Number(w.cost) || 0);
-      var end = ISO_RE.test(String(w.endDate || '')) ? w.endDate : '';
-      var next = out.nextKnown ? (Object.prototype.hasOwnProperty.call(nextBy, norm(w.name)) ? nextBy[norm(w.name)] : 0) : null;
-      var gone = next === 0 && cost > 0;
-      if (!end && !gone) return;
-      var saving = next === null ? null : Math.max(0, cost - next);
-      out.items.push({ name: w.name, roles: w.roles || [], endDate: end, cost: cost, next: next, saving: saving });
-      if (saving) out.saving += saving;
-    });
-    out.items.sort(function (a, b) { return (a.endDate || '9999').localeCompare(b.endDate || '9999') || (b.cost - a.cost); });
-    return out;
-  }
-  function leaversHtml(lv, staff) {
-    var nextName = monthHe(lv.nextMonth);
-    var h = '<div class="card work-card wk-budget-leavers"><div class="card-title">עובדים שמסיימים (' + lv.items.length + ')</div>' +
-      '<div class="wk-note">מאפליקציית כוח האדם: מי שנרשם לו/ה תאריך סיום. העלות שלהם כבר יורדת מהצפי של החודשים הבאים.</div>';
-    if (!lv.items.length) {
-      return h + '<div class="wk-empty">אין כרגע עובדים עם תאריך סיום באפליקציית כוח האדם.</div>' +
-        '<div class="wk-note">עובד/ת שמסיים/ת — מעדכנים תאריך סיום באפליקציית כוח האדם (מורן). מאותו רגע העלות יורדת כאן לבד, גם במבט הרבעוני. עד אז אפשר לבדוק את ההשפעה ב«סימולציה» ליד העובד/ת.</div></div>';
-    }
-    var costLabel = 'עלות ' + monthHe(staff.month), nextLabel = lv.nextKnown && nextName ? 'צפי ' + nextName : 'צפי חודש הבא';
-    h += '<div class="tbl-wrap"><table class="crm-tbl stack-tbl"><thead><tr><th>עובד/ת</th><th>תפקיד</th><th>סיום</th><th>' + esc(costLabel) + '</th><th>' +
-      esc(nextLabel) + '</th><th>ירידה</th></tr></thead><tbody>' +
-      lv.items.map(function (x) {
-        return '<tr>' + td('עובד/ת', '<button type="button" class="link-cell" data-emp-open="' + esc(x.name) + '">' + esc(x.name) + '</button>') +
-          td('תפקיד', esc((x.roles || []).join(', ') || '—')) +
-          td('סיום', x.endDate ? chip('warn', 'מסיים/ת ' + fmtDate(x.endDate)) : chip('wait', 'לא בצפי של החודש הבא')) +
-          td(costLabel, esc(ils(x.cost))) + td(nextLabel, esc(x.next === null ? '—' : ils(x.next))) +
-          td('ירידה', esc(x.saving === null ? '—' : x.saving ? signedIls(-x.saving) : ils(0)), x.saving ? 'pos' : '') + '</tr>';
-      }).join('') + '</tbody>' +
-      (lv.nextKnown ? '<tfoot><tr>' + td('', 'סה״כ ירידה צפויה') + '<td></td><td></td><td></td><td></td>' + td('ירידה', esc(lv.saving ? signedIls(-lv.saving) : ils(0))) + '</tr></tfoot>' : '') +
-      '</table></div>';
-    return h + '</div>';
-  }
-
   /* st = { staff: houseStaffCost.staff | {loading}, nextStaff: next month's houseStaffCost.staff | null,
    *        quarter: budgetBonusQuarter() | null, octoberTarget, octoberCost, monthBonuses, sim, nowYM } */
   function budgetHtml(st) {
@@ -563,7 +548,6 @@
       // simulateStaff(next) already handles it (the delta is taken from next month's own list).
       var total = Math.max(0, Number(s.total) || 0), budget = s.budget ? Math.max(0, Number(s.budget) || 0) : 0;
       var bst = budgetStatus(total, budget);
-      var lv = leaversOf(s, st.nextStaff);
       var nextTotal = next ? Math.max(0, Number(next.total) || 0) : null;
       var nextBudget = next && next.budget ? Math.max(0, Number(next.budget) || 0) : 0;
       h += '<div class="card work-card wk-budget-sum" data-default-open><div class="card-title">תקציב כוח אדם — ' + esc(monthHe(s.month)) + '</div>' +
@@ -573,10 +557,12 @@
           '<div class="budget-kpi ' + bst.cls + '"><b>' + esc(bst.pct === null ? '—' : bst.pct + '%') + '</b><span>' + esc(bst.text) + '</span></div>' +
           '<div class="budget-kpi"><b>' + esc(budget ? ils(Math.abs(budget - total)) : '—') + '</b><span>' + esc(budget && total > budget ? 'חריגה' : 'נשאר') + '</span></div>' +
           (nextTotal !== null ? '<div class="budget-kpi ' + budgetStatus(nextTotal, nextBudget).cls + '"><b>' + esc(ils(nextTotal)) + '</b><span>' +
-            esc('צפי ' + monthHe(next.month) + (lv.saving ? ' · כולל ירידה של ' + ils(lv.saving) + ' ממסיימים' : '')) + '</span></div>' : '') +
+            esc('צפי ' + monthHe(next.month) + (s.ending && Number(s.ending.count) > 0 ? ' · אחרי סיומי העבודה' : '')) + '</span></div>' : '') +
         '</div>' + barHtml(total, budget) +
         '<div class="wk-note">' + esc(s.hasActuals ? 'חלק מהעלות כבר לפי דוח השכר, והשאר הערכה.' : 'עדיין אין דוח שכר לחודש הזה — הסכומים הם הערכה.') +
         (s.stale ? ' (הנתון לא התעדכן לאחרונה)' : '') + '</div></div>';
+      // «חיסכון צפוי מסיומי עבודה» — the staffing app's forecast, shown only when someone finishes.
+      h += endingHtml(s);
 
       // The simulation result — only while something is simulated.
       if (simNow.active) {
@@ -602,7 +588,7 @@
           (next ? '<th>' + esc('צפי ' + monthHe(next.month)) + '</th>' : '') + '<th>% מהבית</th><th>מקור</th><th>סימולציה</th></tr></thead><tbody>' +
           workers.map(function (w) {
             var pct = simTotal ? Math.round((w.simCost / simTotal) * 100) : 0;
-            var end = ISO_RE.test(String(w.endDate || '')) ? w.endDate : '';
+            var end = endOf(w);
             var nw = next && w.name ? (simNext.workers.filter(function (x) { return norm(x.name) === norm(w.name); })[0] || null) : null;
             var costCell = w.simKind && w.simCost !== w.cost
               ? '<s class="sim-old">' + esc(ils(w.cost)) + '</s> <b class="sim-new">' + esc(ils(w.simCost)) + '</b>'
@@ -621,8 +607,6 @@
           (next ? td('צפי ' + monthHe(next.month), simNow.active && simNext.delta ? '<s class="sim-old">' + esc(ils(nextTotal)) + '</s> <b class="sim-new">' + esc(ils(simNext.total)) + '</b>' : esc(ils(nextTotal))) : '') +
           td('% מהבית', '100%') + '<td></td>' + (simNow.active ? td('שינוי', esc(signedIls(simNow.delta))) : '<td></td>') + '</tr></tfoot></table></div>'
           : '<div class="wk-empty">אין עובדים עם עלות בחודש הזה</div>') + '</div>';
-
-      h += leaversHtml(lv, s);
 
       var lines = (s.budgetLines || []).filter(function (l) { return l && (l.budget || l.cost); });
       if (lines.length) {
@@ -736,7 +720,7 @@
     contactOf: contactOf, familyCallsOf: familyCallsOf, familyContactsHtml: familyContactsHtml,
     familyCallsListHtml: familyCallsListHtml, familyFilterHtml: familyFilterHtml,
     employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, octoberTargetHtml: octoberTargetHtml, quarterHtml: quarterHtml,
-    simulateStaff: simulateStaff, leaversOf: leaversOf, leaversHtml: leaversHtml, SIM_MAX: SIM_MAX,
+    endingHtml: endingHtml, simulateStaff: simulateStaff, SIM_MAX: SIM_MAX,
     budgetBonusHtml: budgetBonusHtml, monthBonusCardHtml: monthBonusCardHtml
   };
   root.CrmView = CrmView;

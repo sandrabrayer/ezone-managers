@@ -99,11 +99,11 @@ Details and the kept-features checklist: `docs/crm-redesign.md`.
 - **Collapsible cards**: every card of a work tab is a header with an arrow; state in page memory only.
 - **Simulation** in «תקציב כוח אדם»: «סיום העסקה» / «שינוי שכר» per worker. Replaces the figure and the total on screen.
   Never saved, never sent.
-- **«עובדים שמסיימים»**: the end date from staffing (`endDate`) and next month's per-worker cost.
+- **Next month per worker**: a «צפי <next month>» column and tile (`houseStaffCost` for the next month), next to
+  «חיסכון צפוי מסיומי עבודה» (PR #73) — the one card about who is leaving.
 - **«שיחות עם משפחה»**: the contact person from the Dashboard (`houseData.patients[].contact`) and the documented
   calls (`familyCalls` log), also in the patient card.
-- Needs E-Zone-Dashboard #402 (contact, `endDate` pass-through) and ezone-staffing #136 (`endDate`). The app
-  degrades honestly without them.
+- Needs E-Zone-Dashboard #402 for the contact person. Without it the tab says the contact is not connected yet.
 
 ## Access and work tabs (13 Oct 2026)
 

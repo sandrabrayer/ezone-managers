@@ -1,8 +1,8 @@
 'use strict';
 /* Managers CRM views (14 Nov 2026, docs/crm-redesign.md) — public/crm.js and
  * the work.js pieces that use it: patient card, employee card, staff-talk
- * threads, «שיחות עם משפחה», «תקציב כוח אדם» with the per-worker simulation and the
- * people who are leaving, the quarterly budget-bonus card. («מה היה בוועדה» was removed
+ * threads, «שיחות עם משפחה», «תקציב כוח אדם» with the per-worker simulation and next
+ * month's cost per worker, the quarterly budget-bonus card. («מה היה בוועדה» was removed
  * on 16 Nov 2026 — committees are information only.)
  * Every feed value is escaped; a card never invents a value it was not sent. */
 const test = require('node:test');
@@ -254,6 +254,44 @@ test('«תקציב כוח אדם»: KPIs, the bar status, budget lines, workers 
   assert.match(C.budgetHtml({ staff: { loading: true } }), /טוען/);
 });
 
+test('«חיסכון צפוי מסיומי עבודה» (16 Nov 2026): the staffing forecast as it came — the card, the chip in the table, the field in the employee card', () => {
+  const staff = { available: true, month: '2026-12', hasActuals: false, total: 50000, budget: 60000,
+    ending: { count: 2, monthlySaving: 21250, savingThisMonth: 7500, savingNextMonth: 21250 },
+    workers: [{ name: 'רינה', roles: ['מדריך/ה'], cost: 3750, estimated: true, endDate: '2026-12-10' },
+      { name: XSS, roles: ['מטפל/ת'], cost: 10000, estimated: true, endDate: '2026-12-31' },
+      { name: 'נשארת', roles: ['מדריך/ה'], cost: 36250, estimated: false, endDate: '' },
+      { name: 'תאריך שבור', roles: [], cost: 1, estimated: false, endDate: '<b>soon</b>' }],
+    budgetLines: [] };
+  const h = C.budgetHtml({ staff });
+  const from = h.indexOf('<div class="card work-card wk-budget-ending"');
+  const card = h.slice(from, h.indexOf('<div class="card work-card', from + 10));
+  assert.match(card, /חיסכון צפוי מסיומי עבודה — הערכה/);
+  assert.match(card, /<b>2<\/b><span>עובדים מסיימים/);
+  assert.match(card, /<b>7,500 ₪<\/b><span>חיסכון בדצמבר 2026/);
+  assert.match(card, /<b>21,250 ₪<\/b><span>חיסכון בינואר 2027/, 'the month after December is January of the next year');
+  assert.match(card, /<b>21,250 ₪<\/b><span>חיסכון בחודש מלא/);
+  assert.deepEqual([...card.matchAll(/מסיים\/ת ב-([\d/]+)/g)].map((m) => m[1]), ['10/12/26', '31/12/26'], 'soonest first; only real dates');
+  assert.ok(h.indexOf('wk-budget-ending') > h.indexOf('wk-budget-sum') && h.indexOf('wk-budget-ending') < h.indexOf('wk-budget-workers'), 'right under the month cost');
+  // the workers table marks who finishes
+  const table = h.slice(h.indexOf('wk-budget-workers'));
+  assert.equal((table.match(/crm-chip warn">מסיים\/ת /g) || []).length, 2);
+  assert.match(table, /crm-chip warn">מסיים\/ת 10\/12\/26/);
+  assert.ok(!h.includes('<img') && !h.includes('<b>soon</b>'), 'every feed value escaped; a bad date is not shown');
+  assert.doesNotMatch(card, /[(][^<]*[\u0590-\u05FF]|[\u0590-\u05FF][^<]*[)]/, 'no parentheses in the new Hebrew text');
+  // one worker: singular wording
+  assert.match(C.endingHtml({ month: '2026-11', workers: [], ending: { count: 1, monthlySaving: 9000, savingThisMonth: 6000, savingNextMonth: 9000 } }), /<b>1<\/b><span>עובד\/ת מסיים\/ת/);
+  // nobody finishing, an older Dashboard, junk → no card at all, never a 0
+  for (const ending of [undefined, null, { count: 0, monthlySaving: 0, savingThisMonth: 0, savingNextMonth: 0 }, 'x', { count: 'abc' }]) {
+    assert.equal(C.endingHtml({ month: '2026-11', workers: [], ending }), '');
+    assert.ok(!C.budgetHtml({ staff: Object.assign({}, staff, { ending }) }).includes('wk-budget-ending'));
+  }
+  // the employee card says when the person finishes in the house
+  const emp = C.employeeCardHtml(D, 'רינה', staff, null, 'cost');
+  assert.match(emp, /סיום עבודה בבית/);
+  assert.match(emp, /10\/12\/26/);
+  assert.doesNotMatch(C.employeeCardHtml(D, 'רינה', Object.assign({}, staff, { workers: [{ name: 'רינה', roles: [], cost: 5, estimated: false, endDate: '' }] }), null, 'cost'), /סיום עבודה בבית/);
+});
+
 test('budget bonus card: condition in plain words; Q4 2026 shows when the quarterly bonus starts; December\'s one-off 2,500 ₪; running vs settled', () => {
   // Today (Nov 2026): Q4 2026 is not a bonus quarter — the card says when it starts and for how much.
   const q4 = BE.budgetBonusQuarter([
@@ -404,28 +442,30 @@ test('simulation in «תקציב כוח אדם»: the simulated figure replaces 
   assert.doesNotMatch(C.quarterHtml(q), /בסימולציה/);
 });
 
-test('the people who are leaving: the end date from staffing, next month\'s cost and the drop — already inside next month\'s forecast', () => {
-  const lv = C.leaversOf(STAFF, NEXT);
-  assert.deepEqual(lv.items.map((x) => [x.name, x.endDate, x.cost, x.next, x.saving]), [['נועם', '2026-11-30', 16871, 0, 16871], ['רובי', '', 8811, 0, 8811]]);
-  assert.equal(lv.saving, 25682);
-  const h = C.budgetHtml({ staff: STAFF, nextStaff: NEXT, sim: {}, nowYM: '2026-11' });
-  assert.match(h, /עובדים שמסיימים \(2\)/);
-  assert.match(h, /wk-budget-leavers[\s\S]*?data-emp-open="נועם"[\s\S]*?מסיים\/ת 30\/11\/26[\s\S]*?<td data-label="עלות נובמבר 2026">16,871 ₪<\/td><td data-label="צפי דצמבר 2026">0 ₪<\/td><td data-label="ירידה" class="pos">‎-16,871 ₪/);
-  assert.match(h, /לא בצפי של החודש הבא/, 'no end date, but no cost next month — said as such');
-  assert.match(h, /סה״כ ירידה צפויה[\s\S]*?‎-25,682 ₪/);
-  assert.match(h, /302,067 ₪<\/b><span>צפי דצמבר 2026 · כולל ירידה של 25,682 ₪ ממסיימים/);
-  assert.match(h, /<th>צפי דצמבר 2026<\/th>/, 'next month per worker, in the workers table');
-  // next month not readable → the end date still shows; the drop is «—», never a guess
-  const only = C.leaversOf(STAFF, null);
-  assert.deepEqual(only.items.map((x) => [x.name, x.next, x.saving]), [['נועם', null, null]]);
-  assert.doesNotMatch(C.budgetHtml({ staff: STAFF, sim: {} }), /צפי דצמבר|סה״כ ירידה צפויה/);
-  // nobody leaving → said, with what to do
-  const stay = { ...STAFF, workers: STAFF.workers.filter((w) => w.name === 'אורן' || w.name === 'דנה') };
-  const none = C.budgetHtml({ staff: stay, nextStaff: NEXT, sim: {} });
-  assert.match(none, /עובדים שמסיימים \(0\)[\s\S]*אין כרגע עובדים עם תאריך סיום באפליקציית כוח האדם[\s\S]*מעדכנים תאריך סיום באפליקציית כוח האדם/);
-  // a bad end date from the feed is ignored, never rendered
-  assert.equal(C.leaversOf({ available: true, workers: [{ name: 'x', cost: 5, endDate: '<b>' }] }, null).items.length, 0);
-  assert.equal(C.leaversOf({ available: false }, NEXT).items.length, 0);
+test('next month per worker: the «צפי» column and the month card; with staffing\'s «חיסכון צפוי מסיומי עבודה» as the one card about who is leaving', () => {
+  const ending = { count: 1, monthlySaving: 16871, savingThisMonth: 0, savingNextMonth: 16871 };
+  const h = C.budgetHtml({ staff: { ...STAFF, ending }, nextStaff: NEXT, sim: {}, nowYM: '2026-11' });
+  assert.match(h, /<th>צפי דצמבר 2026<\/th>/);
+  // a worker who leaves: full this month, nothing next month — the offset is visible on their own row
+  assert.match(h, /data-emp-open="נועם"[\s\S]*?מסיים\/ת 30\/11\/26[\s\S]*?<td data-label="עלות החודש">16,871 ₪<\/td><td data-label="צפי דצמבר 2026">0 ₪<\/td>/);
+  assert.match(h, /data-emp-open="אורן"[\s\S]*?<td data-label="עלות החודש">36,167 ₪<\/td><td data-label="צפי דצמבר 2026">36,167 ₪<\/td>/);
+  assert.match(h, /<td data-label="עלות החודש">327,749 ₪<\/td><td data-label="צפי דצמבר 2026">302,067 ₪<\/td>/, 'the totals of both months');
+  assert.match(h, /302,067 ₪<\/b><span>צפי דצמבר 2026 · אחרי סיומי העבודה/);
+  // ONE card about who is leaving — staffing's forecast (PR #73), open when the tab opens; no second list
+  assert.equal((h.match(/wk-budget-ending/g) || []).length, 1);
+  assert.match(h, /wk-budget-ending" data-default-open>/);
+  assert.doesNotMatch(h, /wk-budget-leavers|עובדים שמסיימים \(/);
+  assert.equal(C.leaversOf, undefined);
+  // the chip of a worker who finishes appears once per row, in the name cell
+  assert.equal((h.slice(h.indexOf('wk-budget-workers')).match(/crm-chip warn">מסיים\/ת /g) || []).length, 1);
+  // next month not readable → no column, no forecast tile; the month itself is unchanged
+  const only = C.budgetHtml({ staff: STAFF, sim: {} });
+  assert.doesNotMatch(only, /צפי דצמבר/);
+  assert.match(only, /327,749 ₪<\/b><span>עלות החודש/);
+  // nobody leaving → no «אחרי סיומי העבודה» claim
+  assert.match(C.budgetHtml({ staff: STAFF, nextStaff: NEXT, sim: {} }), /<span>צפי דצמבר 2026<\/span>/);
+  // a bad end date from the feed is never rendered
+  assert.doesNotMatch(C.budgetHtml({ staff: { ...STAFF, workers: [{ name: 'x', roles: [], cost: 5, estimated: true, endDate: '<b>' }] }, sim: {} }), /מסיים\/ת|<b>'/);
 });
 
 test('collapsible cards: a stable key per card, and which cards open first', () => {
