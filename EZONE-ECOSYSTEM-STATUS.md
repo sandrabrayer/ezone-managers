@@ -14,6 +14,14 @@
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 
+## Managers: simulation — «הפחתת סכום אחר» (November 17, 2026)
+
+Sandra, 17 Nov 2026. Details: `docs/simulation-family-collapse.md` §4 in ezone-managers.
+
+- A fourth simulation option per worker in «תקציב כוח אדם»: an amount typed in «סכום להפחתה ₪» comes straight off the
+  total, whatever figure the list shows for the worker. An emptied field puts the real figures back.
+- Page memory only. No new endpoint, env var or secret. Tests 524 → 525. SW v50.
+
 ## Managers: clearing a simulation, birth date in the employee card (November 17, 2026)
 
 Sandra, 17 Nov 2026. Details: `docs/simulation-family-collapse.md` in ezone-managers.

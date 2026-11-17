@@ -1567,13 +1567,15 @@
         if (simKind) {
           if (simKind.value === 'end') sm[who] = { kind: 'end' };
           else if (simKind.value === 'cost') sm[who] = { kind: 'cost', amount: null };
+          else if (simKind.value === 'deduct') sm[who] = { kind: 'deduct', amount: null };
           else delete sm[who];
         } else {
           var n = Number(simAmt.value);
-          sm[who] = { kind: 'cost', amount: simAmt.value !== '' && isFinite(n) && n >= 0 ? Math.min(CV ? CV.SIM_MAX : 1000000, Math.round(n)) : null };
+          // The field belongs to the option chosen for this worker; an emptied field is «no amount» — the real figure is back.
+          sm[who] = { kind: sm[who] && sm[who].kind === 'deduct' ? 'deduct' : 'cost', amount: simAmt.value !== '' && isFinite(n) && n >= 0 ? Math.min(CV ? CV.SIM_MAX : 1000000, Math.round(n)) : null };
         }
         paintBudget(panel, key);
-        if (simKind && simKind.value === 'cost') {
+        if (simKind && (simKind.value === 'cost' || simKind.value === 'deduct')) {
           var inp = Array.prototype.filter.call(panel.querySelectorAll('[data-sim-amount]'), function (x) { return x.getAttribute('data-sim-amount') === who; })[0];
           if (inp && inp.focus) inp.focus();
         }

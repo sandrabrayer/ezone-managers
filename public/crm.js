@@ -524,7 +524,12 @@
    * הנתון הקיים ולהשפיע על הסה"כ שרשום למטה. ככה המנהלים יראו איך לעשות שינויים».
    * A what-if in the browser's memory ONLY: nothing is saved, nothing is sent,
    * the staffing app is not touched. sim = { workerName: { kind: 'end' } |
-   * { kind: 'cost', amount } } — amount = the worker's NEW monthly cost. */
+   * { kind: 'cost', amount } | { kind: 'deduct', amount } } — for 'cost' the amount is the
+   * worker's NEW monthly cost.
+   * 'deduct' (17 Nov 2026, Sandra: «באופציית הסימולציה תעשה שאפשר לרשום סכום אחר וזה מוריד
+   * ישירות מהעלות הכוללת ושאחר כך אפשר לנקות את השדה ולחזור אחורה»): the amount typed comes
+   * straight off the total — it is not tied to the figure the list shows for the worker, so a
+   * manager can take off what the worker really costs. An empty field takes nothing off. */
   var SIM_MAX = 1000000;
   function simOf(sim, name) {
     if (!sim || !name || !Object.prototype.hasOwnProperty.call(sim, name)) return null;
@@ -535,9 +540,13 @@
       var has = x.amount !== '' && x.amount != null && isFinite(Number(x.amount)) && Number(x.amount) >= 0;
       return { kind: 'cost', amount: has ? Math.min(SIM_MAX, Math.round(Number(x.amount))) : null };
     }
+    if (x.kind === 'deduct') {
+      var hasD = x.amount !== '' && x.amount != null && isFinite(Number(x.amount)) && Number(x.amount) >= 0;
+      return { kind: 'deduct', amount: hasD ? Math.min(SIM_MAX, Math.round(Number(x.amount))) : null };
+    }
     return null;
   }
-  /* → { workers: [{ …w, simKind, simCost, simDelta }], total, delta, active, count } */
+  /* → { workers: [{ …w, simKind, simCost, simDelta, simAmount, simDeduct }], total, delta, active, count } */
   function simulateStaff(staff, sim) {
     var s = staff || {};
     var base = Math.max(0, Number(s.total) || 0);
@@ -548,11 +557,14 @@
       var simCost = cost, kind = '', typed = null;
       if (x && x.kind === 'end') { simCost = 0; kind = 'end'; }
       else if (x && x.kind === 'cost') { kind = 'cost'; if (x.amount !== null) { simCost = x.amount; typed = x.amount; } }
+      // The amount comes off the total as typed; the worker's own figure is only what is left of it.
+      var deduct = 0;
+      if (x && x.kind === 'deduct') { kind = 'deduct'; if (x.amount !== null) { deduct = x.amount; typed = x.amount; simCost = Math.max(0, cost - deduct); } }
       if (kind) count++;
-      delta += simCost - cost;
+      delta += kind === 'deduct' ? -deduct : simCost - cost;
       var o = {};
       Object.keys(w).forEach(function (k) { o[k] = w[k]; });
-      o.cost = cost; o.simKind = kind; o.simCost = simCost; o.simDelta = simCost - cost; o.simAmount = typed;
+      o.cost = cost; o.simKind = kind; o.simCost = simCost; o.simDelta = kind === 'deduct' ? -deduct : simCost - cost; o.simAmount = typed; o.simDeduct = deduct;
       return o;
     });
     return { workers: workers, base: base, total: Math.max(0, base + delta), delta: delta, active: count > 0, count: count };
@@ -566,9 +578,12 @@
     return '<div class="sim-cell"><select class="sim-kind" data-sim-kind="' + name + '" aria-label="' + esc('סימולציה — ' + w.name) + '">' +
       '<option value=""' + (w.simKind ? '' : ' selected') + '>ללא שינוי</option>' +
       '<option value="end"' + (w.simKind === 'end' ? ' selected' : '') + '>סיום העסקה</option>' +
-      '<option value="cost"' + (w.simKind === 'cost' ? ' selected' : '') + '>שינוי שכר</option></select>' +
-      (w.simKind === 'cost' ? '<input class="sim-amount" type="number" inputmode="numeric" min="0" max="' + SIM_MAX + '" step="100" data-sim-amount="' + name +
-        '" value="' + (w.simAmount === null || w.simAmount === undefined ? '' : esc(w.simAmount)) + '" placeholder="עלות חודשית חדשה ₪" aria-label="' + esc('עלות חודשית חדשה — ' + w.name) + '">' : '') +
+      '<option value="cost"' + (w.simKind === 'cost' ? ' selected' : '') + '>שינוי שכר</option>' +
+      '<option value="deduct"' + (w.simKind === 'deduct' ? ' selected' : '') + '>הפחתת סכום אחר</option></select>' +
+      (w.simKind === 'cost' || w.simKind === 'deduct' ? '<input class="sim-amount" type="number" inputmode="numeric" min="0" max="' + SIM_MAX + '" step="100" data-sim-amount="' + name +
+        '" value="' + (w.simAmount === null || w.simAmount === undefined ? '' : esc(w.simAmount)) + '" placeholder="' + (w.simKind === 'deduct' ? 'סכום להפחתה ₪' : 'עלות חודשית חדשה ₪') +
+        '" aria-label="' + esc((w.simKind === 'deduct' ? 'סכום להפחתה מהעלות הכוללת — ' : 'עלות חודשית חדשה — ') + w.name) + '">' : '') +
+      (w.simKind === 'deduct' ? '<span class="sim-hint">יורד ישירות מהסה״כ. שדה ריק מחזיר את הנתון.</span>' : '') +
       // «ניקוי» (17 Nov 2026, Sandra: «תעשה אפשרות לנקות שדות אחרי שעושים סימולציה»): this worker back to the real figure.
       (w.simKind ? '<button type="button" class="wk-link sim-clear" data-sim-clear="' + name + '" aria-label="' + esc('ניקוי הסימולציה — ' + w.name) + '">✕ ניקוי</button>' : '') + '</div>';
   }
@@ -632,7 +647,7 @@
       var workers = simNow.workers;
       var simTotal = simNow.total;
       h += '<div class="card work-card wk-budget-workers" data-default-open><div class="card-title">העובדים ועלות השכר (' + workers.filter(function (w) { return w.name; }).length + ')</div>' +
-        '<div class="wk-note">רשימה מעודכנת מאפליקציית כוח האדם. נראית רק לך, לסנדרה ולרון. <b>סימולציה:</b> בחרו ליד עובד/ת «סיום העסקה» או «שינוי שכר» (ואז עלות חודשית חדשה) — הסכום מתחלף והסה״כ למטה מתעדכן. לא נשמר. «✕ ניקוי» ליד עובד/ת מחזיר את הנתון שלו/ה, ו«ניקוי כל השדות» מנקה את כל הסימולציה.</div>' +
+        '<div class="wk-note">רשימה מעודכנת מאפליקציית כוח האדם. נראית רק לך, לסנדרה ולרון. <b>סימולציה:</b> בחרו ליד עובד/ת «סיום העסקה», «שינוי שכר» ואז עלות חודשית חדשה, או «הפחתת סכום אחר» ואז הסכום שיורד ישירות מהסה״כ. הסה״כ למטה מתעדכן. לא נשמר. «✕ ניקוי» ליד עובד/ת מחזיר את הנתון שלו/ה, ו«ניקוי כל השדות» מנקה את כל הסימולציה.</div>' +
         // While a simulation is on: «ניקוי כל השדות» above the table and under it — one tap, from wherever you are.
         (workers.length && simNow.active ? simClearAllHtml(simNow.count) : '') +
         (workers.length ? '<div class="tbl-wrap"><table class="crm-tbl sim-tbl stack-tbl"><thead><tr><th>עובד/ת</th><th>תפקיד</th><th>עלות החודש</th>' +
@@ -641,15 +656,18 @@
             var pct = simTotal ? Math.round((w.simCost / simTotal) * 100) : 0;
             var end = endOfRow(s, w);
             var nw = next && w.name ? (simNext.workers.filter(function (x) { return norm(x.name) === norm(w.name); })[0] || null) : null;
-            var costCell = w.simKind && w.simCost !== w.cost
+            // «הפחתת סכום אחר»: the worker's figure stays, and the amount that comes off the total is beside it.
+            var costCell = w.simKind === 'deduct' ? esc(ils(w.cost)) + (w.simDeduct ? ' <b class="sim-new sim-deduct">' + esc(signedIls(-w.simDeduct)) + '</b>' : '')
+              : w.simKind && w.simCost !== w.cost
               ? '<s class="sim-old">' + esc(ils(w.cost)) + '</s> <b class="sim-new">' + esc(ils(w.simCost)) + '</b>'
               : esc(ils(w.cost));
             var nextCell = !next ? '' : td('צפי ' + monthHe(next.month), !w.name ? '—' : nw
-              ? (nw.simKind && nw.simCost !== nw.cost ? '<s class="sim-old">' + esc(ils(nw.cost)) + '</s> <b class="sim-new">' + esc(ils(nw.simCost)) + '</b>' : esc(ils(nw.cost)))
+              ? (nw.simKind === 'deduct' ? esc(ils(nw.cost)) + (nw.simDeduct ? ' <b class="sim-new sim-deduct">' + esc(signedIls(-nw.simDeduct)) + '</b>' : '')
+                : nw.simKind && nw.simCost !== nw.cost ? '<s class="sim-old">' + esc(ils(nw.cost)) + '</s> <b class="sim-new">' + esc(ils(nw.simCost)) + '</b>' : esc(ils(nw.cost)))
               : esc(ils(0)));
             return '<tr class="' + (w.name ? '' : 'muted') + (w.simKind ? ' is-sim' : '') + '">' + td('עובד/ת',
               (w.name ? '<button type="button" class="link-cell" data-emp-open="' + esc(w.name) + '">' + esc(w.name) + '</button>' : 'אחר (ללא שם)') +
-              (end ? ' ' + chip('warn', 'מסיים/ת ' + fmtDate(end)) : '') + (w.simKind === 'end' ? ' ' + chip('bad', 'סימולציה: סיום') : w.simKind === 'cost' ? ' ' + chip('open', 'סימולציה: שכר') : '')) +
+              (end ? ' ' + chip('warn', 'מסיים/ת ' + fmtDate(end)) : '') + (w.simKind === 'end' ? ' ' + chip('bad', 'סימולציה: סיום') : w.simKind === 'cost' ? ' ' + chip('open', 'סימולציה: שכר') : w.simKind === 'deduct' ? ' ' + chip('open', 'סימולציה: הפחתה') : '')) +
               td('תפקיד', esc((w.roles || []).join(', ') || '—')) + td('עלות החודש', costCell) + nextCell + td('% מהבית', esc(pct + '%')) +
               td('מקור', w.estimated ? chip('wait', 'הערכה') : chip('ok', 'דוח שכר')) +
               (w.name ? td('סימולציה', simCellHtml(w)) : '<td></td>') + '</tr>';
