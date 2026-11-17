@@ -229,6 +229,46 @@ test('employee card: details, cost from the staffing list, talks (read-only), fe
   assert.match(x, /נתוני העלות לא זמינים/);
 });
 
+test('employee card: «תאריך לידה» from the staffing list — a real past date with its full year; said when not entered; no row when unreadable', () => {
+  const staff = (birthDate) => ({ available: true, month: '2026-11', total: 20000, workers: [{ name: 'רינה', roles: ['מדריך/ה'], cost: 8000, estimated: true, birthDate }] });
+  const details = (h) => h.slice(h.indexOf('data-card-panel="details"'), h.indexOf('data-card-panel="cost"'));
+  assert.match(details(C.employeeCardHtml(D, 'רינה', staff('1990-05-01'), null)), /ותק<\/dt><dd>[^<]*<\/dd><\/div>[\s\S]*תאריך לידה<\/dt><dd>1\/5\/1990</, 'after seniority, full year');
+  for (const bad of ['', undefined, '01/05/1990', '<img src=x>', '2090-01-01', '1990-13-40x']) {
+    const h = details(C.employeeCardHtml(D, 'רינה', staff(bad), null));
+    assert.match(h, /תאריך לידה<\/dt><dd>לא הוזן באפליקציית כוח האדם/, String(bad));
+    assert.ok(!h.includes('<img') && !h.includes('2090'));
+  }
+  // a worker who is not in the month's staffing list → not entered, never someone else's date
+  assert.match(details(C.employeeCardHtml(D, 'רינה', { available: true, month: '2026-11', total: 1, workers: [{ name: 'אחרת', cost: 1, birthDate: '1980-01-01' }, { name: '', cost: 1, birthDate: '1970-01-01' }] }, null)),
+    /תאריך לידה<\/dt><dd>לא הוזן/);
+  assert.match(details(C.employeeCardHtml(D, 'רינה', { loading: true }, null)), /תאריך לידה<\/dt><dd>טוען…/);
+  assert.doesNotMatch(details(C.employeeCardHtml(D, 'רינה', { available: false, reason: 'unreachable' }, null)), /תאריך לידה/, 'staffing unreadable → no row, never a guess');
+  assert.doesNotMatch(details(C.employeeCardHtml(D, 'רינה', null, null)), /תאריך לידה/);
+});
+
+test('clearing a simulation: «✕ ניקוי» beside every simulated worker, «ניקוי כל השדות» above and under the table and in the result card', () => {
+  const sim = { 'אורן': { kind: 'cost', amount: 30000 }, 'דנה': { kind: 'end' } };
+  const h = C.budgetHtml({ staff: STAFF, nextStaff: NEXT, sim, nowYM: '2026-11' });
+  assert.deepEqual((h.match(/data-sim-clear="([^"]+)"/g) || []), ['data-sim-clear="אורן"', 'data-sim-clear="דנה"'], 'only the simulated rows');
+  assert.equal((h.match(/data-sim-reset/g) || []).length, 3, 'the result card, above the table, under the table');
+  assert.match(h, /sim-bar"><span class="sim-bar-text">🧪 2 שינויים בסימולציה<\/span><button type="button" class="wk-btn ghost sim-clear-all" data-sim-reset>🧹 ניקוי כל השדות/);
+  const workers = h.slice(h.indexOf('wk-budget-workers'));
+  assert.ok(workers.indexOf('sim-bar') < workers.indexOf('<table') && workers.lastIndexOf('sim-bar') > workers.indexOf('</table>'));
+  assert.match(C.budgetHtml({ staff: STAFF, sim: { 'אורן': { kind: 'end' } } }), /שינוי אחד בסימולציה/);
+  assert.doesNotMatch(h, /איפוס הסימולציה/, 'one wording everywhere');
+  // nothing to clear → no clear control at all
+  const none = C.budgetHtml({ staff: STAFF, nextStaff: NEXT, sim: {} });
+  assert.doesNotMatch(none, /data-sim-clear|data-sim-reset|sim-bar"/);
+  // a worker named like markup: the attribute is escaped
+  const x = C.budgetHtml({ staff: { available: true, month: '2026-11', total: 5, workers: [{ name: XSS, roles: [], cost: 5, estimated: true }] }, sim: { [XSS]: { kind: 'end' } } });
+  assert.match(x, /data-sim-clear="&lt;img/);
+  assert.ok(!x.includes('<img'));
+  // wiring: one worker is removed from the page's memory, the rest stays; the whole simulation is emptied
+  const w = fs.readFileSync(path.join(__dirname, '..', 'public', 'work.js'), 'utf8');
+  assert.match(w, /closest\('\[data-sim-clear\]'\)[\s\S]{0,260}hasOwnProperty\.call\(smc, whoC\)\) delete smc\[whoC\];\s*paintBudget\(panel, key\)/);
+  assert.match(w, /closest\('\[data-sim-reset\]'\)\) \{ simState\[key\] = \{\}; paintBudget\(panel, key\)/);
+});
+
 test('«תקציב כוח אדם»: KPIs, the bar status, budget lines, workers table with totals; failures in plain Hebrew', () => {
   const staff = { available: true, month: '2026-11', hasActuals: false, total: 103000, budget: 100000,
     workers: [{ name: XSS, roles: ['מדריך/ה'], cost: 60000, estimated: true }, { name: '', roles: [], cost: 43000, estimated: false }],

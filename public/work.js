@@ -1475,6 +1475,15 @@
       var famAdd = t.closest && t.closest('[data-fam-add]');
       if (famAdd) { prefillFamilyCall(panel, key, famAdd.getAttribute('data-fam-add')); return; }
       if (t.closest && t.closest('[data-sim-reset]')) { simState[key] = {}; paintBudget(panel, key); return; }
+      // «✕ ניקוי» beside one worker (17 Nov 2026): that worker back to the real figure; the rest of the simulation stays.
+      var simClear = t.closest && t.closest('[data-sim-clear]');
+      if (simClear) {
+        var smc = simState[key];
+        var whoC = simClear.getAttribute('data-sim-clear');
+        if (smc && Object.prototype.hasOwnProperty.call(smc, whoC)) delete smc[whoC];
+        paintBudget(panel, key);
+        return;
+      }
       var empOpen = t.closest && t.closest('[data-emp-open]');
       if (empOpen) { openDrawer(key, 'employee', empOpen.getAttribute('data-emp-open')); return; }
       var thOpen = t.closest && t.closest('[data-thread-open]');
