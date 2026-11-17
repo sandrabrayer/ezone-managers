@@ -2401,3 +2401,12 @@ body.drawer-on { overflow: hidden; }
 .dash-go:hover { background: var(--card-2); }
 .dash-go[disabled] { color: var(--text-dim); cursor: default; }
 .dash-go[aria-pressed="true"] { background: var(--card-2); font-weight: 800; }
+
+/* 17 Nov 2026: clearing a simulation — «✕ ניקוי» beside a worker, «ניקוי כל השדות» above and under the table. */
+.sim-clear { align-self: flex-start; font-size: 13px; font-weight: 700; color: #5B21B6; background: none; border: 0; padding: 2px 0; cursor: pointer; }
+.sim-clear:hover { text-decoration: underline; }
+.sim-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 8px 0; padding: 8px 12px;
+  background: #F5F3FF; border: 1px solid #C4B5FD; border-radius: var(--r-sm); }
+.sim-bar-text { font-weight: 700; color: #5B21B6; font-size: 14px; }
+.wk-btn.sim-clear-all { border-color: #7C3AED; color: #5B21B6; background: #FFFFFF; font-weight: 700; }
+.wk-btn.sim-clear-all:hover { background: #EDE9FE; }

@@ -52,7 +52,11 @@ Sandra, 16 Nov 2026, after looking at the redesigned app:
 - The total under the table follows, for this month and for next month's forecast, with the change in ₪.
 - A «🧪 סימולציה» card shows the simulated monthly cost against the budget, the saving, what is left, and next month.
 - The quarter card gets a «בסימולציה» column for the running month and the months after it. A settled month has none.
-- «איפוס הסימולציה» clears it. So does a reload.
+- Clearing (17 Nov 2026, Sandra: «תעשה אפשרות לנקות שדות אחרי שעושים סימולציה»):
+  - «✕ ניקוי» beside a simulated worker puts that worker back to the real figure; the rest of the simulation stays.
+  - «🧹 ניקוי כל השדות» clears the whole simulation. It appears above the table, under it and in the result card,
+    only while a simulation is on. («איפוס הסימולציה» was the earlier wording of the same button.)
+  - A reload clears it too.
 - **A what-if only.** It lives in the page's memory: it is never saved, never sent to the server, and it changes
   nothing in the staffing app. The amounts are for a full month. No bonus figure reads it.
 - Only a worker of the list on screen can be simulated; an amount is a whole number from 0 to 1,000,000.
@@ -107,3 +111,17 @@ contacts, budget lines, the quarter) are shown one block per row on a phone, eac
 - Every feed value is escaped; `crm.js` stays pure (no `innerHTML`, `fetch` or `console`).
 - The simulation and the open / closed state of the cards never leave the page and are never stored.
 - No new endpoint, env var, secret or dependency.
+
+## 17 Nov 2026 — the birth date in the employee card
+
+Sandra, 17 Nov 2026: «תוסיף תאריכי לידה בפרטי העובד, עכשיו בסטאפינג מוסיפים אז צריך שזה ישאב משם נתונים».
+
+- «כרטיס עובד/ת» → «פרטים» shows «תאריך לידה», after «ותק», with the full year (1/5/1990).
+- Source: «תאריך לידה» in the worker's card of the staffing app → the staffing feed (ezone-staffing #138) → the
+  Dashboard `houseStaffCost` (E-Zone-Dashboard #405) → `worker.birthDate`. It rides on the list the card already loads
+  for its «עלות» tab — no new request, endpoint or secret.
+- Not entered in staffing, or a value that is not a real past date → «לא הוזן באפליקציית כוח האדם». The staffing list
+  unreadable → no row at all. Never a guess, never another worker's date.
+- Who sees it: the manager of the worker's own house, Sandra and Ron — the same people who see the worker's cost.
+  `no-store`, never in the service-worker cache, never logged.
+- Until #138 and #405 are live every card says «לא הוזן באפליקציית כוח האדם».

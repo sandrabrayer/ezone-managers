@@ -3,6 +3,25 @@
 
 ## Unreleased
 
+### Added — clearing a simulation; the birth date in the employee card (November 17, 2026)
+
+- **Why**: Sandra, 17 Nov 2026 — «תעשה אפשרות לנקות שדות אחרי שעושים סימולציה. תוסיף תאריכי לידה בפרטי העובד, עכשיו
+  בסטאפינג מוסיפים אז צריך שזה ישאב משם נתונים».
+- **Clearing a simulation** in «תקציב כוח אדם»:
+  - «✕ ניקוי» beside every simulated worker: that worker back to the real figure, the rest stays.
+  - «🧹 ניקוי כל השדות» above the workers table, under it and in the «🧪 סימולציה» card — shown only while a simulation is
+    on. It replaces the wording «איפוס הסימולציה» of the single button that sat in the result card.
+  - Unchanged: the simulation lives in the page's memory only.
+- **«תאריך לידה»** in «כרטיס עובד/ת» → «פרטים», after «ותק», with the full year.
+  - From the staffing app's worker card, through the list the card already loads for «עלות» (`houseStaffCost` →
+    `worker.birthDate`). No new request, endpoint, env var or secret.
+  - Not entered, or not a real past date → «לא הוזן באפליקציית כוח האדם». The list unreadable → no row.
+- **Security**: the birth date is seen by the manager of the worker's own house and the admins only (the server
+  decides the house); `no-store`, never in the SW cache, never logged; rendered escaped, after a date check.
+- **Needs**: ezone-staffing #138 and E-Zone-Dashboard #405. Safe before them: the card then says «לא הוזן».
+- **Docs**: `docs/simulation-family-collapse.md`, guide §14, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
+- **Tests**: 522 → 524 (`crm-view` +2). SW v48 → v49.
+
 ### Fixed — «חיסכון צפוי מסיומי עבודה» names every finishing worker, with the end date (November 16, 2026)
 
 - **Why**: Sandra, 16 Nov 2026, on the live card — «כתוב 2 עובדים אבל יש רק שם של 1, צריך גם נתון מתי הסיום עבודה

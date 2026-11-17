@@ -14,6 +14,17 @@
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 
+## Managers: clearing a simulation, birth date in the employee card (November 17, 2026)
+
+Sandra, 17 Nov 2026. Details: `docs/simulation-family-collapse.md` in ezone-managers.
+
+- **Clearing a simulation**: «✕ ניקוי» beside a simulated worker; «🧹 ניקוי כל השדות» above the table, under it and in
+  the result card. Still page memory only.
+- **«תאריך לידה»** in «כרטיס עובד/ת» → «פרטים»: from staffing's worker card → `getHouseWorkerCostsForManagers`
+  (staffing #138) → Dashboard `houseStaffCost` (Dashboard #405) → `worker.birthDate`. The one field of staffing's
+  contract data that leaves it. The worker's own house manager and the admins only.
+- No new endpoint, env var or secret. Tests 522 → 524. SW v49.
+
 ## Managers: committees for information, operational issues, collapsible cards, budget simulation, family calls (November 16, 2026)
 
 Sandra, 16 Nov 2026. Details: `docs/simulation-family-collapse.md` in ezone-managers.

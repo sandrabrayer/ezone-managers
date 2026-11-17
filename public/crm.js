@@ -29,6 +29,11 @@
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
     return m ? (parseInt(m[3], 10) + '/' + parseInt(m[2], 10) + '/' + m[1].slice(2)) : '';
   }
+  /* A birth date keeps its full year (1/5/1990) — two digits would be ambiguous. */
+  function fmtDateFull(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    return m ? (parseInt(m[3], 10) + '/' + parseInt(m[2], 10) + '/' + m[1]) : '';
+  }
   function ils(n) {
     var v = Math.round(Number(n) || 0);
     // LRM keeps a minus sign on the number's left in an RTL line.
@@ -366,11 +371,22 @@
       var mo = (Number(d.today.slice(0, 4)) - Number(s.startDate.slice(0, 4))) * 12 + Number(d.today.slice(5, 7)) - Number(s.startDate.slice(5, 7));
       seniority = mo >= 12 ? Math.floor(mo / 12) + ' שנים' + (mo % 12 ? ' ו-' + (mo % 12) + ' חודשים' : '') : mo >= 0 ? mo + ' חודשים' : '';
     }
+    // «תאריך לידה» (17 Nov 2026, Sandra: «תוסיף תאריכי לידה בפרטי העובד, עכשיו בסטאפינג מוסיפים
+    // אז צריך שזה ישאב משם נתונים»): from the staffing list the card already loads for «עלות»
+    // (houseStaffCost → worker.birthDate). A real past date only; no row when the list is unreadable.
+    var born = null;
+    if (staffCost && staffCost.loading) born = ['תאריך לידה', 'טוען…'];
+    else if (staffCost && staffCost.available) {
+      var bw = (staffCost.workers || []).filter(function (x) { return x && x.name && norm(x.name) === norm(name); })[0];
+      var bd = bw && ISO_RE.test(String(bw.birthDate || '')) && (!d.today || bw.birthDate <= d.today) ? bw.birthDate : '';
+      born = ['תאריך לידה', bd ? fmtDateFull(bd) : 'לא הוזן באפליקציית כוח האדם'];
+    }
     var details = fieldsHtml([
       ['תפקיד', s.role || (s.kind === 'therapist' ? 'מטפל/ת' : 'מדריך/ה')],
       ['טלפון', tel ? '<a class="wk-tel" href="' + esc(tel) + '">📞 ' + esc(s.phone) + '</a>' : '—', !!tel],
       ['תחילת עבודה', s.startDate ? fmtDate(s.startDate) : 'אין תאריך במערכת'],
       seniority ? ['ותק', seniority] : null,
+      born,
       ['זמינות', s.onLeave ? 'בחופשה' : 'פעיל/ה'],
       s.kind === 'therapist' && (s.workdays || []).length ? ['ימי עבודה', s.workdays.map(function (x) { return WEEKDAYS[x]; }).filter(Boolean).join(', ')] : null
     ]);
@@ -552,7 +568,14 @@
       '<option value="end"' + (w.simKind === 'end' ? ' selected' : '') + '>סיום העסקה</option>' +
       '<option value="cost"' + (w.simKind === 'cost' ? ' selected' : '') + '>שינוי שכר</option></select>' +
       (w.simKind === 'cost' ? '<input class="sim-amount" type="number" inputmode="numeric" min="0" max="' + SIM_MAX + '" step="100" data-sim-amount="' + name +
-        '" value="' + (w.simAmount === null || w.simAmount === undefined ? '' : esc(w.simAmount)) + '" placeholder="עלות חודשית חדשה ₪" aria-label="' + esc('עלות חודשית חדשה — ' + w.name) + '">' : '') + '</div>';
+        '" value="' + (w.simAmount === null || w.simAmount === undefined ? '' : esc(w.simAmount)) + '" placeholder="עלות חודשית חדשה ₪" aria-label="' + esc('עלות חודשית חדשה — ' + w.name) + '">' : '') +
+      // «ניקוי» (17 Nov 2026, Sandra: «תעשה אפשרות לנקות שדות אחרי שעושים סימולציה»): this worker back to the real figure.
+      (w.simKind ? '<button type="button" class="wk-link sim-clear" data-sim-clear="' + name + '" aria-label="' + esc('ניקוי הסימולציה — ' + w.name) + '">✕ ניקוי</button>' : '') + '</div>';
+  }
+  /* The whole simulation back to the real figures — shown wherever a simulation is on. */
+  function simClearAllHtml(count) {
+    return '<div class="sim-bar"><span class="sim-bar-text">🧪 ' + esc(count === 1 ? 'שינוי אחד בסימולציה' : count + ' שינויים בסימולציה') + '</span>' +
+      '<button type="button" class="wk-btn ghost sim-clear-all" data-sim-reset>🧹 ניקוי כל השדות</button></div>';
   }
 
   /* st = { staff: houseStaffCost.staff | {loading}, nextStaff: next month's houseStaffCost.staff | null,
@@ -603,13 +626,15 @@
             '<div class="budget-kpi"><b>' + esc(budget ? ils(Math.abs(budget - simNow.total)) : '—') + '</b><span>' + esc(budget && simNow.total > budget ? 'עדיין חריגה' : 'נשאר') + '</span></div>' +
             (simNext ? '<div class="budget-kpi ' + nst.cls + '"><b>' + esc(ils(simNext.total)) + '</b><span>' + esc(monthHe(next.month) + ' בסימולציה' + (nst.pct === null ? '' : ' · ' + nst.pct + '% · ' + nst.text)) + '</span></div>' : '') +
           '</div>' + barHtml(simNow.total, budget) +
-          '<div class="crm-actions"><button type="button" class="wk-btn ghost" data-sim-reset>איפוס הסימולציה</button></div></div>';
+          '<div class="crm-actions"><button type="button" class="wk-btn ghost sim-clear-all" data-sim-reset>🧹 ניקוי כל השדות</button></div></div>';
       }
 
       var workers = simNow.workers;
       var simTotal = simNow.total;
       h += '<div class="card work-card wk-budget-workers" data-default-open><div class="card-title">העובדים ועלות השכר (' + workers.filter(function (w) { return w.name; }).length + ')</div>' +
-        '<div class="wk-note">רשימה מעודכנת מאפליקציית כוח האדם. נראית רק לך, לסנדרה ולרון. <b>סימולציה:</b> בחרו ליד עובד/ת «סיום העסקה» או «שינוי שכר» (ואז עלות חודשית חדשה) — הסכום מתחלף והסה״כ למטה מתעדכן. לא נשמר.</div>' +
+        '<div class="wk-note">רשימה מעודכנת מאפליקציית כוח האדם. נראית רק לך, לסנדרה ולרון. <b>סימולציה:</b> בחרו ליד עובד/ת «סיום העסקה» או «שינוי שכר» (ואז עלות חודשית חדשה) — הסכום מתחלף והסה״כ למטה מתעדכן. לא נשמר. «✕ ניקוי» ליד עובד/ת מחזיר את הנתון שלו/ה, ו«ניקוי כל השדות» מנקה את כל הסימולציה.</div>' +
+        // While a simulation is on: «ניקוי כל השדות» above the table and under it — one tap, from wherever you are.
+        (workers.length && simNow.active ? simClearAllHtml(simNow.count) : '') +
         (workers.length ? '<div class="tbl-wrap"><table class="crm-tbl sim-tbl stack-tbl"><thead><tr><th>עובד/ת</th><th>תפקיד</th><th>עלות החודש</th>' +
           (next ? '<th>' + esc('צפי ' + monthHe(next.month)) + '</th>' : '') + '<th>% מהבית</th><th>מקור</th><th>סימולציה</th></tr></thead><tbody>' +
           workers.map(function (w) {
@@ -631,7 +656,8 @@
           }).join('') + '</tbody><tfoot><tr>' + td('', 'סה״כ' + (simNow.active ? ' בסימולציה' : '')) + '<td></td>' + td('עלות החודש',
           (simNow.active && simNow.delta ? '<s class="sim-old">' + esc(ils(total)) + '</s> <b class="sim-new">' + esc(ils(simTotal)) + '</b>' : esc(ils(total)))) +
           (next ? td('צפי ' + monthHe(next.month), simNow.active && simNext.delta ? '<s class="sim-old">' + esc(ils(nextTotal)) + '</s> <b class="sim-new">' + esc(ils(simNext.total)) + '</b>' : esc(ils(nextTotal))) : '') +
-          td('% מהבית', '100%') + '<td></td>' + (simNow.active ? td('שינוי', esc(signedIls(simNow.delta))) : '<td></td>') + '</tr></tfoot></table></div>'
+          td('% מהבית', '100%') + '<td></td>' + (simNow.active ? td('שינוי', esc(signedIls(simNow.delta))) : '<td></td>') + '</tr></tfoot></table></div>' +
+          (simNow.active ? simClearAllHtml(simNow.count) : '')
           : '<div class="wk-empty">אין עובדים עם עלות בחודש הזה</div>') + '</div>';
 
       var lines = (s.budgetLines || []).filter(function (l) { return l && (l.budget || l.cost); });
