@@ -3,6 +3,24 @@
 
 ## Unreleased
 
+### Added — simulation: «הפחתת סכום אחר», an amount that comes straight off the total (November 17, 2026)
+
+- **Why**: Sandra, 17 Nov 2026 — «באופציית הסימולציה תעשה שאפשר לרשום סכום אחר וזה מוריד ישירות מהעלות הכוללת ושאחר כך
+  אפשר לנקות את השדה ולחזור אחורה». The list can show a low figure for a worker, for example after a leave month,
+  and «סיום העסקה» then takes off only that figure.
+- **What**: a fourth option beside every named worker in «תקציב כוח אדם» → «העובדים ועלות השכר»: «הפחתת סכום אחר»,
+  with a field «סכום להפחתה ₪».
+  - The amount typed comes off the total as it is. It is not limited by the figure the list shows for the worker.
+  - The worker's figure stays in the row and the amount is shown beside it. The total under the table, next month's
+    forecast, the «🧪 סימולציה» card and the quarter column follow.
+  - Emptying the field puts the real figures back and leaves the field for another amount. «✕ ניקוי» and
+    «🧹 ניקוי כל השדות» work as for the other options.
+- **Unchanged**: «סיום העסקה» and «שינוי שכר». The simulation lives in the page's memory only: nothing is saved or sent.
+- **Security**: no request, endpoint, env var or stored value. The amount is a whole number from 0 to 1,000,000; the
+  worker must be on the list on screen; the name is escaped in every attribute.
+- **Docs**: `docs/simulation-family-collapse.md` §4, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
+- **Tests**: 524 → 525 (`crm-view` +1). SW v49 → v50.
+
 ### Added — clearing a simulation; the birth date in the employee card (November 17, 2026)
 
 - **Why**: Sandra, 17 Nov 2026 — «תעשה אפשרות לנקות שדות אחרי שעושים סימולציה. תוסיף תאריכי לידה בפרטי העובד, עכשיו

@@ -2358,6 +2358,8 @@ body.drawer-on { overflow: hidden; }
 .sim-kind, .sim-amount { font: inherit; font-size: 13.5px; padding: 5px 8px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: #FFFFFF; color: var(--text); }
 .sim-amount { width: 100%; box-sizing: border-box; }
 .sim-kind { width: 100%; box-sizing: border-box; }
+.sim-hint { font-size: 12px; color: var(--text-mute); line-height: 1.3; }
+.sim-deduct { white-space: nowrap; }
 .sim-kind:focus, .sim-amount:focus { outline: 2px solid color-mix(in srgb, var(--c-green) 45%, transparent); outline-offset: 1px; }
 .sim-old { color: var(--text-dim); font-weight: 400; }
 .sim-new { color: #5B21B6; font-weight: 800; }

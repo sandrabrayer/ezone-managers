@@ -570,6 +570,66 @@ test('collapsible cards: a stable key per card, and which cards open first', () 
   assert.match(css, /@media print \{ \.card\.is-collapsed > \* \{ display: revert !important; \}/, 'a printed page is never missing a closed card');
 });
 
+test('simulation «הפחתת סכום אחר»: the typed amount comes straight off the total, whatever the list shows for the worker; an empty field puts it back', () => {
+  // more than the worker's listed figure: the whole amount still comes off the total
+  const r = C.simulateStaff(STAFF, { 'דנה': { kind: 'deduct', amount: 35000 } });
+  assert.deepEqual([r.active, r.count, r.delta, r.total], [true, 1, -35000, 327749 - 35000]);
+  const d = r.workers[2];
+  assert.deepEqual([d.name, d.cost, d.simKind, d.simAmount, d.simDeduct, d.simDelta, d.simCost], ['דנה', 13945, 'deduct', 35000, 35000, -35000, 0]);
+  // less than the listed figure
+  const part = C.simulateStaff(STAFF, { 'אורן': { kind: 'deduct', amount: 6000 } });
+  assert.deepEqual([part.total, part.workers[0].simCost, part.workers[0].simDelta], [327749 - 6000, 30167, -6000]);
+  // the field emptied → the real figures are back; the option stays chosen so another amount can be typed
+  for (const empty of [null, '', undefined]) {
+    const back = C.simulateStaff(STAFF, { 'דנה': { kind: 'deduct', amount: empty } });
+    assert.deepEqual([back.delta, back.total, back.workers[2].simKind, back.workers[2].simCost, back.workers[2].simDeduct], [0, 327749, 'deduct', 13945, 0]);
+  }
+  // only a whole amount from 0 to SIM_MAX; the total never goes under 0
+  for (const bad of [-5, 'abc', NaN]) assert.equal(C.simulateStaff(STAFF, { 'דנה': { kind: 'deduct', amount: bad } }).delta, 0);
+  assert.equal(C.simulateStaff(STAFF, { 'דנה': { kind: 'deduct', amount: 9e12 } }).delta, -C.SIM_MAX, 'capped');
+  assert.equal(C.simulateStaff(STAFF, { 'דנה': { kind: 'deduct', amount: 1234.6 } }).delta, -1235);
+  assert.equal(C.simulateStaff({ total: 100, workers: [{ name: 'a', cost: 100 }] }, { a: { kind: 'deduct', amount: 500 } }).total, 0);
+  // together with the other options
+  const mix = C.simulateStaff(STAFF, { 'אורן': { kind: 'cost', amount: 30000 }, 'נועם': { kind: 'end' }, 'דנה': { kind: 'deduct', amount: 35000 } });
+  assert.deepEqual([mix.count, mix.delta], [3, -6167 - 16871 - 35000]);
+
+  const h = C.budgetHtml({ staff: STAFF, nextStaff: NEXT, sim: { 'דנה': { kind: 'deduct', amount: 35000 } }, nowYM: '2026-11' });
+  // the option, the field with what was typed, the hint
+  assert.match(h, /<option value="deduct" selected>הפחתת סכום אחר<\/option><\/select><input class="sim-amount"[^>]*data-sim-amount="דנה" value="35000" placeholder="סכום להפחתה ₪" aria-label="סכום להפחתה מהעלות הכוללת — דנה">/);
+  assert.match(h, /<span class="sim-hint">יורד ישירות מהסה״כ\. שדה ריק מחזיר את הנתון\.<\/span>/);
+  // the row: the worker's figure stays, the amount off the total is beside it; the chip says what it is
+  assert.match(h, /data-emp-open="דנה"[\s\S]*?סימולציה: הפחתה[\s\S]*?<td data-label="עלות החודש">13,945 ₪ <b class="sim-new sim-deduct">‎-35,000 ₪<\/b><\/td><td data-label="צפי דצמבר 2026">13,945 ₪ <b class="sim-new sim-deduct">‎-35,000 ₪<\/b>/);
+  // the total under the table and the result card: this month and next month
+  assert.match(h, /סה״כ בסימולציה<\/td><td><\/td><td data-label="עלות החודש"><s class="sim-old">327,749 ₪<\/s> <b class="sim-new">292,749 ₪<\/b><\/td><td data-label="צפי דצמבר 2026"><s class="sim-old">302,067 ₪<\/s> <b class="sim-new">267,067 ₪<\/b>/);
+  assert.match(h, /<b>292,749 ₪<\/b><span>עלות חודשית בסימולציה<\/span>/);
+  assert.match(h, /<b>‎-35,000 ₪<\/b><span>חיסכון לחודש<\/span>/);
+  // clearing is offered like for every simulated row
+  assert.match(h, /data-sim-clear="דנה"/);
+  // the field emptied: no struck-through figure anywhere, the field is still there to type in
+  const empty = C.budgetHtml({ staff: STAFF, nextStaff: NEXT, sim: { 'דנה': { kind: 'deduct', amount: null } }, nowYM: '2026-11' });
+  assert.match(empty, /data-sim-amount="דנה" value="" placeholder="סכום להפחתה ₪"/);
+  assert.doesNotMatch(empty, /sim-old|sim-deduct"/);
+  assert.match(empty, /<b>327,749 ₪<\/b><span>עלות חודשית בסימולציה<\/span>/);
+  // an untouched row offers the option, with no field
+  const none = C.budgetHtml({ staff: STAFF, sim: {} });
+  assert.equal((none.match(/<option value="deduct">הפחתת סכום אחר<\/option>/g) || []).length, 4);
+  assert.doesNotMatch(none, /data-sim-amount|sim-hint/);
+  // the name is escaped in the new attributes too
+  const XSS = '<img src=x onerror=alert(1)>';
+  const x = C.budgetHtml({ staff: { available: true, month: '2026-11', total: 5, workers: [{ name: XSS, roles: [], cost: 5, estimated: true }] }, sim: { [XSS]: { kind: 'deduct', amount: 3 } } });
+  assert.doesNotMatch(x, /<img/);
+  assert.match(x, /aria-label="סכום להפחתה מהעלות הכוללת — &lt;img/);
+  // no parentheses in the new Hebrew
+  assert.doesNotMatch(none.slice(none.indexOf('<b>סימולציה:</b>'), none.indexOf('לא נשמר.')), /[()]/);
+
+  // wiring: the option, the amount kept under the option chosen for the worker, the focus on the field
+  const w = fs.readFileSync(path.join(__dirname, '..', 'public', 'work.js'), 'utf8');
+  assert.match(w, /simKind\.value === 'deduct'\) sm\[who\] = \{ kind: 'deduct', amount: null \};/);
+  assert.match(w, /sm\[who\] = \{ kind: sm\[who\] && sm\[who\]\.kind === 'deduct' \? 'deduct' : 'cost', amount: simAmt\.value !== '' && isFinite\(n\) && n >= 0 \?/);
+  assert.match(w, /simKind\.value === 'cost' \|\| simKind\.value === 'deduct'\)/);
+  assert.ok(Number(/ezone-managers-v(\d+)/.exec(fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8'))[1]) >= 50);
+});
+
 test('the simulation never leaves the page: no request carries it, nothing is stored', () => {
   const w = fs.readFileSync(path.join(__dirname, '..', 'public', 'work.js'), 'utf8');
   const posts = w.match(/post\(\{[^}]*\}\)/g) || [];

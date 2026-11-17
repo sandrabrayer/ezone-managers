@@ -46,8 +46,12 @@ Sandra, 16 Nov 2026, after looking at the redesigned app:
 
 ## 4. The simulation in «תקציב כוח אדם»
 
-- Beside every named worker: «ללא שינוי» / «סיום העסקה» / «שינוי שכר». «שינוי שכר» opens a field for the worker's
-  **new monthly cost**.
+- Beside every named worker: «ללא שינוי» / «סיום העסקה» / «שינוי שכר» / «הפחתת סכום אחר». «שינוי שכר» opens a field
+  for the worker's **new monthly cost**.
+- «הפחתת סכום אחר» (17 Nov 2026, Sandra: «אפשר לרשום סכום אחר וזה מוריד ישירות מהעלות הכוללת ושאחר כך אפשר לנקות את
+  השדה ולחזור אחורה») opens a field «סכום להפחתה ₪». The amount comes off the total as typed, also when it is more
+  than the figure the list shows for the worker. The worker's figure stays in the row with the amount beside it.
+  An emptied field puts the real figures back.
 - The simulated figure replaces the worker's figure (the real one stays beside it, struck through).
 - The total under the table follows, for this month and for next month's forecast, with the change in ₪.
 - A «🧪 סימולציה» card shows the simulated monthly cost against the budget, the saving, what is left, and next month.
@@ -60,6 +64,7 @@ Sandra, 16 Nov 2026, after looking at the redesigned app:
 - **A what-if only.** It lives in the page's memory: it is never saved, never sent to the server, and it changes
   nothing in the staffing app. The amounts are for a full month. No bonus figure reads it.
 - Only a worker of the list on screen can be simulated; an amount is a whole number from 0 to 1,000,000.
+- `simState` per worker: `{ kind: 'end' }`, `{ kind: 'cost', amount }` or `{ kind: 'deduct', amount }`.
 - Code: `crm.js` `simulateStaff`, `budgetHtml`, `quarterHtml`; `work.js` `simState`.
 
 ## 5. The people who are leaving — next month, per worker
