@@ -88,6 +88,13 @@ Light look like the newer E-ZONE apps, one colour per tab, «בונוס» last. 
 
 Details and the kept-features checklist: `docs/crm-redesign.md`.
 
+## «פגישות קליטה», 19 Nov 2026
+
+`docs/meeting-reports.md`. A sub-tab after «מטופלים» lists the intake meetings Vered scheduled for the house. The
+manager reports each one there: whether it happened, and if not, why (+ an optional new date for נדחתה); if it did,
+the result. «שלח לקבוצה» sends the link's exact WhatsApp text. The report lands on the same Dashboard lead row as
+`/meeting-report`. `POST /api/work` ops `meetings` / `meetingReport`; the house and the reporter come from the session.
+
 ## Work tabs, 16 Nov 2026
 
 `docs/simulation-family-collapse.md`. The house sub-tabs are now:

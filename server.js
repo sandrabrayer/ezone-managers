@@ -379,7 +379,9 @@ app.get('/api/sheets', requireUser, async (req, res) => {
 
 // ---- work tool: house lists + the managers' logs (Dashboard `managersWork`) ----
 // houseStaffCost (14 Nov 2026): the house's per-worker month cost («תקציב כוח אדם»), Dashboard → staffing.
-const WORK_OPS = new Set(['houseData', 'houseCost', 'houseStaffCost', 'logAdd', 'logUpdate', 'dischargeSet', 'meetingSummaries', 'feedbackDone']);
+// meetings / meetingReport (19 Nov 2026, docs/meeting-reports.md): the intake meetings Vered
+// scheduled and the manager's report on them — the SAME lead row as the /meeting-report link.
+const WORK_OPS = new Set(['houseData', 'houseCost', 'houseStaffCost', 'logAdd', 'logUpdate', 'dischargeSet', 'meetingSummaries', 'feedbackDone', 'meetings', 'meetingReport']);
 // Direct read-only feed from the Coordinators app (22 Oct 2026, docs/coordinators-feed.md):
 // committees (with status + notes) merged into houseData, meeting summaries (Dashboard as the
 // fallback) and «עדכון משמרת» (feed only). OFF — never called — until both variables are set.
@@ -418,7 +420,13 @@ const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // Writes get their own, tighter bucket on top of the shared one.
 const allowWrites = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 });
-const WRITE_OPS = new Set(['logAdd', 'logUpdate', 'dischargeSet', 'feedbackDone']);
+const WRITE_OPS = new Set(['logAdd', 'logUpdate', 'dischargeSet', 'feedbackDone', 'meetingReport']);
+// Intake-meeting report allowlists (docs/meeting-reports.md) — the Dashboard re-validates all of it.
+const MEETING_OUTCOMES = new Set(['advancing', 'undecided', 'not_fit', 'no_show']);
+const MEETING_NOTE_MAX = 5000;       // = MANAGER_REPORT_MAX_CHARS on the Dashboard
+const MEETING_SHORT_MAX = 100;       // companion / reason free text
+const SUBMISSION_ID_RE = /^sub-[A-Za-z0-9-]{8,64}$/;
+const CONTROL_RE = /[\u0000-\u001f\u007f]/;
 const DISCHARGE_MODES = new Set(['set', 'clear', 'none']);
 // A write may wait up to 5 s for the Dashboard's script lock on top of its
 // reads, so it gets a longer budget than a read (docs/expected-discharge.md).
@@ -490,6 +498,24 @@ app.post('/api/work', requireUser, async (req, res) => {
     if (!employee || employee.length > 80) return res.status(400).json({ error: 'bad_request' });
     if (!ISO_DATE_RE.test(String(b.doneAt || ''))) return res.status(400).json({ error: 'bad_date' });
     Object.assign(body, { employee, doneAt: String(b.doneAt) });
+  }
+  if (op === 'meetingReport') {
+    // Shape check only, never forwarded when wrong. The Dashboard decides the rest: the lead is in
+    // THIS house's meetings (else lead_not_found), the reason rules, the reporter (= this session).
+    const str = (v) => (typeof v === 'string' ? v : v == null ? '' : null);
+    const leadId = str(b.leadId), outcome = str(b.outcome), reason = str(b.notHeldReason);
+    const proposed = str(b.proposedDate), companion = str(b.companion), note = str(b.note);
+    if ([leadId, outcome, reason, proposed, companion, note].some((v) => v === null)) return res.status(400).json({ error: 'bad_request' });
+    if (!leadId.trim() || leadId.length > 100 || CONTROL_RE.test(leadId)) return res.status(400).json({ error: 'bad_lead' });
+    if (!MEETING_OUTCOMES.has(outcome)) return res.status(400).json({ error: 'bad_outcome' });
+    if (reason.length > MEETING_SHORT_MAX) return res.status(400).json({ error: 'bad_reason' });
+    if (outcome !== 'no_show' && (reason || proposed)) return res.status(400).json({ error: 'bad_reason' });
+    if (outcome === 'no_show' && !reason.trim()) return res.status(400).json({ error: 'bad_reason' });
+    if (proposed && !ISO_DATE_RE.test(proposed)) return res.status(400).json({ error: 'bad_proposed_date' });
+    if (companion.length > MEETING_SHORT_MAX) return res.status(400).json({ error: 'bad_companion' });
+    if (note.length > MEETING_NOTE_MAX) return res.status(400).json({ error: 'bad_note' });
+    Object.assign(body, { leadId: leadId.trim(), outcome, notHeldReason: reason.trim(), proposedDate: proposed, companion: companion.trim(), note });
+    if (typeof b.submissionId === 'string' && SUBMISSION_ID_RE.test(b.submissionId)) body.submissionId = b.submissionId;
   }
   if (op === 'logAdd' || op === 'logUpdate') {
     if (!WORK_LOGS.has(String(b.log || ''))) return res.status(400).json({ error: 'unknown_log' });

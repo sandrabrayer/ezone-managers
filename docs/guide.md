@@ -23,6 +23,8 @@ a table, and print / PDF.
 12. «שיחות עם משפחה»: the contact person from the Dashboard, documenting a call (16 Nov 2026).
 13. Headers with an arrow: opening and closing a card (16 Nov 2026).
 14. The simulation and next month's forecast per worker (16 Nov 2026).
+15. «פגישות קליטה» — reporting an intake meeting: held → result; not held → why (+ a proposed date for נדחתה);
+    «שלח לקבוצה» (19 Nov 2026, `docs/meeting-reports.md`).
 
 Section 6 is «שיחות עם עובדים, סוגיות תפעוליות ותזכורות» since 16 Nov 2026 («אירועים חריגים» was renamed).
 Section 7 says committees are information only: nothing is recorded here.

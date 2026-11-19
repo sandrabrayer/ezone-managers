@@ -3,6 +3,28 @@
 
 ## Unreleased
 
+### Added — «פגישות קליטה»: intake meetings + reporting them in the app (November 19, 2026)
+
+- **Why**: Sandra, 19 Nov 2026 — a manager reported a meeting through the link, not the app. The meetings Vered
+  schedules must appear in the app (whatever WhatsApp message the manager got), and the manager reports there whether
+  each happened, why not (לא הגיעו / נדחתה / בוטלה…) or the result. The report goes to WhatsApp and to the Dashboard
+  as today.
+- **What**: a new house sub-tab «🤝 פגישות קליטה» after «מטופלים» (`public/meetings.js`):
+  - «ממתינות לדיווח» (red count on the tab), «קרובות», and «דווחו» (closed).
+  - A report form: «האם הפגישה התקיימה?» → כן (result + who came) / לא (reason, optional proposed date for נדחתה),
+    plus פירוט (5,000 chars).
+  - «📤 שלח לקבוצה» with the link's exact WhatsApp text.
+  - A «הבית היום» card with this week's meetings and the waiting count.
+  - A guide section (15).
+- **Proxy**: `/api/work` ops `meetings` (read) and `meetingReport` (write bucket, house cache dropped). The house and the
+  reporter come from the session. Shape checks are refused with 400 and never forwarded. «לא מחובר» shows until the
+  Dashboard has the ops (E-Zone-Dashboard #410).
+- **Security**: no new env var or secret; the house scope is enforced on the server and again on the Dashboard.
+  Every feed value is escaped, and nothing is stored on the device.
+- **Docs**: `docs/meeting-reports.md`, `docs/guide.md`, README, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
+- **Tests**: 525 → 539 (`meetings` +14; tab order, collapse rule, guide sections, tab colour updated on purpose).
+  SW v50 → v51.
+
 ### Added — simulation: «הפחתת סכום אחר», an amount that comes straight off the total (November 17, 2026)
 
 - **Why**: Sandra, 17 Nov 2026 — «באופציית הסימולציה תעשה שאפשר לרשום סכום אחר וזה מוריד ישירות מהעלות הכוללת ושאחר כך

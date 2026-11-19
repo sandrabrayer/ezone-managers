@@ -178,6 +178,7 @@
             <li><a href="#g-family">שיחות עם משפחה</a></li>
             <li><a href="#g-collapse">כותרות עם חץ — פתיחה וסגירה</a></li>
             <li><a href="#g-sim">סימולציה וצפי לחודש הבא</a></li>
+            <li><a href="#g-meetings">פגישות קליטה — דיווח</a></li>
           </ol>
         </nav>
 
@@ -187,6 +188,7 @@
           <ul>
             <li><b>הבית היום</b> — המסך הראשון. מה קורה בבית היום.</li>
             <li><b>מטופלים</b> — מי בבית, מי המטפל/ת, תאריך כניסה, שחרור משוער והוועדה הבאה. «כרטיס מטופל/ת» פותח את כל הפרטים בלשוניות.</li>
+            <li><b>פגישות קליטה</b> — הפגישות שהמשרד תיאם לבית, ודיווח על כל פגישה: התקיימה או לא, ולמה. ראו סעיף 15.</li>
             <li><b>שיחות עם משפחה</b> — איש הקשר של כל מטופל/ת (מהדשבורד) ותיעוד כל שיחה.</li>
             <li><b>צוות ומשמרות</b> ו<b>מטפלים</b> — מאפליקציית הרכזים, לקריאה בלבד. «כרטיס» ליד כל עובד/ת.</li>
             <li><b>תקציב כוח אדם</b> — עלות החודש מול התקציב, חיסכון מסיומי עבודה, העובדים ועלות השכר של כל אחד, סימולציה והמבט הרבעוני.</li>
@@ -361,6 +363,21 @@
             <li>עובד/ת שמסיים/ת ולא מסומן/ת «מסיים/ת» — צריך לרשום סיום העסקה עם תאריך באפליקציית כוח האדם. מאותו רגע העלות יורדת כאן לבד, גם במבט הרבעוני.</li>
           </ul>
         </section>
+
+        <section class="card guide-sec" id="g-meetings">
+          <h2>15. פגישות קליטה — דיווח</h2>
+          <ul>
+            <li><b>איפה</b> — לשונית «🤝 פגישות קליטה», אחרי «מטופלים». המספר האדום = פגישות שעברו ועוד לא דווחו. ב«הבית היום» מופיעות גם פגישות השבוע.</li>
+            <li><b>מה רואים</b> — כל פגישה שהמשרד תיאם לבית (או איתך), 30 יום אחורה ושבועיים קדימה: שם, יום ושעה, ו«רקע מהמשרד» מתחת לחץ.</li>
+            <li><b>איך מדווחים</b> — «דיווח על הפגישה» → «האם הפגישה התקיימה?».
+              <b>כן</b>: התוצאה (מתקדם לכניסה / מתלבט / לא מתאים), מי הגיע/ה ופירוט.
+              <b>לא</b>: למה (לא הגיעו / נדחתה / בוטלה ע"י הפונה או המשפחה / בוטלה על ידינו / אחר). ב«נדחתה» אפשר לרשום מועד חדש מוצע.</li>
+            <li><b>אחרי השמירה</b> — הדיווח נכנס לדשבורד אצל ורד, בדיוק כמו בלינק. «📤 שלח לקבוצה» פותח וואטסאפ עם אותה הודעה כמו היום.</li>
+            <li>מועד חדש מוצע לא משנה את הפגישה — המשרד קובע את המועד החדש ושולח הודעה.</li>
+            <li><b>טעות?</b> «עריכת דיווח» ושמירה מחדש — הדיווח האחרון קובע.</li>
+            <li>הלינק לדיווח ממשיך לעבוד כרגיל. אם כתוב «לא מחובר» — מדווחים בלינק ופונים לסנדרה.</li>
+          </ul>
+        </section>
       </div>
     </section>
 
@@ -397,6 +414,8 @@
       <nav class="subtabs" data-subtabs role="tablist" aria-label="תפריט הבית">
         <button type="button" class="subtab is-active" data-sub="home" role="tab" aria-selected="true">🏠 הבית היום</button>
         <button type="button" class="subtab" data-sub="patients" role="tab" aria-selected="false">🧑‍🤝‍🧑 מטופלים</button>
+        <!-- «פגישות קליטה» (19 Nov 2026, docs/meeting-reports.md): the intake meetings and their reports (meetings.js). -->
+        <button type="button" class="subtab" data-sub="meetings" role="tab" aria-selected="false">🤝 פגישות קליטה <span class="mt-badge" data-mt-badge hidden></span></button>
         <button type="button" class="subtab" data-sub="familyCalls" role="tab" aria-selected="false">📞 שיחות עם משפחה</button>
         <button type="button" class="subtab" data-sub="team" role="tab" aria-selected="false">👥 צוות ומשמרות</button>
         <button type="button" class="subtab" data-sub="therapists" role="tab" aria-selected="false">🩺 מטפלים</button>
@@ -416,6 +435,8 @@
         <div data-dash-committees></div>
         <!-- Discharge alerts (Task E): from the manager's own expected dates. -->
         <div data-dash-alerts></div>
+        <!-- «פגישות קליטה» this week + waiting for a report (meetings.js homeCardHtml). -->
+        <div data-dash-meetings></div>
         <div data-dash-house><div class="card dash-card"><div class="wk-empty">טוען את נתוני הבית…</div></div></div>
         <div class="card dash-card dash-cost" data-dash-cost>
           <div class="card-title">עלות כוח אדם</div>
@@ -423,6 +444,8 @@
         </div>
       </section>
       <section data-sub-panel="patients" hidden></section>
+      <!-- «פגישות קליטה»: waiting for a report · coming · reported; the report form (meetings.js). -->
+      <section data-sub-panel="meetings" hidden></section>
       <!-- «שיחות עם משפחה» (16 Nov 2026): the contact person from the Dashboard and
            the documented calls, CRM-style (work.js familyPanelHtml). -->
       <section data-sub-panel="familyCalls" hidden></section>
@@ -552,6 +575,7 @@
   <script src="/lib/feedback-due.js"></script>
   <script src="/crm.js"></script>
   <script src="/work.js"></script>
+  <script src="/meetings.js"></script>
   <script src="/app.js"></script>
   <!-- External, not inline: the CSP is script-src 'self' with no
        'unsafe-inline'. -->

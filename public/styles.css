@@ -2102,6 +2102,7 @@ body.is-locked { overflow: hidden; }
   --c-amber: #D97706; --c-green: #059669; --c-blue: #2563EB; --c-violet: #7C3AED;
   --c-teal: #0D9488; --c-coral: #E11D48; --c-pink: #DB2777; --c-indigo: #4F46E5;
   --c-sky: #0284C7; --c-slate: #475569; --c-gold: #CA8A04; --c-plum: #7E1F4F;
+  --c-cyan: #0E7490;
   --ok: #047857; --ok-bg: #D1FAE5; --warn: #B45309; --warn-bg: #FEF3C7;
   --bad: #B91C1C; --bad-bg: #FEE2E2; --wait: #475569; --wait-bg: #E2E8F0;
 }
@@ -2138,6 +2139,7 @@ body { background: var(--bg); }
 .subtab.is-active { background: var(--tab); color: #FFFFFF; border-color: var(--tab); box-shadow: 0 4px 12px color-mix(in srgb, var(--tab) 30%, transparent); }
 .subtab[data-sub="home"]         { --tab: var(--c-plum); }
 .subtab[data-sub="patients"]     { --tab: var(--c-teal); }
+.subtab[data-sub="meetings"]     { --tab: var(--c-cyan); }
 .subtab[data-sub="familyCalls"]  { --tab: var(--c-gold); }
 .subtab[data-sub="team"]         { --tab: var(--c-blue); }
 .subtab[data-sub="therapists"]   { --tab: var(--c-violet); }
@@ -2152,6 +2154,7 @@ body { background: var(--bg); }
 /* Work sections: white cards with a coloured top accent per tab. */
 [data-sub-panel] { --sec: var(--c-plum); }
 [data-sub-panel="patients"]     { --sec: var(--c-teal); }
+[data-sub-panel="meetings"]     { --sec: var(--c-cyan); }
 [data-sub-panel="familyCalls"]  { --sec: var(--c-gold); }
 [data-sub-panel="team"]         { --sec: var(--c-blue); }
 [data-sub-panel="therapists"]   { --sec: var(--c-violet); }
@@ -2412,3 +2415,43 @@ body.drawer-on { overflow: hidden; }
 .sim-bar-text { font-weight: 700; color: #5B21B6; font-size: 14px; }
 .wk-btn.sim-clear-all { border-color: #7C3AED; color: #5B21B6; background: #FFFFFF; font-weight: 700; }
 .wk-btn.sim-clear-all:hover { background: #EDE9FE; }
+
+/* ============================================================
+ * «פגישות קליטה» — intake meetings + the report form (19 Nov 2026,
+ * docs/meeting-reports.md; public/meetings.js). Light theme, RTL, phone first.
+ * ============================================================ */
+.mt-badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-inline-start: 4px; border-radius: 9px;
+  background: var(--bad); color: #FFFFFF; font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; }
+.mt-badge[hidden] { display: none; }
+.mt-intro { margin: 0 0 10px; }
+.mt-list > li.mt-row { display: block; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.mt-list > li.mt-row:last-child { border-bottom: 0; }
+.mt-line { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.mt-pending .mt-line .wk-name::before { content: '⏳ '; }
+.mt-office { margin-top: 6px; font-size: 13px; }
+.mt-office > summary { cursor: pointer; color: color-mix(in srgb, var(--sec) 80%, #000000); }
+.mt-office-text, .mt-note { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); margin-top: 4px; }
+.mt-report { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.mt-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.mt-form { margin-top: 8px; padding: 10px; border: 1px solid color-mix(in srgb, var(--sec) 35%, #FFFFFF); border-radius: 10px;
+  background: color-mix(in srgb, var(--sec) 5%, #FFFFFF); }
+.mt-q { font-weight: 700; font-size: 14px; margin: 8px 0 6px; color: color-mix(in srgb, var(--sec) 80%, #000000); }
+.mt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mt-chip { font: inherit; font-size: 14px; min-height: 40px; padding: 6px 12px; border-radius: 20px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--sec) 45%, #FFFFFF); background: #FFFFFF; color: color-mix(in srgb, var(--sec) 85%, #000000); }
+.mt-chip.is-on { background: var(--sec); border-color: var(--sec); color: #FFFFFF; font-weight: 700; }
+.mt-label { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 13px; color: var(--text-mute); }
+.mt-input { font: inherit; font-size: 16px; width: 100%; box-sizing: border-box; padding: 10px; margin-top: 6px;
+  border: 1px solid color-mix(in srgb, var(--sec) 55%, transparent); border-radius: 8px; background: #FFFFFF; color: var(--text); }
+.mt-textarea { min-height: 110px; resize: vertical; line-height: 1.6; overflow-wrap: anywhere; }
+.mt-count { font-size: 12px; color: var(--text-mute); text-align: start; margin-top: 2px; }
+.mt-count.warn { color: var(--warn); font-weight: 700; }
+.mt-error { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: var(--bad-bg); color: var(--bad); font-size: 14px; }
+.mt-notice { padding: 10px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-weight: 600; }
+.mt-done { margin-top: 8px; padding: 10px; border-radius: 10px; background: var(--ok-bg); }
+.mt-done-title { font-weight: 700; color: var(--ok); margin-bottom: 4px; }
+.wk-btn.mt-wa { background: #0F7A41; color: #FFFFFF; text-decoration: none; display: inline-flex; align-items: center; }
+.mt-fold > summary { list-style: none; cursor: pointer; }
+.mt-fold > summary::-webkit-details-marker { display: none; }
+.mt-home .mt-alert { display: block; width: 100%; text-align: start; font: inherit; font-weight: 700; margin: 4px 0 8px; padding: 8px 10px;
+  border: 0; border-radius: 8px; background: var(--warn-bg); color: var(--warn); cursor: pointer; }
