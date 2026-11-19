@@ -14,7 +14,7 @@ const html = read('public/index.html');
 const guide = /<section class="panel" id="panel-guide"[\s\S]*?<\/section>\s*<\/div>\s*<\/section>/.exec(html)[0];
 
 const SECTIONS = ['g-tabs', 'g-today', 'g-bonus', 'g-patients', 'g-team', 'g-logs', 'g-committees', 'g-summaries', 'g-feedback', 'g-access', 'g-budget',
-  'g-family', 'g-collapse', 'g-sim'];   // 16 Nov 2026
+  'g-family', 'g-collapse', 'g-sim', 'g-meetings'];   // 16 Nov 2026; «פגישות קליטה» 19 Nov 2026
 
 test('guide: a «מדריך» tab after the houses (opened from the top-bar button, 14 Nov 2026); the page is RTL Hebrew', () => {
   const nav = /<nav class="tabs"[\s\S]*?<\/nav>/.exec(html)[0];

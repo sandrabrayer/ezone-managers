@@ -67,7 +67,7 @@ test('the work panels no longer lighten the muted text (the old dark-theme overr
 });
 
 test('every tab colour: white text on the active tab, and a dark title shade on white — both AA', () => {
-  const names = ['amber', 'green', 'blue', 'violet', 'teal', 'coral', 'pink', 'indigo', 'sky', 'slate', 'plum'];
+  const names = ['amber', 'green', 'blue', 'violet', 'teal', 'coral', 'pink', 'indigo', 'sky', 'slate', 'plum', 'cyan'];
   for (const n of names) {
     const c = lastToken('c-' + n);
     // Active tab: white text on the solid colour — large bold text (>= 3:1) at minimum.
@@ -77,7 +77,7 @@ test('every tab colour: white text on the active tab, and a dark title shade on 
     assert.ok(ratio(title, WHITE) >= 4.5, `--c-${n} title on white: ${ratio(title, WHITE).toFixed(2)}`);
   }
   // Each house sub-tab has its own colour.
-  for (const s of ['home', 'patients', 'team', 'therapists', 'budget', 'committees', 'staffTalks', 'events', 'summaries', 'shiftUpdates', 'bonus']) {
+  for (const s of ['home', 'patients', 'meetings', 'team', 'therapists', 'budget', 'committees', 'staffTalks', 'events', 'summaries', 'shiftUpdates', 'bonus']) {
     assert.match(css, new RegExp('\\.subtab\\[data-sub="' + s + '"\\]\\s*\\{ --tab: var\\(--c-\\w+\\); \\}'), s);
   }
 });

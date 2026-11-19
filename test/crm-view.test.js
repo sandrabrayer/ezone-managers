@@ -563,7 +563,8 @@ test('collapsible cards: a stable key per card, and which cards open first', () 
   // wiring: every render path re-applies it; nothing is stored on the device; the bonus tab is left alone
   const w = fs.readFileSync(path.join(__dirname, '..', 'public', 'work.js'), 'utf8');
   assert.ok((w.match(/applyCollapse\(panel, key\)/g) || []).length >= 4);
-  assert.match(w, /NO_COLLAPSE_SUBS = \{ bonus: 1, summaries: 1, shiftUpdates: 1 \}/);
+  // «פגישות קליטה» (19 Nov 2026) draws its own sections — never collapsed by work.js.
+  assert.match(w, /NO_COLLAPSE_SUBS = \{ bonus: 1, summaries: 1, shiftUpdates: 1, meetings: 1 \}/);
   assert.doesNotMatch(w, /localStorage|sessionStorage|indexedDB/);
   const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
   assert.match(css, /\.card\.is-collapsed > :not\(\.card-title\)/);

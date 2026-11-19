@@ -54,7 +54,8 @@ test('house page: «הבית היום» is the first, active sub-tab; «בונו
   assert.deepEqual(subs[0], ['home', 'הבית היום', true]);
   assert.deepEqual(subs[subs.length - 1], ['bonus', 'בונוס', false]);
   // 16 Nov 2026: «שיחות עם משפחה» right after «מטופלים»; «אירועים חריגים» is now «סוגיות תפעוליות למעקב».
-  assert.deepEqual(subs.map((s) => s[0]), ['home', 'patients', 'familyCalls', 'team', 'therapists', 'budget', 'committees', 'staffTalks', 'events', 'summaries', 'shiftUpdates', 'bonus']);
+  // 19 Nov 2026: «פגישות קליטה» right after «מטופלים» (docs/meeting-reports.md).
+  assert.deepEqual(subs.map((s) => s[0]), ['home', 'patients', 'meetings', 'familyCalls', 'team', 'therapists', 'budget', 'committees', 'staffTalks', 'events', 'summaries', 'shiftUpdates', 'bonus']);
   assert.equal(subs.filter((s) => s[0] === 'familyCalls')[0][1], 'שיחות עם משפחה');
   assert.equal(subs.filter((s) => s[0] === 'events')[0][1], 'סוגיות תפעוליות למעקב');
   assert.doesNotMatch(tpl, /אירועים חריגים/);

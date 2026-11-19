@@ -885,7 +885,8 @@
    * opened or closed is remembered while the page is open, per house and card.
    * collapseKeyOf: the card's own class (wk-patients, dash-today …), else its
    * title without the numbers — stable across redraws. */
-  var NO_COLLAPSE_SUBS = { bonus: 1, summaries: 1, shiftUpdates: 1 };
+  // «פגישות קליטה» (meetings.js) draws and keeps its own sections — never collapsed here.
+  var NO_COLLAPSE_SUBS = { bonus: 1, summaries: 1, shiftUpdates: 1, meetings: 1 };
   var GENERIC_CARD_CLASSES = { card: 1, 'work-card': 1, 'dash-card': 1, 'is-collapsible': 1, 'is-collapsed': 1 };
   function collapseKeyOf(className, titleText) {
     var own = String(className || '').split(/\s+/).filter(function (c) { return c && !GENERIC_CARD_CLASSES[c] && /^[a-zA-Z][\w-]{1,40}$/.test(c); })[0];
@@ -1156,7 +1157,7 @@
         var busy = !!card.querySelector('[data-wk-dirty="1"], [data-dis-form]:not([hidden]), [data-thread-form]:not([hidden])');
         var open = busy || collapseDefaultOpen({
           stored: mem[ck], total: cards.length, index: index, anyMarked: anyMarked, marked: card.hasAttribute('data-default-open'),
-          hasAlerts: !!card.querySelector('.cm-alert, .dis-alert, [data-alert-edit]')
+          hasAlerts: !!card.querySelector('.cm-alert, .dis-alert, [data-alert-edit], .mt-alert')
         });
         card.setAttribute('data-ck', ck);
         card.classList.add('is-collapsible');
@@ -1388,6 +1389,8 @@
     panel.querySelectorAll('[data-sub-panel]').forEach(function (s) { s.hidden = s.getAttribute('data-sub-panel') !== sub; });
     if (sub === 'summaries') loadSummaries(panel, panel.getAttribute('data-house-key'));
     if (sub === 'shiftUpdates') loadShiftUpdates(panel, panel.getAttribute('data-house-key'));
+    // «פגישות קליטה» (19 Nov 2026, docs/meeting-reports.md): fresh when opened.
+    if (sub === 'meetings' && root.Meetings) root.Meetings.onHouse(panel, panel.getAttribute('data-house-key'), true);
   }
 
   /* «עדכון משמרת»: per house + week, kept 2 minutes in memory only. */
@@ -1944,11 +1947,13 @@
     refresh(panel, key, false);
     loadCost(panel, key);
     loadBudget(panel, key);
+    // «פגישות קליטה»: the home card + the tab badge (meetings.js; absent → nothing).
+    if (root.Meetings) root.Meetings.onHouse(panel, key, false);
   }
 
   WorkView.saveDischarge = saveDischarge;   // tests drive it with injected post / refresh / cache
   WorkView.saveFeedback = saveFeedback;
   root.WorkView = WorkView;
-  root.Work = { onHouseRendered: onHouseRendered, showSub: showSub, mountAdmin: mountAdmin, renderTodayAll: renderTodayAll, _cache: cache };
+  root.Work = { onHouseRendered: onHouseRendered, showSub: showSub, mountAdmin: mountAdmin, renderTodayAll: renderTodayAll, applyCollapse: applyCollapse, _cache: cache };
   if (typeof module === 'object' && module.exports) module.exports = WorkView;
 }(typeof self !== 'undefined' ? self : this));

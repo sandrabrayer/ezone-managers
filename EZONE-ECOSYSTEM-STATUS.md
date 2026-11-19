@@ -14,6 +14,19 @@
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 
+## Managers: «פגישות קליטה» — intake meetings reported in the app (November 19, 2026)
+
+Sandra, 19 Nov 2026. Details: `docs/meeting-reports.md` in ezone-managers.
+
+- A house sub-tab «🤝 פגישות קליטה» after «מטופלים». It lists the meetings Vered scheduled for the house (the lead's
+  house or a meeting with its manager; 30 days back, 14 ahead). Past unreported meetings carry a red count on the tab,
+  and «הבית היום» has a card.
+- The report: «התקיימה?» כן → the result + who came; לא → the reason (+ an optional proposed date for נדחתה). Then
+  «שלח לקבוצה» with the link's exact WhatsApp text. It lands on the same Dashboard lead row as `/meeting-report`, unread
+  for Vered (`meetingReportVia = 'app'`).
+- `/api/work` ops `meetings` / `meetingReport` → Dashboard `managersWork` (E-Zone-Dashboard #410). No new env var or
+  secret. Tests 525 → 539. SW v51.
+
 ## Managers: simulation — «הפחתת סכום אחר» (November 17, 2026)
 
 Sandra, 17 Nov 2026. Details: `docs/simulation-family-collapse.md` §4 in ezone-managers.
