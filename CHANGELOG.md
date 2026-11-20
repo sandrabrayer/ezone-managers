@@ -3,6 +3,24 @@
 
 ## Unreleased
 
+### Added — «זימון»: a personal highlight when a meeting is scheduled with you (November 20, 2026)
+
+- **Why**: Sandra, 20 Nov 2026 (Part B of the meeting-notify work) — when Vered schedules an intake meeting «נפגש/ת
+  עם» a manager, that manager should see in their own app that a meeting was scheduled with them, not only get a
+  WhatsApp message (Part A, on the Dashboard side).
+- **What** (`public/meetings.js`, UI-only — the feed already carries `meetingWith`):
+  - On the manager's «הבית היום», a «📩 נקבעה פגישה איתך» block leads the «🤝 פגישות קליטה» card, listing their
+    upcoming (unreported) meetings by lead name + when.
+  - In the full meetings list, each row scheduled with the logged-in manager gets an «איתך» chip.
+  - The logged-in manager's name is handed to the view by `app.js` (`MeetingsView.setViewer`) after login; admins are
+    nobody's meeting target, so they get no personal highlight. Matched by the manager's display name, normalised (NFC,
+    trim, collapse spaces, case-fold) — the same string on both sides (`MANAGER_ACCESS.name` and the lead's
+    `meetingWith`).
+- **No backend / feed change**: `meetings` (read) already returns `meetingWith`; nothing new is requested or written.
+- **Tests**: `test/meetings.test.js` +1 («זימון» highlight, the «איתך» chip, the admin/empty case, the app.js wiring) —
+  suite 539 → 540.
+- **SW**: `ezone-managers-v51` → `v52` (a `public/` change).
+
 ### Added — «פגישות קליטה»: intake meetings + reporting them in the app (November 19, 2026)
 
 - **Why**: Sandra, 19 Nov 2026 — a manager reported a meeting through the link, not the app. The meetings Vered

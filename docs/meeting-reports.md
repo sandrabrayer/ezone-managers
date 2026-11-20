@@ -70,6 +70,21 @@ past meetings nobody has reported yet.
   card stays hidden and the link keeps working;
 - a read error with «נסו שוב».
 
+## «זימון» — a meeting scheduled with you (20 Nov 2026, Part B)
+
+When Vered schedules a meeting «נפגש/ת עם» a manager (the Dashboard sends that manager a WhatsApp
+«זימון», Part A), the manager also sees it in their own app:
+
+- «הבית היום» leads the «🤝 פגישות קליטה» card with a «📩 נקבעה פגישה איתך» block listing their
+  upcoming (unreported) meetings.
+- Every row in the full list that is scheduled with the logged-in manager carries an «איתך» chip.
+
+The logged-in manager's name reaches the view through `MeetingsView.setViewer`, called by `app.js`
+after login; admins are nobody's target and get no highlight. The match is by the manager's display
+name, normalised (NFC, trim, collapse spaces, case-fold) — the same string on both sides
+(`MANAGER_ACCESS.name` and the lead's `meetingWith`). This is UI-only: the `meetings` feed already
+returns `meetingWith`, so nothing new is requested or written.
+
 ## Safety
 
 - Every feed value is escaped. Free text never becomes markup.

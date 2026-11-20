@@ -104,6 +104,16 @@
   function whenText(m) {
     return (m.visitDate ? 'יום ' + weekdayOf(m.visitDate) + ' ' + fmtDate(m.visitDate) : '') + (m.visitTime ? ' · ' + m.visitTime : '');
   }
+
+  /* «זימון» — the logged-in manager's own name, set by app.js after login, so a meeting the
+   * Dashboard scheduled WITH them («נפגש/ת עם») gets a personal highlight on their home
+   * screen. Admins (nobody's meeting target) and an empty name get none. Matched by the
+   * manager's display name — the same string on both sides (MANAGER_ACCESS.name and the
+   * lead's meetingWith). Normalised: NFC, trimmed, inner spaces collapsed, case-folded. */
+  var viewer = '';
+  function normName(v) { return String(v == null ? '' : v).normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase(); }
+  function setViewer(name) { viewer = normName(name); }
+  function scheduledWithViewer(m) { return !!viewer && !!(m && m.meetingWith) && normName(m.meetingWith) === viewer; }
   function reportSummary(r) {
     if (!r) return '';
     var head = OUTCOME_LABELS[r.outcome] || r.outcome || '';
@@ -120,7 +130,8 @@
     var open = st && st.open === m.id;
     var h = '<li class="mt-row mt-' + kind + '" data-mt-row="' + esc(m.id) + '">' +
       '<div class="mt-line"><span class="wk-name">' + esc(m.name) + '</span>' +
-      '<span class="wk-meta">' + esc(whenText(m)) + (m.houseLabel ? ' · ' + esc(m.houseLabel) : '') + (m.meetingWith ? ' · עם ' + esc(m.meetingWith) : '') + '</span></div>';
+      '<span class="wk-meta">' + esc(whenText(m)) + (m.houseLabel ? ' · ' + esc(m.houseLabel) : '') + (m.meetingWith ? ' · עם ' + esc(m.meetingWith) : '') + '</span>' +
+      (scheduledWithViewer(m) ? '<span class="crm-chip ok mt-mine">איתך</span>' : '') + '</div>';
     if (m.officeNote) {
       h += '<details class="mt-office"><summary>רקע מהמשרד ▾</summary><div class="mt-office-text">' + esc(m.officeNote) + '</div></details>';
     }
@@ -304,6 +315,16 @@
     var t = mm.today, end = addDays(t, 6);
     var week = mm.all.filter(function (m) { return !m.report && m.visitDate >= t && m.visitDate <= end; }).sort(function (a, b) { return sortKey(a) < sortKey(b) ? -1 : 1; });
     var h = '<div class="card dash-card mt-home"><div class="card-title">🤝 פגישות קליטה</div>';
+    /* «זימון»: upcoming (unreported, from today on) meetings scheduled WITH this manager. */
+    var mine = mm.upcoming.filter(scheduledWithViewer);
+    if (mine.length) {
+      h += '<div class="mt-invite" role="note"><div class="mt-invite-head">📩 ' +
+        esc(mine.length === 1 ? 'נקבעה פגישה איתך' : 'נקבעו ' + mine.length + ' פגישות איתך') + '</div><ul class="wk-list">' +
+        mine.slice(0, 5).map(function (m) {
+          return '<li><span class="wk-name">' + esc(m.name) + '</span><span class="wk-meta">' +
+            esc(m.visitDate === t ? 'היום' + (m.visitTime ? ' · ' + m.visitTime : '') : whenText(m)) + '</span></li>';
+        }).join('') + '</ul></div>';
+    }
     if (mm.pending.length) {
       h += '<button type="button" class="mt-alert" data-go-sub="meetings">⏳ ' + esc(mm.pending.length === 1 ? 'פגישה אחת ממתינה לדיווח' : mm.pending.length + ' פגישות ממתינות לדיווח') + ' ←</button>';
     }
@@ -317,6 +338,7 @@
     OUTCOME_LABELS: OUTCOME_LABELS, NOT_HELD_LABELS: NOT_HELD_LABELS, NOT_HELD_ORDER: NOT_HELD_ORDER,
     COMPANION_LABELS: COMPANION_LABELS, HELD_OUTCOMES: HELD_OUTCOMES, NOTE_MAX: NOTE_MAX,
     model: model, badgeCount: badgeCount, stateOf: stateOf, tabHtml: tabHtml, homeCardHtml: homeCardHtml,
+    setViewer: setViewer, scheduledWithViewer: scheduledWithViewer,
     formHtml: formHtml, rowHtml: rowHtml, draftError: draftError, payloadOf: payloadOf, freeValue: freeValue,
     errorText: errorText, ERRORS: ERRORS, reportSummary: reportSummary,
     waMessage: waMessage, waShareMessage: waShareMessage, waShareUrl: waShareUrl, WA_URL_MAX: WA_URL_MAX, esc: esc
