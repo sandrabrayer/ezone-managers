@@ -2649,6 +2649,11 @@ let currentUser = null;
  * house's own «הבית היום» sub-tab. */
 function applyRole_(u) {
   currentUser = u || null;
+  // «זימון»: tell the meetings view who is logged in, so meetings scheduled WITH this
+  // manager get a personal highlight. Admins are nobody's target → no viewer name.
+  if (window.MeetingsView && window.MeetingsView.setViewer) {
+    window.MeetingsView.setViewer(u && u.role !== 'admin' ? u.name : '');
+  }
   if (!u || u.role === 'admin' || !HOUSE_KEYS.includes(u.house)) return;
   document.querySelectorAll('.tab').forEach(btn => {
     btn.hidden = btn.dataset.tab !== u.house && btn.dataset.tab !== 'guide';

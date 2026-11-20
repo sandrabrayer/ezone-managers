@@ -161,6 +161,32 @@ test('B: the home card — the waiting count links to the tab; this week\'s meet
   assert.doesNotMatch(h, /גל/, 'a reported meeting is not on the home card');
 });
 
+test('B: «זימון» — a meeting scheduled WITH the logged-in manager is highlighted (CHANGELOG Unreleased)', () => {
+  // default (no viewer, e.g. an admin): no personal highlight anywhere
+  assert.doesNotMatch(M.homeCardHtml(ST()), /mt-invite|נקבעה פגישה איתך/);
+  assert.doesNotMatch(M.tabHtml(ST()), /mt-mine/);
+  // match is by the manager's display name, normalised (NFC, trim, collapse, case-fold)
+  M.setViewer('  אורן ');
+  assert.equal(M.scheduledWithViewer({ meetingWith: 'אורן' }), true);
+  assert.equal(M.scheduledWithViewer({ meetingWith: 'שחר' }), false);
+  assert.equal(M.scheduledWithViewer({ meetingWith: '' }), false);
+  // the home card leads with the «זימון» block for the two upcoming meetings with אורן (L2, L3)
+  const home = M.homeCardHtml(ST());
+  assert.match(home, /mt-invite/);
+  assert.match(home, /נקבעו 2 פגישות איתך/);
+  assert.match(home, /רות/); assert.match(home, /יוסי/);
+  assert.ok(home.indexOf('mt-invite') < home.indexOf('mt-alert'), 'the personal «זימון» comes before the waiting alert');
+  // the full meetings list marks each of this manager's rows «איתך»
+  assert.match(M.tabHtml(ST()), /crm-chip ok mt-mine">איתך/);
+  // cleared (admin / logout): no highlight again — no leakage across sessions
+  M.setViewer('');
+  assert.equal(M.scheduledWithViewer({ meetingWith: 'אורן' }), false);
+  assert.doesNotMatch(M.homeCardHtml(ST()), /mt-invite/);
+  // app.js hands the logged-in manager's name to the view (admins get none)
+  assert.match(pub('app.js'), /window\.MeetingsView\.setViewer\(u && u\.role !== 'admin' \? u\.name : ''\)/);
+  assert.match(pub('styles.css'), /\.mt-home \.mt-invite \{/);
+});
+
 test('B: the form — yes/no first; «כן» asks the result + who came; «לא» asks why (+ date for נדחתה)', () => {
   const m = RES.meetings[0];
   const f0 = M.formHtml(m, {}, ST());

@@ -14,6 +14,17 @@
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 
+## Managers: «זימון» — a personal highlight when a meeting is scheduled with you (November 20, 2026)
+
+Sandra, 20 Nov 2026 (Part B of the meeting-notify work; Part A is the Dashboard WhatsApp «זימון»).
+UI-only in `public/meetings.js` — the `meetings` feed already carries `meetingWith`.
+
+- On a manager's «הבית היום», a «📩 נקבעה פגישה איתך» block leads the «🤝 פגישות קליטה» card with
+  their upcoming (unreported) meetings; each row in the full list gets an «איתך» chip.
+- The logged-in manager's name is handed to the view after login (`MeetingsView.setViewer`, from
+  `app.js`); admins (nobody's meeting target) get no highlight. Matched by display name, normalised.
+- No backend or feed change; SW `ezone-managers-v52`. Details: `docs/meeting-reports.md`.
+
 ## Managers: «פגישות קליטה» — intake meetings reported in the app (November 19, 2026)
 
 Sandra, 19 Nov 2026. Details: `docs/meeting-reports.md` in ezone-managers.
