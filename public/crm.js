@@ -392,6 +392,7 @@
     ]);
     var cost;
     if (!staffCost || !staffCost.available) cost = '<div class="wk-empty">' + esc(staffCost && staffCost.loading ? 'טוען…' : 'נתוני העלות לא זמינים כרגע') + '</div>';
+    else if (staffCost.individualCostsRedacted) cost = '<div class="wk-empty">פירוט עלות אישית חסום לפי הרשאת החשבון</div>';
     else {
       var w = (staffCost.workers || []).filter(function (x) { return norm(x.name) === norm(name); })[0];
       cost = w ? fieldsHtml([
@@ -646,7 +647,7 @@
 
       var workers = simNow.workers;
       var simTotal = simNow.total;
-      h += '<div class="card work-card wk-budget-workers" data-default-open><div class="card-title">העובדים ועלות השכר (' + workers.filter(function (w) { return w.name; }).length + ')</div>' +
+      h += '<div class="card work-card wk-budget-workers" data-default-open><div class="card-title">' + (s.individualCostsRedacted ? 'עלויות עובדים — נתונים אישיים מוגבלים' : 'העובדים ועלות השכר (' + workers.filter(function (w) { return w.name; }).length + ')') + '</div>' +
         '<div class="wk-note">רשימה מעודכנת מאפליקציית כוח האדם. נראית רק לך, לסנדרה ולרון. <b>סימולציה:</b> בחרו ליד עובד/ת «סיום העסקה», «שינוי שכר» ואז עלות חודשית חדשה, או «הפחתת סכום אחר» ואז הסכום שיורד ישירות מהסה״כ. הסה״כ למטה מתעדכן. לא נשמר. «✕ ניקוי» ליד עובד/ת מחזיר את הנתון שלו/ה, ו«ניקוי כל השדות» מנקה את כל הסימולציה.</div>' +
         // While a simulation is on: «ניקוי כל השדות» above the table and under it — one tap, from wherever you are.
         (workers.length && simNow.active ? simClearAllHtml(simNow.count) : '') +
@@ -676,7 +677,7 @@
           (next ? td('צפי ' + monthHe(next.month), simNow.active && simNext.delta ? '<s class="sim-old">' + esc(ils(nextTotal)) + '</s> <b class="sim-new">' + esc(ils(simNext.total)) + '</b>' : esc(ils(nextTotal))) : '') +
           td('% מהבית', '100%') + '<td></td>' + (simNow.active ? td('שינוי', esc(signedIls(simNow.delta))) : '<td></td>') + '</tr></tfoot></table></div>' +
           (simNow.active ? simClearAllHtml(simNow.count) : '')
-          : '<div class="wk-empty">אין עובדים עם עלות בחודש הזה</div>') + '</div>';
+          : '<div class="wk-empty">' + (s.individualCostsRedacted ? 'פירוט העלויות האישיות אינו זמין לחשבון זה. הסיכומים והתקציב מוצגים למעלה.' : 'אין עובדים עם עלות בחודש הזה') + '</div>') + '</div>';
 
       var lines = (s.budgetLines || []).filter(function (l) { return l && (l.budget || l.cost); });
       if (lines.length) {
