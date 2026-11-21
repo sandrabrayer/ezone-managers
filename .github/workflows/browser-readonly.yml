@@ -19,7 +19,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Synthetic Managers browser smoke
-        run: node test/browser-readonly.cjs
+        run: node e2e/browser-readonly.cjs
       - name: Save synthetic-only 390px screenshot
         if: always()
         uses: actions/upload-artifact@v4
