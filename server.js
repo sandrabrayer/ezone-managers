@@ -143,7 +143,7 @@ function requireUser(req, res, next) {
   req.user = u;
   next();
 }
-const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, house: u.house || null });
+const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, house: u.house || null, readOnly: u.readOnly === true });
 
 // ---- static: public assets only (they hold no data; data needs a login) ----
 app.use(express.static(path.join(__dirname, 'public')));
@@ -421,6 +421,9 @@ const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 // Writes get their own, tighter bucket on top of the shared one.
 const allowWrites = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 });
 const WRITE_OPS = new Set(['logAdd', 'logUpdate', 'dischargeSet', 'feedbackDone', 'meetingReport']);
+// Explicit read allowlist: unrecognized or newly added write operations cannot
+// accidentally change data through an account configured for viewing only.
+const READ_ONLY_WORK_OPS = new Set(['houseData', 'houseCost', 'houseStaffCost', 'meetingSummaries', 'meetings', 'shiftUpdates']);
 // Intake-meeting report allowlists (docs/meeting-reports.md) — the Dashboard re-validates all of it.
 const MEETING_OUTCOMES = new Set(['advancing', 'undecided', 'not_fit', 'no_show']);
 const MEETING_NOTE_MAX = 5000;       // = MANAGER_REPORT_MAX_CHARS on the Dashboard
@@ -447,6 +450,7 @@ app.post('/api/work', requireUser, async (req, res) => {
     return res.status(410).json({ error: 'committee_read_only', message: 'את הוועדות קובעים הרכזים באפליקציית הרכזים.' });
   }
   if (!WORK_OPS.has(op) && !LOCAL_WORK_OPS.has(op)) return res.status(400).json({ error: 'unknown_op' });
+  if (u.readOnly === true && !READ_ONLY_WORK_OPS.has(op)) return res.status(403).json({ error: 'read_only' });
   // The house is the manager's own; an admin names one.
   const house = u.role === 'admin' ? String(b.house || '') : u.house;
   if (!access.canSeeHouse(u, house) || !access.HOUSE_KEYS.includes(house)) {
