@@ -29,12 +29,16 @@ by this patch.
 - UI hides report buttons, expected-discharge editing, employee/family talk
   forms and follow-up completion for view-only users. The server guard is the
   security boundary; hiding controls is only a usability convenience.
-- A role configured for viewing only is **not a new HR/payroll permission**.
-  Currently `houseStaffCost` includes per-worker monthly cost to support
-  existing house-budget and salary simulations. A separate, approved rule
-  defining who may see that person-level data is required before claiming
-  private-salary confidentiality. Do not treat the view-only flag as permission
-  to access personal compensation.
+- **Individual employee cost privacy:** a `readOnly: true` account sees
+  aggregated house cost/budget but, by default, `houseStaffCost.staff.workers`
+  and named `ending.people` are redacted **in the server JSON**, not merely
+  hidden in the HTML. Such an account cannot run worker-level salary
+  simulations. If independently authorized, a strictly boolean
+  `"staffCostDetails": true` may be specified in that same existing
+  account's configuration by an administrator only after explicit approval.
+  Current writable managers keep their pre-existing budget/simulation workflow.
+  This does not by itself audit which currently configured managers should
+  have individual payroll visibility; that decision remains a release gate.
 
 Synthetic automated tests are in `test/read-only-workflows.test.js`.
 Browser/production UAT, live house assignments, and sensitive salary access
