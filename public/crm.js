@@ -648,7 +648,7 @@
       var workers = simNow.workers;
       var simTotal = simNow.total;
       h += '<div class="card work-card wk-budget-workers" data-default-open><div class="card-title">' + (s.individualCostsRedacted ? 'עלויות עובדים — נתונים אישיים מוגבלים' : 'העובדים ועלות השכר (' + workers.filter(function (w) { return w.name; }).length + ')') + '</div>' +
-        '<div class="wk-note">רשימה מעודכנת מאפליקציית כוח האדם. נראית רק לך, לסנדרה ולרון. <b>סימולציה:</b> בחרו ליד עובד/ת «סיום העסקה», «שינוי שכר» ואז עלות חודשית חדשה, או «הפחתת סכום אחר» ואז הסכום שיורד ישירות מהסה״כ. הסה״כ למטה מתעדכן. לא נשמר. «✕ ניקוי» ליד עובד/ת מחזיר את הנתון שלו/ה, ו«ניקוי כל השדות» מנקה את כל הסימולציה.</div>' +
+        (s.individualCostsRedacted ? '<div class="wk-note">הסכומים הכוללים מגיעים ממערכת כוח האדם. אין הרשאה לפירוט עלות אישית או לסימולציה לפי עובד/ת.</div>' : '<div class="wk-note">רשימה מעודכנת מאפליקציית כוח האדם. נראית רק לך, לסנדרה ולרון. <b>סימולציה:</b> בחרו ליד עובד/ת «סיום העסקה», «שינוי שכר» ואז עלות חודשית חדשה, או «הפחתת סכום אחר» ואז הסכום שיורד ישירות מהסה״כ. הסה״כ למטה מתעדכן. לא נשמר. «✕ ניקוי» ליד עובד/ת מחזיר את הנתון שלו/ה, ו«ניקוי כל השדות» מנקה את כל הסימולציה.</div>') +
         // While a simulation is on: «ניקוי כל השדות» above the table and under it — one tap, from wherever you are.
         (workers.length && simNow.active ? simClearAllHtml(simNow.count) : '') +
         (workers.length ? '<div class="tbl-wrap"><table class="crm-tbl sim-tbl stack-tbl"><thead><tr><th>עובד/ת</th><th>תפקיד</th><th>עלות החודש</th>' +
