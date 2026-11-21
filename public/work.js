@@ -854,18 +854,18 @@
   }
   /* «שיחות עם משפחה» (16 Nov 2026): the contacts table (crm.js), the form and the calls
    * list. st = { filter } — the patient the list is narrowed to ('' = everyone). */
-  function familyListInner(rows, filter) {
+  function familyListInner(rows, filter, readOnly) {
     if (!CV) return '';
-    return (rows.length ? CV.familyFilterHtml(rows, filter) : '') + CV.familyCallsListHtml(rows, { filter: filter });
+    return (rows.length ? CV.familyFilterHtml(rows, filter) : '') + CV.familyCallsListHtml(rows, { filter: filter, readOnly: !!readOnly });
   }
   function familyPanelHtml(d, st) {
     var rows = (d && d.logs && d.logs.familyCalls) || [];
     return (CV ? CV.familyContactsHtml(d) : '') +
       '<div class="card work-card wk-familyCalls"><div class="card-title">+ רישום שיחה עם בן/בת משפחה</div>' +
       '<div class="wk-note">' + esc(LOGS.familyCalls.note) + '</div><div class="wk-note fam-hint" data-fam-hint hidden></div>' +
-      formHtml('familyCalls', d, d && d.today) + '</div>' +
+      (d.readOnly ? '<div class="wk-note">צפייה בלבד</div>' : formHtml('familyCalls', d, d && d.today)) + '</div>' +
       '<div class="card work-card wk-fam-list" data-default-open><div class="card-title">השיחות המתועדות (' + rows.length + ')</div>' +
-      '<div data-fam-list>' + familyListInner(rows, st && st.filter) + '</div></div>';
+      '<div data-fam-list>' + familyListInner(rows, st && st.filter, d.readOnly) + '</div></div>';
   }
   /* The contact line shown when a patient is picked in the form — plain text. */
   function familyHintText(d, patientName) {
@@ -1099,7 +1099,7 @@
     var form = h.querySelector('form[data-wk-form="familyCalls"]');
     if (form && form.getAttribute('data-wk-dirty') === '1') {
       var list = h.querySelector('[data-fam-list]');
-      if (list) list.innerHTML = familyListInner(rows, st.filter);
+      if (list) list.innerHTML = familyListInner(rows, st.filter, d.readOnly);
       var ct = h.querySelector('.wk-fam-contacts');
       if (ct && CV) ct.outerHTML = CV.familyContactsHtml(d);
       return;
