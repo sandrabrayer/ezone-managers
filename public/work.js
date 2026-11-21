@@ -538,7 +538,7 @@
     var duplicates = roster.filter(function (x) { return x && FD && FD.normName(x.name) === FD.normName(s.name); }).length > 1;
     return '<li><span class="wk-name">' + esc(s.name) + '</span><span class="wk-meta">' + esc(s.role) +
       (s.onLeave ? ' · בחופשה' : '') +
-      (duplicates ? ' · ' + (tel ? 'טלפון מסתיים ב-' + esc(String(s.phone).replace(/\\D/g, '').slice(-4)) : 'נדרש מזהה עובד') : '') + '</span>' +
+      (duplicates ? ' · ' + (tel ? 'טלפון מסתיים ב-' + esc(FD.validPhone(s).slice(-4)) : 'נדרש מזהה עובד') : '') + '</span>' +
       (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') +
       (ref ? '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(ref) + '">כרטיס ←</button>' :
         '<span class="wk-note">לא ניתן לפתוח כרטיס עובד ללא זיהוי חד-משמעי</span>') + '</li>';
@@ -1635,6 +1635,16 @@
       var res = entryFromForm(logKey, values);
       var msg = form.querySelector('[data-wk-msg]');
       if (res.missing.length) { msg.textContent = 'חסר: ' + res.missing.join(', '); return; }
+      // The Dashboard's staff-talk writer is name-only. A collision or an
+      // ID-bearing worker needs an identity-aware backend, not a guessed log.
+      if (logKey === 'staffTalks' && FD) {
+        var roster = (cache[key] && cache[key].data && cache[key].data.team && cache[key].data.team.staff) || [];
+        var matches = FD.activeRoster(roster).filter(function (e) { return FD.normName(e.name) === FD.normName(res.entry.employeeName); });
+        if (matches.length > 1 || (matches.length === 1 && FD.workerId(matches[0]))) {
+          msg.textContent = 'לא ניתן לשמור שיחה לפי שם שאינו מזהה את העובד/ת בוודאות. נדרש חיבור מזהה עובד למקור.';
+          return;
+        }
+      }
       var btn = form.querySelector('button[type="submit"]');
       if (btn.disabled) return;   // a second tap while saving
       btn.disabled = true; msg.textContent = 'שומר…';
@@ -1667,7 +1677,7 @@
     }
     var bs = budgetState[key];
     var fm = feedbackModel(c);
-    var fr = fm ? fm.items.filter(function (x) { return String(x.name).trim() === String(arg).trim(); })[0] : null;
+    var fr = fm ? fm.items.filter(function (x) { return x.ref === arg; })[0] : null;
     var staffCost = bs && bs.staff ? bs.staff : { loading: true };
     return { title: arg, html: CV.employeeCardHtml(c, arg, staffCost, fr, tab) };
   }
@@ -1933,6 +1943,17 @@
     var doneAt = String(form.elements.doneAt.value || '').trim();
     var today = String(form.elements.doneAt.getAttribute('max') || '');
     if (!FD || !FD.validDoneAt(doneAt, today)) { if (msg) msg.textContent = FEEDBACK_ERRORS.bad_date; return; }
+    // The feed might have changed after the form was rendered: fail closed.
+    var data = cache[key] && cache[key].data;
+    if (data && FD) {
+      var model = feedbackModel(data);
+      var itemIndex = Number(form.getAttribute('data-fb-form'));
+      var item = model && model.items[itemIndex];
+      if (!item || item.name !== employee || item.writeBlocked) {
+        if (msg) msg.textContent = 'נדרש זיהוי עובד/ת מאומת. לא ניתן לרשום משוב לפי שם בלבד.';
+        return;
+      }
+    }
     form.setAttribute('data-fb-busy', '1');
     Array.prototype.forEach.call(form.querySelectorAll('input, button'), function (el) { el.disabled = true; });
     if (msg) msg.textContent = 'שומר...';
