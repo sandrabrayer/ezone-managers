@@ -18,6 +18,7 @@
  * (clicks, saves, loads) lives in work.js. Tested in test/crm-view.test.js. */
 (function (root) {
   'use strict';
+  var FD = root.FeedbackDue || (typeof require === 'function' ? require('../lib/feedback-due.js') : null);
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -362,9 +363,24 @@
 
   /* ── «כרטיס עובד/ת» ─────────────────────────────────── */
   function employeeCardHtml(d, name, staffCost, feedbackRow, active) {
-    var t = d && d.team;
-    var s = t && t.available ? (t.staff || []).filter(function (x) { return norm(x.name) === norm(name); })[0] : null;
-    if (!s) return '<div class="wk-empty">העובד/ת לא נמצא/ה ברשימת הבית — רעננו את הדף</div>';
+    var t = d && d.team, roster = t && t.available ? t.staff || [] : [];
+    var s = FD ? FD.resolveEmployee(roster, name) : roster.filter(function (x) { return norm(x.name) === norm(name); })[0];
+    if (!s) return '<div class="wk-empty">לא ניתן לזהות את העובד/ת באופן חד-משמעי לפי המידע הקיים. יש לבדוק מזהה עובד או טלפון במקור.</div>';
+    var sameName = roster.filter(function (x) { return x && norm(x.name) === norm(s.name); }).length > 1;
+    var costRow = function (rows) {
+      var list = Array.isArray(rows) ? rows : [];
+      var id = FD && FD.workerId(s), phone = FD && FD.validPhone(s);
+      var matches = id ? list.filter(function (x) { return FD.workerId(x) === id; }) : [];
+      if (matches.length === 1) return matches[0];
+      if (matches.length > 1) return null;
+      matches = phone ? list.filter(function (x) { return FD.validPhone(x) === phone; }) : [];
+      if (matches.length === 1) return matches[0];
+      if (matches.length > 1) return null;
+      // Do not attribute a name-only cost to either of two same-name employees.
+      if (sameName) return null;
+      matches = list.filter(function (x) { return norm(x.name) === norm(s.name); });
+      return matches.length === 1 ? matches[0] : null;
+    };
     var tel = /^0\d{8,9}$/.test(String(s.phone || '')) ? 'tel:' + s.phone : '';
     var seniority = '';
     if (ISO_RE.test(String(s.startDate || '')) && d.today) {
@@ -377,7 +393,7 @@
     var born = null;
     if (staffCost && staffCost.loading) born = ['תאריך לידה', 'טוען…'];
     else if (staffCost && staffCost.available) {
-      var bw = (staffCost.workers || []).filter(function (x) { return x && x.name && norm(x.name) === norm(name); })[0];
+      var bw = costRow(staffCost.workers);
       var bd = bw && ISO_RE.test(String(bw.birthDate || '')) && (!d.today || bw.birthDate <= d.today) ? bw.birthDate : '';
       born = ['תאריך לידה', bd ? fmtDateFull(bd) : 'לא הוזן באפליקציית כוח האדם'];
     }
@@ -393,26 +409,27 @@
     var cost;
     if (!staffCost || !staffCost.available) cost = '<div class="wk-empty">' + esc(staffCost && staffCost.loading ? 'טוען…' : 'נתוני העלות לא זמינים כרגע') + '</div>';
     else {
-      var w = (staffCost.workers || []).filter(function (x) { return norm(x.name) === norm(name); })[0];
+      var w = costRow(staffCost.workers);
       cost = w ? fieldsHtml([
         ['עלות ' + monthHe(staffCost.month), ils(w.cost)],
         ['מקור', w.estimated ? 'הערכה (עוד אין דוח שכר)' : 'לפי דוח השכר'],
         ['חלק מעלות הבית', staffCost.total ? Math.round((w.cost / staffCost.total) * 100) + '%' : '—'],
-        endOfRow(staffCost, w) ? ['סיום עבודה בבית', fmtDate(endOfRow(staffCost, w))] : null
+        (sameName ? endOf(w) : endOfRow(staffCost, w)) ? ['סיום עבודה בבית', fmtDate(sameName ? endOf(w) : endOfRow(staffCost, w))] : null
       ]) : '<div class="wk-empty">אין לעובד/ת עלות רשומה בבית בחודש הזה</div>';
     }
-    var talks = (d.logs && d.logs.staffTalks) ? talksListHtml(d.logs.staffTalks, d.today, name, true) : '<div class="wk-empty">עדיין אין רישומים</div>';
+    var talks = sameName ? '<div class="wk-empty">יש עובדים עם שם זהה. שיחות שתועדו לפי שם בלבד אינן משויכות לכרטיס אישי עד לאימות מזהה.</div>' :
+      (d.logs && d.logs.staffTalks) ? talksListHtml(d.logs.staffTalks, d.today, s.name, true) : '<div class="wk-empty">עדיין אין רישומים</div>';
     var fb = feedbackRow ? fieldsHtml([
       ['משוב אחרון', feedbackRow.lastFeedback ? fmtDate(feedbackRow.lastFeedback) : 'עוד לא נרשם'],
       ['המשוב הבא', feedbackRow.due ? fmtDate(feedbackRow.due) : '—'],
       ['מצב', feedbackRow.status === 'overdue' ? 'באיחור' : feedbackRow.status === 'soon' ? 'בקרוב' : feedbackRow.status === 'unknown' ? 'אין תאריך התחלה' : 'בהמשך']
-    ]) + '<div class="crm-actions"><button type="button" class="wk-btn ghost" data-go-sub="team" data-drawer-close>לסימון משוב ←</button></div>'
+    ]) + (feedbackRow.writeBlocked ? '<div class="wk-note">אין אפשרות לשייך משוב חדש לפי שם בלבד</div>' : '<div class="crm-actions"><button type="button" class="wk-btn ghost" data-go-sub="team" data-drawer-close>לסימון משוב ←</button></div>')
       : '<div class="wk-empty">אין נתוני משוב</div>';
-    return '<div class="crm-card-sub">' + esc((s.role || '') + (s.onLeave ? ' · בחופשה' : '')) + '</div>' +
+    return '<div class="crm-card-sub">' + esc((s.role || '') + (s.onLeave ? ' · בחופשה' : '') + (sameName ? ' · זוהה לפי מזהה עובד או טלפון' : '')) + '</div>' +
       cardTabsHtml('employee', [
         { key: 'details', label: 'פרטים', html: details },
         { key: 'cost', label: 'עלות', html: cost },
-        { key: 'talks', label: 'שיחות', html: talks + '<div class="crm-actions"><button type="button" class="wk-btn" data-emp-talk="' + esc(s.name) + '">💬 רישום שיחה חדשה</button></div>' },
+        { key: 'talks', label: 'שיחות', html: talks + (sameName || (FD && FD.workerId(s)) ? '' : '<div class="crm-actions"><button type="button" class="wk-btn" data-emp-talk="' + esc(s.name) + '">💬 רישום שיחה חדשה</button></div>') },
         { key: 'feedback', label: 'משוב', html: fb }
       ], active);
   }
