@@ -838,7 +838,7 @@
     contactOf: contactOf, familyCallsOf: familyCallsOf, familyContactsHtml: familyContactsHtml,
     familyCallsListHtml: familyCallsListHtml, familyFilterHtml: familyFilterHtml,
     employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, octoberTargetHtml: octoberTargetHtml, quarterHtml: quarterHtml,
-    endingHtml: endingHtml, endingPeople: endingPeople, simulateStaff: simulateStaff, SIM_MAX: SIM_MAX,
+    endingHtml: endingHtml, endingPeople: endingPeople, simulateStaff: simulateStaff, simulationAmbiguousNames: simulationAmbiguousNames, SIM_MAX: SIM_MAX,
     budgetBonusHtml: budgetBonusHtml, monthBonusCardHtml: monthBonusCardHtml
   };
   root.CrmView = CrmView;
