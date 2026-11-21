@@ -162,3 +162,13 @@ test('explicit ID-bearing staff talks are displayed only on verified card; name-
   assert.match(b, /FOR-STAFF-B/);
   assert.doesNotMatch(b, /FOR-STAFF-A|OLD-LEGACY/);
 });
+
+test('a stable worker reference survives a verified rename and phone change; assignment row ID is not worker identity', () => {
+  const old = { workerId: 'worker-17', name: 'השם הקודם', phone: '0501112222' };
+  const ref = F.employeeRef(old, [old]);
+  assert.equal(ref, 'wid:worker-17', 'stable ID precedes a unique display name');
+  const renamed = { ...old, name: 'השם החדש', phone: '0503334444' };
+  assert.equal(F.resolveEmployee([renamed], ref), renamed);
+  assert.equal(F.workerId({ id: 'assignment-123' }), '', 'a generic ID is not a worker ID');
+  assert.equal(F.workerId({ id: 'worker-17', idKind: 'worker' }), 'worker-17');
+});
