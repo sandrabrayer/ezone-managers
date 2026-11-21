@@ -171,7 +171,7 @@
   var DISCHARGE_DONE = { set: 'נשמר ✓', clear: 'התאריך נוקה ✓', none: 'נשמר: אין צפי לשחרור ✓' };
   function dischargeModes(d) {
     var m = d && Array.isArray(d.expectedDischargeModes) ? d.expectedDischargeModes : [];
-    return { clear: m.indexOf('clear') >= 0, none: m.indexOf('none') >= 0 };
+    return { clear: m.indexOf('clear') >= 0, none: m.indexOf('none') >= 0, readOnly: !!(d && d.readOnly) };
   }
   /* What the row shows now: 'none' («אין צפי»), 'date', or '' (nothing set). */
   function dischargeStateOf(p) {
@@ -195,6 +195,7 @@
     var none = st === 'none' && md.none;
     var cur = st === 'date' ? p.expectedDischarge.date : '';
     var who = esc(p.name);
+    if (md.readOnly) return '<div class="wk-dis">' + (none ? 'אין צפי לשחרור' : cur ? 'שחרור משוער: ' + esc(fmtDate(cur)) : 'לא הוגדר תאריך שחרור') + '</div>';
     var h = '<div class="wk-dis" data-dis-row="' + i + '"' + (none ? ' data-dis-none="1"' : '') + '>';
     h += none
       ? '<span class="wk-dis-text wk-dis-none">אין צפי לשחרור</span>' +
@@ -284,9 +285,9 @@
       return '<li class="wk-fb-' + esc(x.status) + '"><span class="wk-name">' + esc(x.name) + '</span><span class="wk-meta">' +
         esc(FEEDBACK_STATUS[x.status]) + (x.due ? ' · עד ' + esc(fmtDate(x.due)) : '') +
         (x.lastFeedback ? ' · משוב אחרון ' + esc(fmtDate(x.lastFeedback)) : (x.startDate ? ' · התחיל/ה ' + esc(fmtDate(x.startDate)) : '')) + '</span>' +
-        '<form class="wk-fb-form" data-fb-form="' + i + '" novalidate><input type="hidden" name="employee" value="' + esc(x.name) + '">' +
+        (d.readOnly ? '<span class="wk-note">צפייה בלבד</span>' : '<form class="wk-fb-form" data-fb-form="' + i + '" novalidate><input type="hidden" name="employee" value="' + esc(x.name) + '">' +
         '<label class="wk-dis-label"><span>תאריך המשוב</span><input name="doneAt" type="date" required value="' + esc(m.today) + '" max="' + esc(m.today) + '"></label>' +
-        '<button type="submit" class="wk-dis-btn">בוצע</button><span class="wk-msg" data-fb-msg role="status" aria-live="polite"></span></form></li>';
+        '<button type="submit" class="wk-dis-btn">בוצע</button><span class="wk-msg" data-fb-msg role="status" aria-live="polite"></span></form>') + '</li>';
     }).join('') + '</ul>';
     return h + '</div>';
   }
@@ -822,10 +823,10 @@
     var def = LOGS[logKey];
     if (!rows || !rows.length) return '<div class="wk-empty">עדיין אין רישומים</div>';
     // Staff talks are THREADS (14 Nov 2026): first talk → follow-ups → outcome.
-    if (logKey === 'staffTalks' && CV) return CV.talksListHtml(rows, today);
+    if (logKey === 'staffTalks' && CV) return CV.talksListHtml(rows, today, '', !!(me && me.readOnly));
     return '<ul class="wk-log">' + rows.map(function (r) {
       var w = def.when(r);
-      var canEdit = r.canEdit === true;
+      var canEdit = r.canEdit === true && !(me && me.readOnly);
       var fu = '';
       if (r.followUpDate) {
         fu = r.followUpDone
@@ -848,7 +849,7 @@
     var rows = (d && d.logs && d.logs[logKey]) || [];
     return '<div class="card work-card wk-' + logKey + '"><div class="card-title">' + esc(def.title) + '</div>' +
       (def.note ? '<div class="wk-note">' + esc(def.note) + '</div>' : '') +
-      formHtml(logKey, d, d && d.today) + '</div>' +
+      (me && me.readOnly ? '<div class="wk-note">צפייה בלבד</div>' : formHtml(logKey, d, d && d.today)) + '</div>' +
       '<div class="card work-card"><div class="card-title">' + esc(listTitle(logKey, rows)) + '</div>' + logListHtml(logKey, rows, me, d && d.today) + '</div>';
   }
   /* «שיחות עם משפחה» (16 Nov 2026): the contacts table (crm.js), the form and the calls
@@ -919,7 +920,7 @@
     return '<div class="wk-followups"><div class="wk-fu-title">🔔 ' + esc(plural(due.length, 'תזכורת אחת למעקב', 'תזכורות למעקב')) + '</div><ul>' +
       due.map(function (f) {
         var r = byId[f.log + '|' + f.id] || {};
-        var canEdit = r.canEdit === true;
+        var canEdit = r.canEdit === true && !(me && me.readOnly);
         return '<li><span>' + esc(LOG_LABEL[f.log] || '') + ' · ' + esc(LOGS[f.log] ? LOGS[f.log].head(r) : '') + ' · ' + esc(fmtDate(f.date)) + '</span>' +
           (canEdit ? '<button type="button" class="wk-link" data-wk-done="' + f.log + '|' + esc(f.id) + '">בוצע</button>' : '') + '</li>';
       }).join('') + '</ul></div>';
@@ -962,6 +963,11 @@
   var loading = {};
 
   async function post(body) {
+    var u = me();
+    if (u && u.readOnly && ['houseData', 'houseCost', 'houseStaffCost', 'meetingSummaries', 'shiftUpdates', 'meetings'].indexOf(body.op) < 0) {
+      var denied = new Error('החשבון מוגדר לצפייה בלבד');
+      denied.status = 403; denied.data = { error: 'read_only' }; throw denied;
+    }
     var r = await fetch('/api/work', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) });
     var data = null;
     try { data = await r.json(); } catch (e) { data = null; }
@@ -1033,6 +1039,7 @@
 
   function renderAll(panel, key, d) {
     var u = me();
+    d = Object.assign({}, d, { readOnly: !!(u && u.readOnly) });
     var fu = panel.querySelector('[data-followups]');
     if (fu) fu.innerHTML = followUpsHtml(d, u);
     var p = host(panel, 'patients');
