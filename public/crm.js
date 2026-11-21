@@ -365,7 +365,7 @@
   function employeeCardHtml(d, name, staffCost, feedbackRow, active) {
     var t = d && d.team, roster = t && t.available ? t.staff || [] : [];
     var s = FD ? FD.resolveEmployee(roster, name) : roster.filter(function (x) { return norm(x.name) === norm(name); })[0];
-    if (!s) return '<div class="wk-empty">לא ניתן לזהות את העובד/ת באופן חד-משמעי לפי המידע הקיים. יש לבדוק מזהה עובד או טלפון במקור.</div>';
+    if (!s) return '<div class="wk-empty">' + (roster.some(function (x) { return norm(x.name) === norm(name); }) ? 'לא ניתן לזהות את העובד/ת באופן חד-משמעי לפי המידע הקיים. יש לבדוק מזהה עובד או טלפון במקור.' : 'העובד/ת לא נמצא/ה ברשימת הבית — רעננו את הדף') + '</div>';
     var sameName = roster.filter(function (x) { return x && norm(x.name) === norm(s.name); }).length > 1;
     var costRow = function (rows) {
       var list = Array.isArray(rows) ? rows : [];
@@ -381,7 +381,8 @@
       matches = list.filter(function (x) { return norm(x.name) === norm(s.name); });
       return matches.length === 1 ? matches[0] : null;
     };
-    var tel = /^0\d{8,9}$/.test(String(s.phone || '')) ? 'tel:' + s.phone : '';
+    var phone = FD ? FD.validPhone(s) : String(s.phone || '');
+    var tel = /^0\d{8,9}$/.test(phone) ? 'tel:' + phone : '';
     var seniority = '';
     if (ISO_RE.test(String(s.startDate || '')) && d.today) {
       var mo = (Number(d.today.slice(0, 4)) - Number(s.startDate.slice(0, 4))) * 12 + Number(d.today.slice(5, 7)) - Number(s.startDate.slice(5, 7));
