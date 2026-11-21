@@ -1574,8 +1574,11 @@
         var sm = simState[key] || (simState[key] = {});
         var who = (simKind || simAmt).getAttribute(simKind ? 'data-sim-kind' : 'data-sim-amount');
         var bst0 = budgetState[key];
-        var known = bst0 && bst0.staff && bst0.staff.available && (bst0.staff.workers || []).some(function (w) { return w.name === who; });
-        if (!known) return;   // only a worker of the list on screen
+        var matches = bst0 && bst0.staff && bst0.staff.available ? (bst0.staff.workers || []).filter(function (w) { return w.name === who; }) : [];
+        var roster = cache[key] && cache[key].data && cache[key].data.team && cache[key].data.team.staff || [];
+        var blocked = CV && CV.simulationAmbiguousNames && CV.simulationAmbiguousNames(bst0 && bst0.staff, roster);
+        var known = matches.length === 1 && !(blocked && blocked[who]);
+        if (!known) { if (sm[who]) delete sm[who]; paintBudget(panel, key); return; }   // never change two people by one display name
         if (simKind) {
           if (simKind.value === 'end') sm[who] = { kind: 'end' };
           else if (simKind.value === 'cost') sm[who] = { kind: 'cost', amount: null };
@@ -1772,7 +1775,8 @@
     var st = budgetState[key];
     var hb = host(panel, 'budget');
     if (hb && CV) {
-      hb.innerHTML = CV.budgetHtml(st && !st.loading ? Object.assign({}, st, { sim: simState[key] || {} }) : { staff: { loading: true } });
+      var roster = cache[key] && cache[key].data && cache[key].data.team && cache[key].data.team.staff || [];
+      hb.innerHTML = CV.budgetHtml(st && !st.loading ? Object.assign({}, st, { sim: simState[key] || {}, roster: roster }) : { staff: { loading: true } });
       applyCollapse(panel, key);
     }
     var bb = panel.querySelector('[data-budget-bonus]');
