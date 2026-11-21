@@ -380,7 +380,7 @@
       if (matches.length > 1) return null;
       // Do not attribute a name-only cost to either of two same-name employees.
       if (sameName) return null;
-      matches = list.filter(function (x) { return norm(x.name) === norm(s.name); });
+      matches = list.filter(function (x) { return norm(x.name) === norm(s.name) && (!id || !FD.workerId(x) || FD.workerId(x) === id); });
       return matches.length === 1 ? matches[0] : null;
     };
     var phone = FD ? FD.validPhone(s) : String(s.phone || '');
@@ -431,7 +431,7 @@
       return !(r.workerId || r.employeeId) && norm(r.employeeName) === norm(s.name);
     });
     var talks = verifiedTalks.length ? talksListHtml(verifiedTalks, d.today, '', true) :
-      (sameName || staffId ? '<div class="wk-empty">לא משייכים שיחות לפי שם בלבד כשנדרש זיהוי עובד. רישומים ישנים יופיעו רק לאחר אימות מזהה במקור.</div>' :
+      (sameName || staffId ? '<div class="wk-empty">שם זהה או מזהה עובד חדש: לא משייכים שיחות לפי שם בלבד. רישומים ישנים יופיעו רק לאחר אימות מזהה במקור.</div>' :
         '<div class="wk-empty">עדיין אין רישומים</div>');
     var fb = feedbackRow ? fieldsHtml([
       ['משוב אחרון', feedbackRow.lastFeedback ? fmtDate(feedbackRow.lastFeedback) : 'עוד לא נרשם'],
