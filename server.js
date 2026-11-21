@@ -576,8 +576,23 @@ app.post('/api/work', requireUser, async (req, res) => {
   }
   // «עלות אוקטובר מול היעד» (15 Nov 2026): fixed numbers for THIS house only — the house is the
   // server's decision above, never the browser's. Added at send time, so the cached reply stays as it came.
-  const withOctober = (json) => (op === 'houseStaffCost' && json && typeof json === 'object'
-    ? Object.assign({}, json, { octoberTarget: octoberTarget.forHouse(house) }) : json);
+  const withOctober = (json) => {
+    if (op !== 'houseStaffCost' || !json || typeof json !== 'object') return json;
+    const out = Object.assign({}, json, { octoberTarget: octoberTarget.forHouse(house) });
+    // Viewing authority does not imply access to identifiable employee costs,
+    // salary simulations, or dates of birth. Preserve only the aggregate
+    // budget, and redact before returning a cached or live reply to the client.
+    // Current writable house managers retain their established cost workflow.
+    if (u.readOnly === true && u.staffCostDetails !== true && out.staff && typeof out.staff === 'object') {
+      const s = out.staff;
+      out.staff = Object.assign({}, s, {
+        workers: [],
+        individualCostsRedacted: true,
+        ending: s.ending && typeof s.ending === 'object' ? Object.assign({}, s.ending, { people: [] }) : s.ending
+      });
+    }
+    return out;
+  };
   // Reads: fast path with stale-while-revalidate. The key holds op + house + month + role + person.
   const rkey = JSON.stringify(['work', op, house, body.month || '', u.role, u.id]);
   const rloader = async () => {
