@@ -580,7 +580,7 @@ app.post('/api/work', requireUser, async (req, res) => {
     if (op !== 'houseStaffCost' || !json || typeof json !== 'object') return json;
     const out = Object.assign({}, json, { octoberTarget: octoberTarget.forHouse(house) });
     // Viewing authority does not imply access to identifiable employee costs,
-    // salary simulations, or dates of birth. Preserve only the aggregate
+    // identifiable planning details, or dates of birth. Preserve aggregates
     // budget, and redact before returning a cached or live reply to the client.
     // Current writable house managers retain their established cost workflow.
     if (u.readOnly === true && u.staffCostDetails !== true && out.staff && typeof out.staff === 'object') {
