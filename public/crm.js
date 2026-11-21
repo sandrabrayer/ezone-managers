@@ -420,8 +420,19 @@
         (sameName ? endOf(w) : endOfRow(staffCost, w)) ? ['סיום עבודה בבית', fmtDate(sameName ? endOf(w) : endOfRow(staffCost, w))] : null
       ]) : '<div class="wk-empty">אין לעובד/ת עלות רשומה בבית בחודש הזה</div>';
     }
-    var talks = sameName ? '<div class="wk-empty">יש עובדים עם שם זהה. שיחות שתועדו לפי שם בלבד אינן משויכות לכרטיס אישי עד לאימות מזהה.</div>' :
-      (d.logs && d.logs.staffTalks) ? talksListHtml(d.logs.staffTalks, d.today, s.name, true) : '<div class="wk-empty">עדיין אין רישומים</div>';
+    // Historical name-only talks cannot be guessed when two workers share a
+    // name, or when the roster now has a stable ID after a rename. A future
+    // Dashboard feed may carry workerId: show only explicitly ID-matched rows.
+    var talkRows = d.logs && d.logs.staffTalks || [];
+    var staffId = FD && FD.workerId(s);
+    var verifiedTalks = staffId ? talkRows.filter(function (r) {
+      return FD.workerId({ workerId: r.workerId, employeeId: r.employeeId }) === staffId;
+    }) : sameName ? [] : talkRows.filter(function (r) {
+      return !(r.workerId || r.employeeId) && norm(r.employeeName) === norm(s.name);
+    });
+    var talks = verifiedTalks.length ? talksListHtml(verifiedTalks, d.today, '', true) :
+      (sameName || staffId ? '<div class="wk-empty">לא משייכים שיחות לפי שם בלבד כשנדרש זיהוי עובד. רישומים ישנים יופיעו רק לאחר אימות מזהה במקור.</div>' :
+        '<div class="wk-empty">עדיין אין רישומים</div>');
     var fb = feedbackRow ? fieldsHtml([
       ['משוב אחרון', feedbackRow.lastFeedback ? fmtDate(feedbackRow.lastFeedback) : 'עוד לא נרשם'],
       ['המשוב הבא', feedbackRow.due ? fmtDate(feedbackRow.due) : '—'],
