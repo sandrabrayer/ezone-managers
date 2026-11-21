@@ -77,7 +77,7 @@ test('configuration is strict and a signed session resolves current readOnly cap
   const cookie = A.signSession(before[0], key);
   const after = A.parseAccess(JSON.stringify([{ ...row, readOnly: true }])).users;
   assert.equal(A.readSession(cookie, key, after).readOnly, true);
-  assert.equal(A.readSession(cookie, key, []).readOnly, null);
+  assert.equal(A.readSession(cookie, key, []), null);
 });
 
 test('read-only HTML hides editing in key manager flows, not the history itself', () => {
