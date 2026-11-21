@@ -117,3 +117,48 @@ test('simple unambiguous name-only feedback remains writable and retains its his
   assert.match(h, /data-fb-form/);
   assert.equal(F.resolveEmployee(roster, 'אורית'), roster[0]);
 });
+
+test('salary simulation: same-name payroll rows cannot double-edit or map to an arbitrary employee card', () => {
+  const staff = { available: true, month: '2026-11', total: 10000, budget: 12500,
+    workers: [{ name: 'דנה', cost: 7000, roles: ['מדריכה'] }, { name: 'משה', cost: 3000, roles: ['מדריך'] }],
+    ending: { count: 1, people: [{ name: 'דנה', endDate: '2026-12-01', monthlySaving: 7000 }], monthlySaving: 7000, savingThisMonth: 0, savingNextMonth: 7000 } };
+  const d = { staff, roster: ALIKE, sim: { 'דנה': { kind: 'end' }, 'משה': { kind: 'cost', amount: 5000 } } };
+  const blocked = C.simulationAmbiguousNames(staff, ALIKE);
+  assert.equal(blocked['דנה'], true);
+  const calculated = C.simulateStaff(staff, d.sim, blocked);
+  assert.equal(calculated.total, 12000, 'only unique Moses simulation changes cost; not two Danas');
+  assert.equal(calculated.workers[0].simCost, 7000);
+  assert.equal(calculated.workers[0].simBlocked, true);
+  const html = C.budgetHtml(d);
+  assert.doesNotMatch(html, /data-sim-kind="דנה"|data-emp-open="דנה"/, 'no same-name editing or opening a guessed employee');
+  assert.match(html, /data-sim-kind="משה"/);
+  assert.match(html, /סימולציה חסומה עד לזיהוי/);
+  const duplicatePayroll = { ...staff, workers: [{ name: 'דנה', cost: 1000 }, { name: 'דנה', cost: 2000 }] };
+  assert.equal(C.simulateStaff(duplicatePayroll, { 'דנה': { kind: 'end' } }).total, staff.total, 'duplicate payroll itself is ambiguous without a roster');
+});
+
+test('payroll with a recycled phone or conflicting worker ID cannot attach costs to the wrong card', () => {
+  const d = legacy([{ workerId: 'wA', name: 'יעל', phone: '0501234567', startDate: '2026-01-01' }]);
+  const bad = { available: true, month: '2026-11', total: 20000,
+    workers: [{ workerId: 'wB', name: 'יעל', phone: '0501234567', cost: 14000, birthDate: '1980-01-01' }] };
+  const html = C.employeeCardHtml(d, 'יעל', bad);
+  assert.doesNotMatch(html, /14,000|1\/1\/1980/, 'a conflicting explicit ID trumps identical phone');
+  const renamed = { ...bad, workers: [{ name: 'רחל', phone: '0501234567', cost: 14000, birthDate: '1980-01-01' }] };
+  const h2 = C.employeeCardHtml(d, 'יעל', renamed);
+  assert.doesNotMatch(h2, /14,000|1\/1\/1980/, 'matching phone with different name cannot assert identity');
+});
+
+test('explicit ID-bearing staff talks are displayed only on verified card; name-only history is not inherited', () => {
+  const d = legacy(ALIKE);
+  d.logs.staffTalks = [
+    { id: 'old', employeeName: 'דנה', summary: 'OLD-LEGACY', talkDate: TODAY, author: 'בדיקה' },
+    { id: 'a', employeeName: 'שם קודם', workerId: 'staff-A', summary: 'FOR-STAFF-A', talkDate: TODAY, author: 'בדיקה' },
+    { id: 'b', employeeName: 'דנה', employeeId: 'staff-B', summary: 'FOR-STAFF-B', talkDate: TODAY, author: 'בדיקה' }
+  ];
+  const a = C.employeeCardHtml(d, 'wid:staff-A', { available: false });
+  const b = C.employeeCardHtml(d, 'wid:staff-B', { available: false });
+  assert.match(a, /FOR-STAFF-A/);
+  assert.doesNotMatch(a, /FOR-STAFF-B|OLD-LEGACY/);
+  assert.match(b, /FOR-STAFF-B/);
+  assert.doesNotMatch(b, /FOR-STAFF-A|OLD-LEGACY/);
+});
