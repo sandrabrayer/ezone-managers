@@ -532,12 +532,16 @@
         (g.rows.some(function (r) { return r.draft; }) ? '<span class="wk-meta">טיוטה</span>' : '') + '</li>';
     }).join('');
   }
-  function staffLine(s) {
+  function staffLine(s, roster) {
     var tel = telHref(s.phone);
+    var ref = FD && FD.employeeRef ? FD.employeeRef(s, roster) : s.name;
+    var duplicates = roster.filter(function (x) { return x && FD && FD.normName(x.name) === FD.normName(s.name); }).length > 1;
     return '<li><span class="wk-name">' + esc(s.name) + '</span><span class="wk-meta">' + esc(s.role) +
-      (s.onLeave ? ' · בחופשה' : '') + '</span>' +
+      (s.onLeave ? ' · בחופשה' : '') +
+      (duplicates ? ' · ' + (tel ? 'טלפון מסתיים ב-' + esc(String(s.phone).replace(/\\D/g, '').slice(-4)) : 'נדרש מזהה עובד') : '') + '</span>' +
       (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') +
-      '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(s.name) + '">כרטיס ←</button></li>';
+      (ref ? '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(ref) + '">כרטיס ←</button>' :
+        '<span class="wk-note">לא ניתן לפתוח כרטיס עובד ללא זיהוי חד-משמעי</span>') + '</li>';
   }
   function teamHtml(d) {
     var gate = teamGate(d);
@@ -560,7 +564,7 @@
     var ther = staff.filter(function (s) { return s.kind === 'therapist'; });
     h += '<div class="card work-card wk-staff"><div class="card-title">עובדי הבית (' + staff.length + ')</div>';
     if (!staff.length) h += '<div class="wk-empty">אין עובדים רשומים בבית</div>';
-    if (guides.length) h += '<div class="card-subtitle">מדריכים (' + guides.length + ')</div><ul class="wk-list">' + guides.map(staffLine).join('') + '</ul>';
+    if (guides.length) h += '<div class="card-subtitle">מדריכים (' + guides.length + ')</div><ul class="wk-list">' + guides.map(function (e) { return staffLine(e, staff); }).join('') + '</ul>';
     // Therapists are listed ONCE, in «מטפלים» (with workdays, phone and the card) — 16 Nov 2026.
     if (ther.length) h += '<button type="button" class="dash-go" data-go-sub="therapists">' + esc(plural(ther.length, 'מטפל/ת אחד/ת', 'מטפלים')) + ' — בלשונית «מטפלים» ←</button>';
     h += '</div>';
@@ -573,12 +577,13 @@
     var h = staleNote(t);
     h += '<div class="card work-card wk-ther"><div class="card-title">מטפלים בבית (' + ther.length + ')</div>';
     h += ther.length ? '<ul class="wk-list">' + ther.map(function (s) {
+      var ref = FD && FD.employeeRef ? FD.employeeRef(s, t.staff || []) : s.name;
       var days = (s.workdays || []).filter(function (x) { return WEEKDAYS[x]; }).map(function (x) { return WEEKDAYS[x]; });
       var tel = telHref(s.phone);
       return '<li><span class="wk-name">' + esc(s.name) + '</span><span class="wk-meta">' + esc(s.role) +
         (days.length ? ' · ימי עבודה: ' + esc(days.join(', ')) : '') + (s.onLeave ? ' · בחופשה' : '') + '</span>' +
         (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') +
-        '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(s.name) + '">כרטיס ←</button></li>';
+        (ref ? '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(ref) + '">כרטיס ←</button>' : '<span class="wk-note">לא ניתן לפתוח כרטיס ללא מזהה עובד</span>') + '</li>';
     }).join('') + '</ul>' : '<div class="wk-empty">אין מטפלים רשומים בבית</div>';
     h += '</div>';
     h += '<div class="card work-card wk-ther-week"><div class="card-title">לוז טיפולים שבועי</div>';
