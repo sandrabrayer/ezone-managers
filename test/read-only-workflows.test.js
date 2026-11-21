@@ -24,6 +24,9 @@ test('read-only: all existing writes blocked at server; read scope preserved; or
     const q = JSON.parse(opts.body);
     calls.push(q);
     let data = { ok: true };
+    if (q.op === 'houseStaffCost') data = { ok: true, staff: { available: true, month: '2026-11', total: 99000, budget: 100000,
+      workers: [{ name: 'Sample Worker', cost: 20000, birthDate: '1990-01-01' }],
+      ending: { count: 1, monthlySaving: 20000, people: [{ name: 'Sample Worker', endDate: '2026-12-01', monthlySaving: 20000 }] } } };
     if (q.op === 'meetings') data = { ok: true, meetings: [{ id: 'L1', name: 'Synthetic', visitDate: '2026-11-22', meetingWith: 'אורן', report: saved.get(q.house + ':L1') || null }], today: '2026-11-21' };
     if (q.op === 'meetingReport') {
       const row = { leadId: q.leadId, reporter: q.actor, outcome: q.outcome, note: q.note || '' };
@@ -47,7 +50,15 @@ test('read-only: all existing writes blocked at server; read scope preserved; or
     assert.equal(me.user.readOnly, true);
     const house = cookie === executive ? 'efroni' : 'ramot';
     for (const op of ['houseData', 'houseCost', 'houseStaffCost', 'meetingSummaries', 'meetings', 'shiftUpdates']) {
-      assert.equal((await post(cookie, { op, house })).status, 200, op);
+      const response = await post(cookie, { op, house });
+      assert.equal(response.status, 200, op);
+      if (op === 'houseStaffCost') {
+        const staff = JSON.parse(response.text).staff;
+        assert.equal(staff.total, 99000, 'budget summary remains visible');
+        assert.equal(staff.individualCostsRedacted, true);
+        assert.deepEqual(staff.workers, [], 'no personal salary or birthdate in the JSON response');
+        assert.deepEqual(staff.ending.people, [], 'no identifiable ending salary forecast');
+      }
     }
     const before = calls.length;
     for (const op of ['logAdd', 'logUpdate', 'dischargeSet', 'feedbackDone', 'meetingReport']) {
@@ -61,6 +72,9 @@ test('read-only: all existing writes blocked at server; read scope preserved; or
   assert.deepEqual(overview.houses.map(h => h.key), ['ramot']);
   assert.deepEqual(overview.totals, { activePatients: 2 });
   assert.equal((await post(executive, { op: 'meetings', house: 'pardes' })).status, 200, 'executive reader can view all allowed houses');
+  const regularCost = await post(manager, { op: 'houseStaffCost', house: 'efroni' });
+  assert.equal(JSON.parse(regularCost.text).staff.workers[0].cost, 20000,
+    'existing writing manager retains their house financial simulation');
   const written = await post(manager, { op: 'meetingReport', house: 'efroni', leadId: 'L1', outcome: 'advancing', note: 'synthetic', submissionId: 'sub-0123456789abcdef' });
   assert.equal(JSON.parse(written.text).saved.reporter, 'אורן');
   assert.deepEqual([calls.at(-1).house, calls.at(-1).actor], ['ramot', 'אורן']);
@@ -72,6 +86,7 @@ test('read-only: all existing writes blocked at server; read scope preserved; or
 test('configuration is strict and a signed session resolves current readOnly capability on every request', () => {
   const row = { id: 'sample-person', name: 'Sample', role: 'admin', code: '11111111' };
   assert.equal(A.parseAccess(JSON.stringify([{ ...row, readOnly: 'false' }])).ok, false);
+  assert.equal(A.parseAccess(JSON.stringify([{ ...row, staffCostDetails: 'yes' }])).ok, false);
   const before = A.parseAccess(JSON.stringify([row])).users;
   const key = A.sessionKey('synthetic-secret');
   const cookie = A.signSession(before[0], key);
