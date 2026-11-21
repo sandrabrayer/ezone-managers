@@ -1578,7 +1578,7 @@
         var roster = cache[key] && cache[key].data && cache[key].data.team && cache[key].data.team.staff || [];
         var blocked = CV && CV.simulationAmbiguousNames && CV.simulationAmbiguousNames(bst0 && bst0.staff, roster);
         var known = matches.length === 1 && !(blocked && blocked[who]);
-        if (!known) { if (sm[who]) delete sm[who]; paintBudget(panel, key); return; }   // never change two people by one display name
+        if (!known) return;   // only one identified worker may have a personal simulation
         if (simKind) {
           if (simKind.value === 'end') sm[who] = { kind: 'end' };
           else if (simKind.value === 'cost') sm[who] = { kind: 'cost', amount: null };
