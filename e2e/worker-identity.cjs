@@ -50,6 +50,23 @@ const fs = require('node:fs');
         { available: true, workers: [] });
     });
     assert.match(await page.locator('#card').innerText(), /לא ניתן לזהות/, 'bare duplicate name fails closed');
+    await page.evaluate(() => {
+      const staff = { available: true, month: '2026-11', total: 30000, budget: 33000,
+        workers: [{ name: 'דנה', roles: ['מדריכה'], cost: 20000 },
+                  { name: 'משה', roles: ['מדריך'], cost: 10000 }] };
+      document.getElementById('card').innerHTML = window.CrmView.budgetHtml({
+        staff, roster: window.fixture.team.staff,
+        sim: { 'דנה': { kind: 'end' }, 'משה': { kind: 'deduct', amount: 1000 } }
+      });
+    });
+    assert.equal(await page.locator('#card [data-sim-kind="דנה"]').count(), 0,
+      'salary simulation must never edit two same-named people via one key');
+    assert.equal(await page.locator('#card [data-emp-open="דנה"]').count(), 0,
+      'a payroll cost row cannot open a guessed employee card');
+    assert.equal(await page.locator('#card [data-sim-kind="משה"]').count(), 1,
+      'unique worker retains the established personal simulation');
+    assert.match(await page.locator('#card').innerText(), /29,000/,
+      'only unique worker adjustment is reflected in the scenario aggregate');
     fs.mkdirSync(path.join(__dirname, '../artifacts'), { recursive: true });
     await page.screenshot({ path: path.join(__dirname, '../artifacts/identity-synthetic-390.png'), fullPage: true });
     assert.deepEqual(errors, [], 'no uncaught browser errors');
