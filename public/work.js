@@ -259,6 +259,7 @@
   }
   function feedbackLine(x) {
     return '<li class="wk-fb-' + esc(x.status) + '"><span class="wk-name">' + esc(x.name) + '</span><span class="wk-meta">' +
+      (x.identityAmbiguous ? esc('זיהוי נדרש' + (x.phoneSuffix ? ' · טלפון מסתיים ב-' + x.phoneSuffix : '')) + ' · ' : '') +
       (x.due ? 'משוב עד ' + esc(fmtDate(x.due)) : '') + (x.status === 'overdue' ? ' · באיחור ' + esc(String(-x.daysLeft)) + ' ימים' : '') +
       (x.status === 'soon' ? ' · בעוד ' + esc(String(x.daysLeft)) + ' ימים' : '') + '</span></li>';
   }
@@ -283,10 +284,12 @@
     h += '<ul class="wk-list wk-fb-all">' + m.items.map(function (x, i) {
       return '<li class="wk-fb-' + esc(x.status) + '"><span class="wk-name">' + esc(x.name) + '</span><span class="wk-meta">' +
         esc(FEEDBACK_STATUS[x.status]) + (x.due ? ' · עד ' + esc(fmtDate(x.due)) : '') +
-        (x.lastFeedback ? ' · משוב אחרון ' + esc(fmtDate(x.lastFeedback)) : (x.startDate ? ' · התחיל/ה ' + esc(fmtDate(x.startDate)) : '')) + '</span>' +
+        (x.lastFeedback ? ' · משוב אחרון ' + esc(fmtDate(x.lastFeedback)) : (x.startDate ? ' · התחיל/ה ' + esc(fmtDate(x.startDate)) : '')) +
+        (x.identityAmbiguous && x.phoneSuffix ? ' · טלפון מסתיים ב-' + esc(x.phoneSuffix) : '') + '</span>' +
+        (x.writeBlocked ? '<span class="wk-note">נדרש זיהוי עובד/ת מאומת לפני רישום משוב; ההיסטוריה אינה משויכת לפי שם בלבד</span>' :
         '<form class="wk-fb-form" data-fb-form="' + i + '" novalidate><input type="hidden" name="employee" value="' + esc(x.name) + '">' +
         '<label class="wk-dis-label"><span>תאריך המשוב</span><input name="doneAt" type="date" required value="' + esc(m.today) + '" max="' + esc(m.today) + '"></label>' +
-        '<button type="submit" class="wk-dis-btn">בוצע</button><span class="wk-msg" data-fb-msg role="status" aria-live="polite"></span></form></li>';
+        '<button type="submit" class="wk-dis-btn">בוצע</button><span class="wk-msg" data-fb-msg role="status" aria-live="polite"></span></form>') + '</li>';
     }).join('') + '</ul>';
     return h + '</div>';
   }
