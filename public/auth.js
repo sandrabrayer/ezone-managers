@@ -27,7 +27,7 @@
   function showUser(u) {
     var chip = el('userChip');
     if (!chip) return;
-    el('userName').textContent = u.name + (u.role === 'admin' ? ' · כל הבתים' : '');
+    el('userName').textContent = u.name + (u.role === 'admin' ? ' · כל הבתים' : '') + (u.readOnly === true ? ' · צפייה בלבד' : '');
     chip.hidden = false;
   }
 
