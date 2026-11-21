@@ -18,6 +18,7 @@
  * (clicks, saves, loads) lives in work.js. Tested in test/crm-view.test.js. */
 (function (root) {
   'use strict';
+  var FD = root.FeedbackDue || (typeof require === 'function' ? require('../lib/feedback-due.js') : null);
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -362,10 +363,28 @@
 
   /* ── «כרטיס עובד/ת» ─────────────────────────────────── */
   function employeeCardHtml(d, name, staffCost, feedbackRow, active) {
-    var t = d && d.team;
-    var s = t && t.available ? (t.staff || []).filter(function (x) { return norm(x.name) === norm(name); })[0] : null;
-    if (!s) return '<div class="wk-empty">העובד/ת לא נמצא/ה ברשימת הבית — רעננו את הדף</div>';
-    var tel = /^0\d{8,9}$/.test(String(s.phone || '')) ? 'tel:' + s.phone : '';
+    var t = d && d.team, roster = t && t.available ? t.staff || [] : [];
+    var s = FD ? FD.resolveEmployee(roster, name) : roster.filter(function (x) { return norm(x.name) === norm(name); })[0];
+    if (!s) return '<div class="wk-empty">' + (roster.some(function (x) { return norm(x.name) === norm(name); }) ? 'לא ניתן לזהות את העובד/ת באופן חד-משמעי לפי המידע הקיים. יש לבדוק מזהה עובד או טלפון במקור.' : 'העובד/ת לא נמצא/ה ברשימת הבית — רעננו את הדף') + '</div>';
+    var sameName = roster.filter(function (x) { return x && norm(x.name) === norm(s.name); }).length > 1;
+    var costRow = function (rows) {
+      var list = Array.isArray(rows) ? rows : [];
+      var id = FD && FD.workerId(s), phone = FD && FD.validPhone(s);
+      var matches = id ? list.filter(function (x) { return FD.workerId(x) === id; }) : [];
+      if (matches.length === 1) return matches[0];
+      if (matches.length > 1) return null;
+      // A recycled phone or a new-name row is not proof of the same employee.
+      // A payroll row with an explicit, conflicting worker ID is authoritative.
+      matches = phone ? list.filter(function (x) { return FD.validPhone(x) === phone && norm(x.name) === norm(s.name) && (!id || !FD.workerId(x) || FD.workerId(x) === id); }) : [];
+      if (matches.length === 1) return matches[0];
+      if (matches.length > 1) return null;
+      // Do not attribute a name-only cost to either of two same-name employees.
+      if (sameName) return null;
+      matches = list.filter(function (x) { return norm(x.name) === norm(s.name) && (!id || !FD.workerId(x) || FD.workerId(x) === id); });
+      return matches.length === 1 ? matches[0] : null;
+    };
+    var phone = FD ? FD.validPhone(s) : String(s.phone || '');
+    var tel = /^0\d{8,9}$/.test(phone) ? 'tel:' + phone : '';
     var seniority = '';
     if (ISO_RE.test(String(s.startDate || '')) && d.today) {
       var mo = (Number(d.today.slice(0, 4)) - Number(s.startDate.slice(0, 4))) * 12 + Number(d.today.slice(5, 7)) - Number(s.startDate.slice(5, 7));
@@ -377,7 +396,7 @@
     var born = null;
     if (staffCost && staffCost.loading) born = ['תאריך לידה', 'טוען…'];
     else if (staffCost && staffCost.available) {
-      var bw = (staffCost.workers || []).filter(function (x) { return x && x.name && norm(x.name) === norm(name); })[0];
+      var bw = costRow(staffCost.workers);
       var bd = bw && ISO_RE.test(String(bw.birthDate || '')) && (!d.today || bw.birthDate <= d.today) ? bw.birthDate : '';
       born = ['תאריך לידה', bd ? fmtDateFull(bd) : 'לא הוזן באפליקציית כוח האדם'];
     }
@@ -393,26 +412,38 @@
     var cost;
     if (!staffCost || !staffCost.available) cost = '<div class="wk-empty">' + esc(staffCost && staffCost.loading ? 'טוען…' : 'נתוני העלות לא זמינים כרגע') + '</div>';
     else {
-      var w = (staffCost.workers || []).filter(function (x) { return norm(x.name) === norm(name); })[0];
+      var w = costRow(staffCost.workers);
       cost = w ? fieldsHtml([
         ['עלות ' + monthHe(staffCost.month), ils(w.cost)],
         ['מקור', w.estimated ? 'הערכה (עוד אין דוח שכר)' : 'לפי דוח השכר'],
         ['חלק מעלות הבית', staffCost.total ? Math.round((w.cost / staffCost.total) * 100) + '%' : '—'],
-        endOfRow(staffCost, w) ? ['סיום עבודה בבית', fmtDate(endOfRow(staffCost, w))] : null
+        (sameName ? endOf(w) : endOfRow(staffCost, w)) ? ['סיום עבודה בבית', fmtDate(sameName ? endOf(w) : endOfRow(staffCost, w))] : null
       ]) : '<div class="wk-empty">אין לעובד/ת עלות רשומה בבית בחודש הזה</div>';
     }
-    var talks = (d.logs && d.logs.staffTalks) ? talksListHtml(d.logs.staffTalks, d.today, name, true) : '<div class="wk-empty">עדיין אין רישומים</div>';
+    // Historical name-only talks cannot be guessed when two workers share a
+    // name, or when the roster now has a stable ID after a rename. A future
+    // Dashboard feed may carry workerId: show only explicitly ID-matched rows.
+    var talkRows = d.logs && d.logs.staffTalks || [];
+    var staffId = FD && FD.workerId(s);
+    var verifiedTalks = staffId ? talkRows.filter(function (r) {
+      return FD.workerId({ workerId: r.workerId, employeeId: r.employeeId }) === staffId;
+    }) : sameName ? [] : talkRows.filter(function (r) {
+      return !(r.workerId || r.employeeId) && norm(r.employeeName) === norm(s.name);
+    });
+    var talks = verifiedTalks.length ? talksListHtml(verifiedTalks, d.today, '', true) :
+      (sameName || staffId ? '<div class="wk-empty">שם זהה או מזהה עובד חדש: לא משייכים שיחות לפי שם בלבד. רישומים ישנים יופיעו רק לאחר אימות מזהה במקור.</div>' :
+        '<div class="wk-empty">עדיין אין רישומים</div>');
     var fb = feedbackRow ? fieldsHtml([
       ['משוב אחרון', feedbackRow.lastFeedback ? fmtDate(feedbackRow.lastFeedback) : 'עוד לא נרשם'],
       ['המשוב הבא', feedbackRow.due ? fmtDate(feedbackRow.due) : '—'],
       ['מצב', feedbackRow.status === 'overdue' ? 'באיחור' : feedbackRow.status === 'soon' ? 'בקרוב' : feedbackRow.status === 'unknown' ? 'אין תאריך התחלה' : 'בהמשך']
-    ]) + '<div class="crm-actions"><button type="button" class="wk-btn ghost" data-go-sub="team" data-drawer-close>לסימון משוב ←</button></div>'
+    ]) + (feedbackRow.writeBlocked ? '<div class="wk-note">אין אפשרות לשייך משוב חדש לפי שם בלבד</div>' : '<div class="crm-actions"><button type="button" class="wk-btn ghost" data-go-sub="team" data-drawer-close>לסימון משוב ←</button></div>')
       : '<div class="wk-empty">אין נתוני משוב</div>';
-    return '<div class="crm-card-sub">' + esc((s.role || '') + (s.onLeave ? ' · בחופשה' : '')) + '</div>' +
+    return '<div class="crm-card-sub">' + esc((s.role || '') + (s.onLeave ? ' · בחופשה' : '') + (sameName ? ' · זוהה לפי מזהה עובד או טלפון' : '')) + '</div>' +
       cardTabsHtml('employee', [
         { key: 'details', label: 'פרטים', html: details },
         { key: 'cost', label: 'עלות', html: cost },
-        { key: 'talks', label: 'שיחות', html: talks + '<div class="crm-actions"><button type="button" class="wk-btn" data-emp-talk="' + esc(s.name) + '">💬 רישום שיחה חדשה</button></div>' },
+        { key: 'talks', label: 'שיחות', html: talks + (sameName || (FD && FD.workerId(s)) ? '' : '<div class="crm-actions"><button type="button" class="wk-btn" data-emp-talk="' + esc(s.name) + '">💬 רישום שיחה חדשה</button></div>') },
         { key: 'feedback', label: 'משוב', html: fb }
       ], active);
   }
@@ -478,10 +509,11 @@
     return list.sort(function (a, b) { return a.endDate < b.endDate ? -1 : a.endDate > b.endDate ? 1 : 0; });
   }
   /* The end date of a row of the workers table: its own, else the list's entry of the same name. */
-  function endOfRow(s, w) {
+  function endOfRow(s, w, ambiguous) {
+    if (ambiguous && ambiguous[norm(w && w.name)]) return '';
     if (endOf(w)) return endOf(w);
-    var hit = w && w.name ? endingPeople(s).filter(function (p) { return p.name === norm(w.name); })[0] : null;
-    return hit ? hit.endDate : '';
+    var matches = w && w.name ? endingPeople(s).filter(function (p) { return p.name === norm(w.name); }) : [];
+    return matches.length === 1 ? matches[0].endDate : '';
   }
   function nextMonth(ym) {
     var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
@@ -490,15 +522,15 @@
     if (mo > 12) { mo = 1; y += 1; }
     return y + '-' + (mo < 10 ? '0' + mo : mo);
   }
-  function endingHtml(s) {
+  function endingHtml(s, ambiguous) {
     var e = s && s.ending;
     var count = e ? Math.max(0, Math.round(Number(e.count) || 0)) : 0;
     if (!e || typeof e !== 'object' || !count) return '';
     var who = endingPeople(s);
     // Nobody is counted without a name: a number above the list is said in words, never left unexplained.
     var unnamed = Math.max(0, count - who.length);
-    var known = {};
-    (s.workers || []).forEach(function (w) { if (w && w.name) known[norm(w.name)] = w.name; });
+    var known = {}, counts = Object.create(null);
+    (s.workers || []).forEach(function (w) { if (w && w.name) { var name = norm(w.name); known[name] = w.name; counts[name] = (counts[name] || 0) + 1; } });
     var next = nextMonth(s.month);
     return '<div class="card work-card wk-budget-ending" data-default-open><div class="card-title">חיסכון צפוי מסיומי עבודה — הערכה</div>' +
       '<div class="budget-kpis">' +
@@ -509,7 +541,7 @@
       '</div>' +
       (who.length ? '<ul class="ending-list">' + who.map(function (p) {
         // The name opens the employee card only when the workers table has that name.
-        return '<li>' + (known[p.name] ? '<button type="button" class="link-cell" data-emp-open="' + esc(known[p.name]) + '">' + esc(p.name) + '</button>'
+        return '<li>' + (known[p.name] && counts[p.name] === 1 && !(ambiguous && ambiguous[p.name]) ? '<button type="button" class="link-cell" data-emp-open="' + esc(known[p.name]) + '">' + esc(p.name) + '</button>'
           : '<b class="ending-name">' + esc(p.name) + '</b>') + '<span>' +
           esc('מסיים/ת ב-' + fmtDate(p.endDate) + (p.monthlySaving ? ' · חיסכון ' + ils(p.monthlySaving) + ' בחודש מלא' : '')) + '</span></li>';
       }).join('') + '</ul>' : '') +
@@ -547,13 +579,16 @@
     return null;
   }
   /* → { workers: [{ …w, simKind, simCost, simDelta, simAmount, simDeduct }], total, delta, active, count } */
-  function simulateStaff(staff, sim) {
+  function simulateStaff(staff, sim, ambiguous) {
     var s = staff || {};
     var base = Math.max(0, Number(s.total) || 0);
+    var blocked = simulationAmbiguousNames(s, []);
+    Object.keys(ambiguous || {}).forEach(function (k) { if (ambiguous[k]) blocked[k] = true; });
     var delta = 0, count = 0;
     var workers = (s.workers || []).map(function (w) {
       var cost = Math.round(Number(w.cost) || 0);
-      var x = simOf(sim, w.name);
+      var nameBlocked = !!blocked[norm(w.name)];
+      var x = nameBlocked ? null : simOf(sim, w.name);
       var simCost = cost, kind = '', typed = null;
       if (x && x.kind === 'end') { simCost = 0; kind = 'end'; }
       else if (x && x.kind === 'cost') { kind = 'cost'; if (x.amount !== null) { simCost = x.amount; typed = x.amount; } }
@@ -564,7 +599,7 @@
       delta += kind === 'deduct' ? -deduct : simCost - cost;
       var o = {};
       Object.keys(w).forEach(function (k) { o[k] = w[k]; });
-      o.cost = cost; o.simKind = kind; o.simCost = simCost; o.simDelta = kind === 'deduct' ? -deduct : simCost - cost; o.simAmount = typed; o.simDeduct = deduct;
+      o.cost = cost; o.simKind = kind; o.simCost = simCost; o.simDelta = kind === 'deduct' ? -deduct : simCost - cost; o.simAmount = typed; o.simDeduct = deduct; o.simBlocked = nameBlocked;
       return o;
     });
     return { workers: workers, base: base, total: Math.max(0, base + delta), delta: delta, active: count > 0, count: count };
@@ -587,6 +622,27 @@
       // «ניקוי» (17 Nov 2026, Sandra: «תעשה אפשרות לנקות שדות אחרי שעושים סימולציה»): this worker back to the real figure.
       (w.simKind ? '<button type="button" class="wk-link sim-clear" data-sim-clear="' + name + '" aria-label="' + esc('ניקוי הסימולציה — ' + w.name) + '">✕ ניקוי</button>' : '') + '</div>';
   }
+  /* The staffing cost rows are currently identified by display name, not
+   * the HR worker ID. A name collision can be present in either the source
+   * roster or the costs table. A single payroll row is not evidence that its
+   * name represents one person if two roster people share that name.
+   * This is a read-only UI guard; no HR or Dashboard changes are made. */
+  function simulationAmbiguousNames(staff, roster) {
+    var count = Object.create(null), blocked = Object.create(null);
+    [staff && staff.workers, roster].forEach(function (items) {
+      var local = Object.create(null);
+      (Array.isArray(items) ? items : []).forEach(function (e) {
+        var name = norm(e && e.name);
+        if (!name) return;
+        local[name] = (local[name] || 0) + 1;
+      });
+      Object.keys(local).forEach(function (name) {
+        if (local[name] > 1) blocked[name] = true;
+      });
+    });
+    return blocked;
+  }
+
   /* The whole simulation back to the real figures — shown wherever a simulation is on. */
   function simClearAllHtml(count) {
     return '<div class="sim-bar"><span class="sim-bar-text">🧪 ' + esc(count === 1 ? 'שינוי אחד בסימולציה' : count + ' שינויים בסימולציה') + '</span>' +
@@ -606,8 +662,10 @@
         '<div class="crm-actions"><button type="button" class="wk-btn ghost" data-budget-retry>נסו שוב</button></div></div>';
     } else {
       var next = st.nextStaff && st.nextStaff.available ? st.nextStaff : null;
-      simNow = simulateStaff(s, st.sim);
-      simNext = next ? simulateStaff(next, st.sim) : null;
+      var blockedNames = simulationAmbiguousNames(s, st.roster || []);
+      Object.keys(st.ambiguousNames || {}).forEach(function (name) { if (st.ambiguousNames[name]) blockedNames[name] = true; });
+      simNow = simulateStaff(s, st.sim, blockedNames);
+      simNext = next ? simulateStaff(next, st.sim, blockedNames) : null;
       // A worker «ended» in the simulation who is not in next month's list changes nothing there —
       // simulateStaff(next) already handles it (the delta is taken from next month's own list).
       var total = Math.max(0, Number(s.total) || 0), budget = s.budget ? Math.max(0, Number(s.budget) || 0) : 0;
@@ -626,7 +684,7 @@
         '<div class="wk-note">' + esc(s.hasActuals ? 'חלק מהעלות כבר לפי דוח השכר, והשאר הערכה.' : 'עדיין אין דוח שכר לחודש הזה — הסכומים הם הערכה.') +
         (s.stale ? ' (הנתון לא התעדכן לאחרונה)' : '') + '</div></div>';
       // «חיסכון צפוי מסיומי עבודה» — the staffing app's forecast, shown only when someone finishes.
-      h += endingHtml(s);
+      h += endingHtml(s, blockedNames);
 
       // The simulation result — only while something is simulated.
       if (simNow.active) {
@@ -654,8 +712,9 @@
           (next ? '<th>' + esc('צפי ' + monthHe(next.month)) + '</th>' : '') + '<th>% מהבית</th><th>מקור</th><th>סימולציה</th></tr></thead><tbody>' +
           workers.map(function (w) {
             var pct = simTotal ? Math.round((w.simCost / simTotal) * 100) : 0;
-            var end = endOfRow(s, w);
-            var nw = next && w.name ? (simNext.workers.filter(function (x) { return norm(x.name) === norm(w.name); })[0] || null) : null;
+            var end = endOfRow(s, w, blockedNames);
+            var nextMatches = next && w.name ? simNext.workers.filter(function (x) { return norm(x.name) === norm(w.name); }) : [];
+            var nw = !w.simBlocked && nextMatches.length === 1 ? nextMatches[0] : null;
             // «הפחתת סכום אחר»: the worker's figure stays, and the amount that comes off the total is beside it.
             var costCell = w.simKind === 'deduct' ? esc(ils(w.cost)) + (w.simDeduct ? ' <b class="sim-new sim-deduct">' + esc(signedIls(-w.simDeduct)) + '</b>' : '')
               : w.simKind && w.simCost !== w.cost
@@ -666,11 +725,11 @@
                 : nw.simKind && nw.simCost !== nw.cost ? '<s class="sim-old">' + esc(ils(nw.cost)) + '</s> <b class="sim-new">' + esc(ils(nw.simCost)) + '</b>' : esc(ils(nw.cost)))
               : esc(ils(0)));
             return '<tr class="' + (w.name ? '' : 'muted') + (w.simKind ? ' is-sim' : '') + '">' + td('עובד/ת',
-              (w.name ? '<button type="button" class="link-cell" data-emp-open="' + esc(w.name) + '">' + esc(w.name) + '</button>' : 'אחר (ללא שם)') +
+              (w.name ? (w.simBlocked ? '<span class="wk-name">' + esc(w.name) + '</span> ' + chip('warn', 'זיהוי עובד לא חד־משמעי') : '<button type="button" class="link-cell" data-emp-open="' + esc(w.name) + '">' + esc(w.name) + '</button>') : 'אחר (ללא שם)') +
               (end ? ' ' + chip('warn', 'מסיים/ת ' + fmtDate(end)) : '') + (w.simKind === 'end' ? ' ' + chip('bad', 'סימולציה: סיום') : w.simKind === 'cost' ? ' ' + chip('open', 'סימולציה: שכר') : w.simKind === 'deduct' ? ' ' + chip('open', 'סימולציה: הפחתה') : '')) +
               td('תפקיד', esc((w.roles || []).join(', ') || '—')) + td('עלות החודש', costCell) + nextCell + td('% מהבית', esc(pct + '%')) +
               td('מקור', w.estimated ? chip('wait', 'הערכה') : chip('ok', 'דוח שכר')) +
-              (w.name ? td('סימולציה', simCellHtml(w)) : '<td></td>') + '</tr>';
+              (w.name ? td('סימולציה', w.simBlocked ? '<span class="wk-note">סימולציה חסומה עד לזיהוי העובד/ת במקור</span>' : simCellHtml(w)) : '<td></td>') + '</tr>';
           }).join('') + '</tbody><tfoot><tr>' + td('', 'סה״כ' + (simNow.active ? ' בסימולציה' : '')) + '<td></td>' + td('עלות החודש',
           (simNow.active && simNow.delta ? '<s class="sim-old">' + esc(ils(total)) + '</s> <b class="sim-new">' + esc(ils(simTotal)) + '</b>' : esc(ils(total)))) +
           (next ? td('צפי ' + monthHe(next.month), simNow.active && simNext.delta ? '<s class="sim-old">' + esc(ils(nextTotal)) + '</s> <b class="sim-new">' + esc(ils(simNext.total)) + '</b>' : esc(ils(nextTotal))) : '') +
@@ -790,7 +849,7 @@
     contactOf: contactOf, familyCallsOf: familyCallsOf, familyContactsHtml: familyContactsHtml,
     familyCallsListHtml: familyCallsListHtml, familyFilterHtml: familyFilterHtml,
     employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, octoberTargetHtml: octoberTargetHtml, quarterHtml: quarterHtml,
-    endingHtml: endingHtml, endingPeople: endingPeople, simulateStaff: simulateStaff, SIM_MAX: SIM_MAX,
+    endingHtml: endingHtml, endingPeople: endingPeople, simulateStaff: simulateStaff, simulationAmbiguousNames: simulationAmbiguousNames, SIM_MAX: SIM_MAX,
     budgetBonusHtml: budgetBonusHtml, monthBonusCardHtml: monthBonusCardHtml
   };
   root.CrmView = CrmView;

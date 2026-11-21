@@ -15,7 +15,19 @@ records when it was done.
   - `ok`: later;
   - `unknown`: no start date and no feedback yet («אין תאריך התחלה», never a guessed date).
 - **Inactive employees are left out** (`active === false`). The digest already carries only active staff.
-  Duplicate names are merged, the first one wins. A feedback date in the future or invalid is ignored.
+  Duplicate display names are **not merged**. When a stable worker ID is supplied, ID-bearing
+  feedback history matches only that ID (including across name changes). A validated,
+  unique phone may distinguish two same-name workers inside the Managers UI,
+  but is **not** used as a durable worker ID or to rewrite old logs. A
+  name-only historic feedback row is not assigned to either of two same-name
+  workers. For a roster carrying a worker ID, a legacy name-only history is not
+  automatically attributed to that ID without verified migration. An invalid
+  or future feedback date is ignored.
+- **Write contract remains name-only** at the Dashboard. The Managers UI hides
+  the «בוצע» action when a worker has an ID or shares a display name with
+  another worker, because sending only the name would lose the proven identity.
+  A unique legacy employee without an ID retains the same workflow.
+- **No payroll/HR permissions or roles are changed** by this fix.
 
 ## Where
 

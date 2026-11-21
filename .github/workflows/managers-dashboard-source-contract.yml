@@ -1,0 +1,37 @@
+name: managers-dashboard-source-contract
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Managers draft
+        uses: actions/checkout@v4
+        with:
+          path: managers
+      - name: Checkout pinned Dashboard source (read-only)
+        uses: actions/checkout@v4
+        with:
+          repository: sandrabrayer/E-Zone-Dashboard
+          ref: 2ee1aa33168642612b96860f982c2f7ff9d05103
+          path: dashboard-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: managers/package-lock.json
+      - name: Managers dependencies
+        working-directory: managers
+        run: npm ci
+      - name: Managers HTTP to real Dashboard Code.gs — synthetic in-memory only
+        working-directory: managers
+        env:
+          DASHBOARD_CHECKOUT: ${{ github.workspace }}/dashboard-source
+        run: node --test test/managers-backend-integration.test.js

@@ -259,6 +259,7 @@
   }
   function feedbackLine(x) {
     return '<li class="wk-fb-' + esc(x.status) + '"><span class="wk-name">' + esc(x.name) + '</span><span class="wk-meta">' +
+      (x.identityAmbiguous ? esc('זיהוי נדרש' + (x.phoneSuffix ? ' · טלפון מסתיים ב-' + x.phoneSuffix : '')) + ' · ' : '') +
       (x.due ? 'משוב עד ' + esc(fmtDate(x.due)) : '') + (x.status === 'overdue' ? ' · באיחור ' + esc(String(-x.daysLeft)) + ' ימים' : '') +
       (x.status === 'soon' ? ' · בעוד ' + esc(String(x.daysLeft)) + ' ימים' : '') + '</span></li>';
   }
@@ -283,10 +284,12 @@
     h += '<ul class="wk-list wk-fb-all">' + m.items.map(function (x, i) {
       return '<li class="wk-fb-' + esc(x.status) + '"><span class="wk-name">' + esc(x.name) + '</span><span class="wk-meta">' +
         esc(FEEDBACK_STATUS[x.status]) + (x.due ? ' · עד ' + esc(fmtDate(x.due)) : '') +
-        (x.lastFeedback ? ' · משוב אחרון ' + esc(fmtDate(x.lastFeedback)) : (x.startDate ? ' · התחיל/ה ' + esc(fmtDate(x.startDate)) : '')) + '</span>' +
+        (x.lastFeedback ? ' · משוב אחרון ' + esc(fmtDate(x.lastFeedback)) : (x.startDate ? ' · התחיל/ה ' + esc(fmtDate(x.startDate)) : '')) +
+        (x.identityAmbiguous && x.phoneSuffix ? ' · טלפון מסתיים ב-' + esc(x.phoneSuffix) : '') + '</span>' +
+        (x.writeBlocked ? '<span class="wk-note">נדרש זיהוי עובד/ת מאומת לפני רישום משוב; ההיסטוריה אינה משויכת לפי שם בלבד</span>' :
         '<form class="wk-fb-form" data-fb-form="' + i + '" novalidate><input type="hidden" name="employee" value="' + esc(x.name) + '">' +
         '<label class="wk-dis-label"><span>תאריך המשוב</span><input name="doneAt" type="date" required value="' + esc(m.today) + '" max="' + esc(m.today) + '"></label>' +
-        '<button type="submit" class="wk-dis-btn">בוצע</button><span class="wk-msg" data-fb-msg role="status" aria-live="polite"></span></form></li>';
+        '<button type="submit" class="wk-dis-btn">בוצע</button><span class="wk-msg" data-fb-msg role="status" aria-live="polite"></span></form>') + '</li>';
     }).join('') + '</ul>';
     return h + '</div>';
   }
@@ -529,12 +532,17 @@
         (g.rows.some(function (r) { return r.draft; }) ? '<span class="wk-meta">טיוטה</span>' : '') + '</li>';
     }).join('');
   }
-  function staffLine(s) {
+  function staffLine(s, roster) {
     var tel = telHref(s.phone);
+    var ref = FD && FD.employeeRef ? FD.employeeRef(s, roster) : s.name;
+    var normalizedPhone = FD && FD.validPhone ? FD.validPhone(s) : '';
+    var duplicates = roster.filter(function (x) { return x && FD && FD.normName(x.name) === FD.normName(s.name); }).length > 1;
     return '<li><span class="wk-name">' + esc(s.name) + '</span><span class="wk-meta">' + esc(s.role) +
-      (s.onLeave ? ' · בחופשה' : '') + '</span>' +
+      (s.onLeave ? ' · בחופשה' : '') +
+      (duplicates ? ' · ' + (normalizedPhone ? 'טלפון מסתיים ב-' + esc(normalizedPhone.slice(-4)) : 'נדרש מזהה עובד') : '') + '</span>' +
       (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') +
-      '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(s.name) + '">כרטיס ←</button></li>';
+      (ref ? '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(ref) + '">כרטיס ←</button>' :
+        '<span class="wk-note">לא ניתן לפתוח כרטיס עובד ללא זיהוי חד-משמעי</span>') + '</li>';
   }
   function teamHtml(d) {
     var gate = teamGate(d);
@@ -557,7 +565,7 @@
     var ther = staff.filter(function (s) { return s.kind === 'therapist'; });
     h += '<div class="card work-card wk-staff"><div class="card-title">עובדי הבית (' + staff.length + ')</div>';
     if (!staff.length) h += '<div class="wk-empty">אין עובדים רשומים בבית</div>';
-    if (guides.length) h += '<div class="card-subtitle">מדריכים (' + guides.length + ')</div><ul class="wk-list">' + guides.map(staffLine).join('') + '</ul>';
+    if (guides.length) h += '<div class="card-subtitle">מדריכים (' + guides.length + ')</div><ul class="wk-list">' + guides.map(function (e) { return staffLine(e, staff); }).join('') + '</ul>';
     // Therapists are listed ONCE, in «מטפלים» (with workdays, phone and the card) — 16 Nov 2026.
     if (ther.length) h += '<button type="button" class="dash-go" data-go-sub="therapists">' + esc(plural(ther.length, 'מטפל/ת אחד/ת', 'מטפלים')) + ' — בלשונית «מטפלים» ←</button>';
     h += '</div>';
@@ -570,12 +578,13 @@
     var h = staleNote(t);
     h += '<div class="card work-card wk-ther"><div class="card-title">מטפלים בבית (' + ther.length + ')</div>';
     h += ther.length ? '<ul class="wk-list">' + ther.map(function (s) {
+      var ref = FD && FD.employeeRef ? FD.employeeRef(s, t.staff || []) : s.name;
       var days = (s.workdays || []).filter(function (x) { return WEEKDAYS[x]; }).map(function (x) { return WEEKDAYS[x]; });
       var tel = telHref(s.phone);
       return '<li><span class="wk-name">' + esc(s.name) + '</span><span class="wk-meta">' + esc(s.role) +
         (days.length ? ' · ימי עבודה: ' + esc(days.join(', ')) : '') + (s.onLeave ? ' · בחופשה' : '') + '</span>' +
         (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') +
-        '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(s.name) + '">כרטיס ←</button></li>';
+        (ref ? '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(ref) + '">כרטיס ←</button>' : '<span class="wk-note">לא ניתן לפתוח כרטיס ללא מזהה עובד</span>') + '</li>';
     }).join('') + '</ul>' : '<div class="wk-empty">אין מטפלים רשומים בבית</div>';
     h += '</div>';
     h += '<div class="card work-card wk-ther-week"><div class="card-title">לוז טיפולים שבועי</div>';
@@ -1565,8 +1574,11 @@
         var sm = simState[key] || (simState[key] = {});
         var who = (simKind || simAmt).getAttribute(simKind ? 'data-sim-kind' : 'data-sim-amount');
         var bst0 = budgetState[key];
-        var known = bst0 && bst0.staff && bst0.staff.available && (bst0.staff.workers || []).some(function (w) { return w.name === who; });
-        if (!known) return;   // only a worker of the list on screen
+        var matches = bst0 && bst0.staff && bst0.staff.available ? (bst0.staff.workers || []).filter(function (w) { return w.name === who; }) : [];
+        var roster = cache[key] && cache[key].data && cache[key].data.team && cache[key].data.team.staff || [];
+        var blocked = CV && CV.simulationAmbiguousNames && CV.simulationAmbiguousNames(bst0 && bst0.staff, roster);
+        var known = matches.length === 1 && !(blocked && blocked[who]);
+        if (!known) return;   // only one identified worker may have a personal simulation
         if (simKind) {
           if (simKind.value === 'end') sm[who] = { kind: 'end' };
           else if (simKind.value === 'cost') sm[who] = { kind: 'cost', amount: null };
@@ -1627,6 +1639,16 @@
       var res = entryFromForm(logKey, values);
       var msg = form.querySelector('[data-wk-msg]');
       if (res.missing.length) { msg.textContent = 'חסר: ' + res.missing.join(', '); return; }
+      // The Dashboard's staff-talk writer is name-only. A collision or an
+      // ID-bearing worker needs an identity-aware backend, not a guessed log.
+      if (logKey === 'staffTalks' && FD) {
+        var roster = (cache[key] && cache[key].data && cache[key].data.team && cache[key].data.team.staff) || [];
+        var matches = FD.activeRoster(roster).filter(function (e) { return FD.normName(e.name) === FD.normName(res.entry.employeeName); });
+        if (matches.length > 1 || (matches.length === 1 && FD.workerId(matches[0]))) {
+          msg.textContent = 'לא ניתן לשמור שיחה לפי שם שאינו מזהה את העובד/ת בוודאות. נדרש חיבור מזהה עובד למקור.';
+          return;
+        }
+      }
       var btn = form.querySelector('button[type="submit"]');
       if (btn.disabled) return;   // a second tap while saving
       btn.disabled = true; msg.textContent = 'שומר…';
@@ -1659,7 +1681,7 @@
     }
     var bs = budgetState[key];
     var fm = feedbackModel(c);
-    var fr = fm ? fm.items.filter(function (x) { return String(x.name).trim() === String(arg).trim(); })[0] : null;
+    var fr = fm ? fm.items.filter(function (x) { return x.ref === arg; })[0] : null;
     var staffCost = bs && bs.staff ? bs.staff : { loading: true };
     return { title: arg, html: CV.employeeCardHtml(c, arg, staffCost, fr, tab) };
   }
@@ -1753,7 +1775,12 @@
     var st = budgetState[key];
     var hb = host(panel, 'budget');
     if (hb && CV) {
-      hb.innerHTML = CV.budgetHtml(st && !st.loading ? Object.assign({}, st, { sim: simState[key] || {} }) : { staff: { loading: true } });
+      var roster = cache[key] && cache[key].data && cache[key].data.team && cache[key].data.team.staff || [];
+      if (st && st.staff && CV.simulationAmbiguousNames && simState[key]) {
+        var blocked = CV.simulationAmbiguousNames(st.staff, roster);
+        Object.keys(blocked).forEach(function (name) { delete simState[key][name]; });
+      }
+      hb.innerHTML = CV.budgetHtml(st && !st.loading ? Object.assign({}, st, { sim: simState[key] || {}, roster: roster }) : { staff: { loading: true } });
       applyCollapse(panel, key);
     }
     var bb = panel.querySelector('[data-budget-bonus]');
@@ -1925,6 +1952,17 @@
     var doneAt = String(form.elements.doneAt.value || '').trim();
     var today = String(form.elements.doneAt.getAttribute('max') || '');
     if (!FD || !FD.validDoneAt(doneAt, today)) { if (msg) msg.textContent = FEEDBACK_ERRORS.bad_date; return; }
+    // The feed might have changed after the form was rendered: fail closed.
+    var data = cache[key] && cache[key].data;
+    if (data && FD) {
+      var model = feedbackModel(data);
+      var itemIndex = Number(form.getAttribute('data-fb-form'));
+      var item = model && model.items[itemIndex];
+      if (!item || item.name !== employee || item.writeBlocked) {
+        if (msg) msg.textContent = 'נדרש זיהוי עובד/ת מאומת. לא ניתן לרשום משוב לפי שם בלבד.';
+        return;
+      }
+    }
     form.setAttribute('data-fb-busy', '1');
     Array.prototype.forEach.call(form.querySelectorAll('input, button'), function (el) { el.disabled = true; });
     if (msg) msg.textContent = 'שומר...';
