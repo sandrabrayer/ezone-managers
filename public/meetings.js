@@ -111,6 +111,8 @@
    * manager's display name — the same string on both sides (MANAGER_ACCESS.name and the
    * lead's meetingWith). Normalised: NFC, trimmed, inner spaces collapsed, case-folded. */
   var viewer = '';
+  var readOnly = false;
+  function setReadOnly(value) { readOnly = value === true; }
   function normName(v) { return String(v == null ? '' : v).normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase(); }
   function setViewer(name) { viewer = normName(name); }
   function scheduledWithViewer(m) { return !!viewer && !!(m && m.meetingWith) && normName(m.meetingWith) === viewer; }
@@ -141,6 +143,7 @@
       if (m.report.note) h += '<div class="wk-text mt-note">' + esc(m.report.note) + '</div>';
     }
     if (open && st.done) h += doneHtml(st.done);
+    else if (readOnly) h += '<div class="wk-note">צפייה בלבד — לא ניתן לדווח מחשבון זה</div>';
     else if (open) h += formHtml(m, st.draft || {}, st);
     else h += '<div class="mt-actions"><button type="button" class="wk-btn' + (m.report ? ' ghost' : '') + '" data-mt-report="' + esc(m.id) + '">' + (m.report ? 'עריכת דיווח' : 'דיווח על הפגישה') + '</button></div>';
     return h + '</li>';
@@ -224,6 +227,7 @@
     unknown_op: 'השרת עוד לא עודכן לדיווח פגישות — בינתיים דווחו בלינק. פנו לסנדרה.',
     unauthorized: 'השרת דחה את הדיווח (הרשאה) — פנו לסנדרה',
     forbidden: 'אין הרשאה לבית הזה',
+    read_only: 'החשבון מוגדר לצפייה בלבד',
     timeout: 'הבקשה לקחה יותר מדי זמן — בדקו ברשימה אם הדיווח נשמר לפני שליחה חוזרת',
     not_proven: 'השרת לא אישר שהדיווח נשמר — נסו שוב (שליחה חוזרת לא תכפיל אותו)'
   };
@@ -338,7 +342,7 @@
     OUTCOME_LABELS: OUTCOME_LABELS, NOT_HELD_LABELS: NOT_HELD_LABELS, NOT_HELD_ORDER: NOT_HELD_ORDER,
     COMPANION_LABELS: COMPANION_LABELS, HELD_OUTCOMES: HELD_OUTCOMES, NOTE_MAX: NOTE_MAX,
     model: model, badgeCount: badgeCount, stateOf: stateOf, tabHtml: tabHtml, homeCardHtml: homeCardHtml,
-    setViewer: setViewer, scheduledWithViewer: scheduledWithViewer,
+    setViewer: setViewer, setReadOnly: setReadOnly, scheduledWithViewer: scheduledWithViewer,
     formHtml: formHtml, rowHtml: rowHtml, draftError: draftError, payloadOf: payloadOf, freeValue: freeValue,
     errorText: errorText, ERRORS: ERRORS, reportSummary: reportSummary,
     waMessage: waMessage, waShareMessage: waShareMessage, waShareUrl: waShareUrl, WA_URL_MAX: WA_URL_MAX, esc: esc
@@ -349,6 +353,7 @@
   var CACHE_MS = 60000;
 
   async function post(body) {
+    if (readOnly && body && body.op === 'meetingReport') throw Object.assign(new Error('read_only'), { code: 'read_only' });
     var r = await fetch('/api/work', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) });
     var data = null;
     try { data = await r.json(); } catch (e) { data = null; }
@@ -435,7 +440,7 @@
 
   async function submit(panel, key) {
     var st = stFor(key);
-    if (st.saving) return;   // a double tap never sends twice
+    if (st.saving || readOnly) return;   // read-only and double taps never send
     var m = findMeeting(key, st.open);
     if (!m) return;
     var err = draftError(st.draft, st.today);
@@ -482,7 +487,7 @@
       if (fold) { st.foldOpen = !fold.parentNode.open; return; }
       var rep = t.closest('[data-mt-report]');
       if (rep) {
-        if (st.saving) return;
+        if (st.saving || readOnly) return;
         st.open = rep.getAttribute('data-mt-report'); st.done = null; st.error = '';
         st.draft = draftFromReport(findMeeting(key, st.open));
         paint(panel, key);
