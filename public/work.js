@@ -172,7 +172,9 @@
   var DISCHARGE_DONE = { set: 'נשמר ✓', clear: 'התאריך נוקה ✓', none: 'נשמר: אין צפי לשחרור ✓' };
   function dischargeModes(d) {
     var m = d && Array.isArray(d.expectedDischargeModes) ? d.expectedDischargeModes : [];
-    return { clear: m.indexOf('clear') >= 0, none: m.indexOf('none') >= 0, readOnly: !!(d && d.readOnly) };
+    var modes = { clear: m.indexOf('clear') >= 0, none: m.indexOf('none') >= 0 };
+    if (d && d.readOnly) modes.readOnly = true;
+    return modes;
   }
   /* What the row shows now: 'none' («אין צפי»), 'date', or '' (nothing set). */
   function dischargeStateOf(p) {
