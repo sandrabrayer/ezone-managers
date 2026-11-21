@@ -535,10 +535,11 @@
   function staffLine(s, roster) {
     var tel = telHref(s.phone);
     var ref = FD && FD.employeeRef ? FD.employeeRef(s, roster) : s.name;
+    var normalizedPhone = FD && FD.validPhone ? FD.validPhone(s) : '';
     var duplicates = roster.filter(function (x) { return x && FD && FD.normName(x.name) === FD.normName(s.name); }).length > 1;
     return '<li><span class="wk-name">' + esc(s.name) + '</span><span class="wk-meta">' + esc(s.role) +
       (s.onLeave ? ' · בחופשה' : '') +
-      (duplicates ? ' · ' + (tel ? 'טלפון מסתיים ב-' + esc(FD.validPhone(s).slice(-4)) : 'נדרש מזהה עובד') : '') + '</span>' +
+      (duplicates ? ' · ' + (normalizedPhone ? 'טלפון מסתיים ב-' + esc(normalizedPhone.slice(-4)) : 'נדרש מזהה עובד') : '') + '</span>' +
       (tel ? '<a class="wk-tel" href="' + esc(tel) + '" aria-label="' + esc('התקשרות ל' + s.name) + '">📞 ' + esc(s.phone) + '</a>' : '') +
       (ref ? '<button type="button" class="wk-link emp-open" data-emp-open="' + esc(ref) + '">כרטיס ←</button>' :
         '<span class="wk-note">לא ניתן לפתוח כרטיס עובד ללא זיהוי חד-משמעי</span>') + '</li>';
