@@ -147,6 +147,7 @@
     bad_request: 'חסרים פרטים — רעננו את הדף ונסו שוב.',
     rate_limited: 'יותר מדי עדכונים — נסו שוב מאוחר יותר.',
     session: 'פג תוקף ההתחברות — היכנסו שוב.',
+    read_only: 'החשבון מוגדר לצפייה בלבד',
     offline: 'אין חיבור לאינטרנט — בדקו את החיבור ונסו שוב.',
     unknown: 'השמירה נכשלה — נסו שוב.'
   };
@@ -1660,6 +1661,9 @@
   function drawerHtml(key, type, arg, tab) {
     var c = cache[key] && cache[key].data;
     if (!c || !CV) return { title: '', html: '<div class="wk-empty">טוען…</div>' };
+    // This drawer reads cached house data directly; keep the signed user's
+    // capability even when a background budget repaint reopens the card.
+    c = Object.assign({}, c, { readOnly: !!(me() && me().readOnly) });
     if (type === 'patient') {
       var p = (c.patients || [])[Number(arg)];
       return { title: p ? p.name : 'מטופל/ת', html: CV.patientCardHtml(c, arg, tab) };
