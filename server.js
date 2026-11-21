@@ -143,7 +143,7 @@ function requireUser(req, res, next) {
   req.user = u;
   next();
 }
-const publicUser = (u) => ({ id: u.id, name: u.name, role: u.role, house: u.house || null, readOnly: u.readOnly === true });
+const publicUser = (u) => Object.assign({ id: u.id, name: u.name, role: u.role, house: u.house || null }, u.readOnly === true ? { readOnly: true } : {});
 
 // ---- static: public assets only (they hold no data; data needs a login) ----
 app.use(express.static(path.join(__dirname, 'public')));
