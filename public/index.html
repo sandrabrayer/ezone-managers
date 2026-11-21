@@ -179,6 +179,7 @@
             <li><a href="#g-collapse">כותרות עם חץ — פתיחה וסגירה</a></li>
             <li><a href="#g-sim">סימולציה וצפי לחודש הבא</a></li>
             <li><a href="#g-meetings">פגישות קליטה — דיווח</a></li>
+            <li><a href="#g-calendar">יומן שבועי וזימון ליומן</a></li>
           </ol>
         </nav>
 
@@ -378,6 +379,20 @@
             <li>הלינק לדיווח ממשיך לעבוד כרגיל. אם כתוב «לא מחובר» — מדווחים בלינק ופונים לסנדרה.</li>
           </ul>
         </section>
+
+        <section class="card guide-sec" id="g-calendar">
+          <h2>16. יומן שבועי וזימון ליומן</h2>
+          <ul>
+            <li><b>איפה</b> — לשונית «📅 יומן», מיד אחרי «הבית היום». ב«הבית היום» יש שורה «השבוע: X אירועים — ליומן».</li>
+            <li><b>מה רואים</b> — השבוע מיום ראשון עד שבת, וכל מה שיש לו תאריך: פגישות קליטה, ועדות, קליטות צפויות, שחרורים צפויים, תזכורות מעקב ומשובים חצי־שנתיים. היום מסומן.</li>
+            <li><b>סינון</b> — הכפתורים מעל היומן מציגים או מסתירים כל סוג. «טיפולים» (לוח המטפלים של השבוע) מוסתר עד שלוחצים עליו.</li>
+            <li><b>שבוע אחר</b> — «שבוע קודם» / «שבוע הבא», ו«השבוע» חוזר להיום. פגישות קליטה מופיעות עד שבועיים קדימה.</li>
+            <li><b>לחיצה על אירוע</b> פותחת את הלשונית שלו — למשל פגישת קליטה נפתחת ב«פגישות קליטה», שם גם מדווחים.</li>
+            <li><b>זימון ליומן בטלפון</b> — כשהמשרד קובע איתך פגישה, מגיע אליך מייל עם זימון ליומן (אם כתובת המייל שלך הוגדרה). ליד הפגישה יופיע «📅 נשלח זימון ליומן במייל».</li>
+            <li><b>הוספה ידנית</b> — ליד כל פגישה קרובה: «📅 הוספה ליומן Google», או «קובץ ליומן» ליומן של האייפון / Outlook. בזימון מופיע רק השם הפרטי של הפונה; שאר הפרטים נשארים באפליקציה.</li>
+            <li>אם סוג מסוים לא מחובר, תופיע שורה כתומה שאומרת מה חסר. יום ריק באמת מסומן «אין אירועים».</li>
+          </ul>
+        </section>
       </div>
     </section>
 
@@ -413,6 +428,8 @@
            applyCollapse, 16 Nov 2026). -->
       <nav class="subtabs" data-subtabs role="tablist" aria-label="תפריט הבית">
         <button type="button" class="subtab is-active" data-sub="home" role="tab" aria-selected="true">🏠 הבית היום</button>
+        <!-- «יומן» (21 Nov 2026, docs/week-calendar.md): the week — meetings and every other dated item (calendar.js). -->
+        <button type="button" class="subtab" data-sub="calendar" role="tab" aria-selected="false">📅 יומן</button>
         <button type="button" class="subtab" data-sub="patients" role="tab" aria-selected="false">🧑‍🤝‍🧑 מטופלים</button>
         <!-- «פגישות קליטה» (19 Nov 2026, docs/meeting-reports.md): the intake meetings and their reports (meetings.js). -->
         <button type="button" class="subtab" data-sub="meetings" role="tab" aria-selected="false">🤝 פגישות קליטה <span class="mt-badge" data-mt-badge hidden></span></button>
@@ -437,12 +454,16 @@
         <div data-dash-alerts></div>
         <!-- «פגישות קליטה» this week + waiting for a report (meetings.js homeCardHtml). -->
         <div data-dash-meetings></div>
+        <!-- «השבוע: X אירועים — ליומן» (calendar.js homeLineHtml). The week itself is listed in «יומן», once. -->
+        <div data-dash-calendar></div>
         <div data-dash-house><div class="card dash-card"><div class="wk-empty">טוען את נתוני הבית…</div></div></div>
         <div class="card dash-card dash-cost" data-dash-cost>
           <div class="card-title">עלות כוח אדם</div>
           <div class="wk-empty">טוען…</div>
         </div>
       </section>
+      <!-- «יומן»: the week, Sunday → Saturday, with filters by kind (calendar.js tabHtml). -->
+      <section data-sub-panel="calendar" hidden></section>
       <section data-sub-panel="patients" hidden></section>
       <!-- «פגישות קליטה»: waiting for a report · coming · reported; the report form (meetings.js). -->
       <section data-sub-panel="meetings" hidden></section>
@@ -576,6 +597,7 @@
   <script src="/crm.js"></script>
   <script src="/work.js"></script>
   <script src="/meetings.js"></script>
+  <script src="/calendar.js"></script>
   <script src="/app.js"></script>
   <!-- External, not inline: the CSP is script-src 'self' with no
        'unsafe-inline'. -->

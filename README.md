@@ -88,6 +88,13 @@ Light look like the newer E-ZONE apps, one colour per tab, «בונוס» last. 
 
 Details and the kept-features checklist: `docs/crm-redesign.md`.
 
+## «📅 יומן», 21 Nov 2026
+
+`docs/week-calendar.md`. A sub-tab right after «הבית היום» shows the house's week, Sunday to Saturday: intake
+meetings, committees, expected admissions and discharges, follow-up reminders and half-yearly feedback, with a chip per
+kind. It reads only what the page already loaded (no new request or route). Every coming meeting with an hour has
+«הוספה ליומן» (a Google Calendar link and an .ics file) that carries the lead's first name only.
+
 ## «פגישות קליטה», 19 Nov 2026
 
 `docs/meeting-reports.md`. A sub-tab after «מטופלים» lists the intake meetings Vered scheduled for the house. The

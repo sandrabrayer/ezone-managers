@@ -152,12 +152,14 @@ test('B: loading, «לא מחובר» (an older Dashboard), and a real error wit
   assert.equal(M.homeCardHtml({ res: { error: 'unknown_op' } }), '', 'the home card stays out until connected');
 });
 
-test('B: the home card — the waiting count links to the tab; this week\'s meetings, today marked', () => {
+test('B: the home card — the waiting count links to the tab; TODAY\'s meetings; the rest of the week is one link to «יומן»', () => {
   const h = M.homeCardHtml(ST());
   assert.match(h, /פגישה אחת ממתינה לדיווח/);
   assert.match(h, /data-go-sub="meetings"/);
   assert.match(h, /רות<\/span><span class="wk-meta">היום · 12:30/);
-  assert.match(h, /יוסי/);
+  // 21 Nov 2026 (docs/week-calendar.md): a later day of the week is listed once, in «יומן».
+  assert.doesNotMatch(h, /יוסי/);
+  assert.match(h, /data-go-sub="calendar">עוד פגישה אחת השבוע — ביומן ←/);
   assert.doesNotMatch(h, /גל/, 'a reported meeting is not on the home card');
 });
 

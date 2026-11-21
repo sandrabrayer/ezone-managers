@@ -2102,7 +2102,7 @@ body.is-locked { overflow: hidden; }
   --c-amber: #D97706; --c-green: #059669; --c-blue: #2563EB; --c-violet: #7C3AED;
   --c-teal: #0D9488; --c-coral: #E11D48; --c-pink: #DB2777; --c-indigo: #4F46E5;
   --c-sky: #0284C7; --c-slate: #475569; --c-gold: #CA8A04; --c-plum: #7E1F4F;
-  --c-cyan: #0E7490;
+  --c-cyan: #0E7490; --c-orange: #C2410C;
   --ok: #047857; --ok-bg: #D1FAE5; --warn: #B45309; --warn-bg: #FEF3C7;
   --bad: #B91C1C; --bad-bg: #FEE2E2; --wait: #475569; --wait-bg: #E2E8F0;
 }
@@ -2138,6 +2138,7 @@ body { background: var(--bg); }
 .subtab:hover { background: color-mix(in srgb, var(--tab) 18%, #FFFFFF); }
 .subtab.is-active { background: var(--tab); color: #FFFFFF; border-color: var(--tab); box-shadow: 0 4px 12px color-mix(in srgb, var(--tab) 30%, transparent); }
 .subtab[data-sub="home"]         { --tab: var(--c-plum); }
+.subtab[data-sub="calendar"]     { --tab: var(--c-orange); }
 .subtab[data-sub="patients"]     { --tab: var(--c-teal); }
 .subtab[data-sub="meetings"]     { --tab: var(--c-cyan); }
 .subtab[data-sub="familyCalls"]  { --tab: var(--c-gold); }
@@ -2153,6 +2154,7 @@ body { background: var(--bg); }
 
 /* Work sections: white cards with a coloured top accent per tab. */
 [data-sub-panel] { --sec: var(--c-plum); }
+[data-sub-panel="calendar"]     { --sec: var(--c-orange); }
 [data-sub-panel="patients"]     { --sec: var(--c-teal); }
 [data-sub-panel="meetings"]     { --sec: var(--c-cyan); }
 [data-sub-panel="familyCalls"]  { --sec: var(--c-gold); }
@@ -2460,3 +2462,54 @@ body.drawer-on { overflow: hidden; }
 .mt-home .mt-invite-head { font-weight: 700; color: var(--ok); margin-bottom: 4px; }
 .mt-home .mt-invite .wk-list li { border-bottom: 0; padding-block: 2px; }
 .mt-line .mt-mine { margin-inline-start: 6px; }
+
+/* ============================================================
+ * «📅 יומן» — the house's week (21 Nov 2026, docs/week-calendar.md;
+ * public/calendar.js). Phone first: a list by day. Wide screens: 7 columns.
+ * Every kind has its icon and its words; colour only adds to them.
+ * ============================================================ */
+.cal-nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 10px; }
+.cal-nav .wk-btn { min-height: 40px; }
+.cal-nav .wk-btn[disabled] { opacity: 0.45; cursor: default; }
+.cal-range { font-weight: 700; color: color-mix(in srgb, var(--sec) 80%, #000000); margin-inline-start: 4px; }
+.cal-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.cal-filter { min-height: 36px; font-size: 13px; padding: 4px 10px; }
+.cal-filter .cal-count { font-weight: 400; }
+.cal-notice { margin-bottom: 10px; font-size: 13px; }
+.cal-week { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.cal-day { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #FFFFFF; min-width: 0; }
+.cal-day.is-today { border: 2px solid var(--sec); background: color-mix(in srgb, var(--sec) 5%, #FFFFFF); }
+.cal-day.is-past { background: var(--card-2); }
+.cal-day-head { margin: 0 0 6px; font-size: 15px; font-weight: 700; color: color-mix(in srgb, var(--sec) 80%, #000000); }
+.cal-date { font-weight: 600; color: var(--text-mute); }
+.cal-empty { padding: 4px 0; font-size: 13px; }
+.cal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cal-item { --kind: var(--c-slate); border-inline-start: 4px solid var(--kind); border-radius: 6px; background: color-mix(in srgb, var(--kind) 7%, #FFFFFF); padding: 2px 8px 6px; }
+.cal-item.cal-meeting   { --kind: var(--c-cyan); }
+.cal-item.cal-committee { --kind: var(--c-indigo); }
+.cal-item.cal-admission { --kind: var(--c-green); }
+.cal-item.cal-discharge { --kind: var(--c-coral); }
+.cal-item.cal-followUp  { --kind: var(--c-amber); }
+.cal-item.cal-feedback  { --kind: var(--c-blue); }
+.cal-item.cal-session   { --kind: var(--c-violet); }
+.cal-item.is-pending { background: var(--bad-bg); }
+.cal-item.is-cancelled .cal-title { text-decoration: line-through; }
+.cal-go { display: flex; gap: 10px; align-items: flex-start; width: 100%; min-height: 40px; padding: 4px 0; font: inherit; text-align: start;
+  background: none; border: 0; color: var(--text); cursor: pointer; }
+.cal-go:focus-visible { outline: 2px solid var(--sec); outline-offset: 2px; border-radius: 4px; }
+.cal-time { flex: 0 0 auto; min-width: 46px; font-weight: 700; font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--kind) 80%, #000000); }
+.cal-what { display: flex; flex-direction: column; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
+.cal-kind { font-size: 12px; font-weight: 600; color: color-mix(in srgb, var(--kind) 80%, #000000); }
+.cal-title { font-weight: 600; }
+.cal-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.cal-add { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 6px; }
+.cal-add .crm-chip { white-space: normal; }
+.cal-add .wk-link { font-size: 14px; min-height: 32px; color: color-mix(in srgb, var(--sec, var(--primary)) 85%, #000000); font-weight: 600; }
+.cal-home { display: block; width: 100%; text-align: start; font: inherit; font-weight: 700; margin: 0 0 12px; padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--c-orange) 35%, #FFFFFF); border-radius: 10px; cursor: pointer;
+  background: color-mix(in srgb, var(--c-orange) 8%, #FFFFFF); color: color-mix(in srgb, var(--c-orange) 80%, #000000); }
+.mt-home .mt-week { margin-inline-end: 12px; }
+@media (min-width: 1100px) {
+  .cal-week { grid-template-columns: repeat(7, minmax(0, 1fr)); align-items: start; }
+  .cal-go { flex-direction: column; gap: 2px; }
+}
