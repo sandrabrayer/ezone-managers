@@ -1776,6 +1776,10 @@
     var hb = host(panel, 'budget');
     if (hb && CV) {
       var roster = cache[key] && cache[key].data && cache[key].data.team && cache[key].data.team.staff || [];
+      if (st && st.staff && CV.simulationAmbiguousNames && simState[key]) {
+        var blocked = CV.simulationAmbiguousNames(st.staff, roster);
+        Object.keys(blocked).forEach(function (name) { delete simState[key][name]; });
+      }
       hb.innerHTML = CV.budgetHtml(st && !st.loading ? Object.assign({}, st, { sim: simState[key] || {}, roster: roster }) : { staff: { loading: true } });
       applyCollapse(panel, key);
     }
