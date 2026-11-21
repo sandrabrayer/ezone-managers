@@ -161,7 +161,7 @@
       e && e.editedBy ? ['עודכן ע״י', e.editedBy + (e.editedAt ? ' · ' + fmtDate(String(e.editedAt).slice(0, 10)) : '')] : null,
       ['מטפל/ת', th === null ? 'הנתונים מאפליקציית הרכזים לא מחוברים' : th.length ? th.join(', ') : 'אין מטפל/ת משובץ/ת'],
       ['הוועדה הבאה', nc ? fmtDate(nc.date) + (nc.time ? ' ' + nc.time : '') + (nc.type ? ' · ' + nc.type : '') : 'אין ועדה קרובה']
-    ]) + '<div class="crm-actions"><button type="button" class="wk-btn" data-pt-discharge="' + esc(i) + '">עדכון שחרור משוער</button></div>';
+    ]) + (d.readOnly ? '' : '<div class="crm-actions"><button type="button" class="wk-btn" data-pt-discharge="' + esc(i) + '">עדכון שחרור משוער</button></div>');
     var ses = sessionsOf(d, p.name);
     var treat = th === null ? '<div class="wk-empty">הנתונים מאפליקציית הרכזים עוד לא מחוברים.</div>'
       : ses.length ? '<ul class="wk-list">' + ses.map(function (r) {
@@ -191,7 +191,7 @@
     ]) : '<div class="wk-empty">' + esc(d.contactsSupported === true ? 'אין איש קשר רשום בדשבורד למטופל/ת' : 'פרטי איש הקשר מהדשבורד עוד לא מחוברים') + '</div>') +
       '<div class="card-subtitle">שיחות עם המשפחה (' + calls.length + ')</div>' +
       (calls.length ? familyCallsListHtml(calls, { readOnly: true, flat: true }) : '<div class="wk-empty">עוד לא תועדה שיחה</div>') +
-      '<div class="crm-actions"><button type="button" class="wk-btn" data-pt-family="' + esc(i) + '">📞 רישום שיחה עם המשפחה</button></div>';
+      (d.readOnly ? '' : '<div class="crm-actions"><button type="button" class="wk-btn" data-pt-family="' + esc(i) + '">📞 רישום שיחה עם המשפחה</button></div>');
     return '<div class="crm-card-sub">' + esc('בבית מ-' + fmtDate(p.entryDate) + ' · יום ' + p.days) + '</div>' +
       cardTabsHtml('patient', [
         { key: 'details', label: 'פרטים', html: details },
@@ -234,7 +234,7 @@
           td('טלפון', ct && (ct.phone || ct.updatesPhone) ? telLink(ct.phone || ct.updatesPhone, 'התקשרות לאיש הקשר של ' + p.name) : '<span class="wk-meta">—</span>') +
           td('שיחה אחרונה', last ? esc(fmtDate(last.callDate)) : '<span class="wk-meta">עוד לא</span>') +
           td('שיחות', String(calls.length)) +
-          td('', '<button type="button" class="wk-link fam-add" data-fam-add="' + i + '">+ רישום שיחה</button>') + '</tr>';
+          td('', d.readOnly ? '' : '<button type="button" class="wk-link fam-add" data-fam-add="' + i + '">+ רישום שיחה</button>') + '</tr>';
       }).join('') + '</tbody></table></div>';
     return h + '</div>';
   }
@@ -412,7 +412,7 @@
       cardTabsHtml('employee', [
         { key: 'details', label: 'פרטים', html: details },
         { key: 'cost', label: 'עלות', html: cost },
-        { key: 'talks', label: 'שיחות', html: talks + '<div class="crm-actions"><button type="button" class="wk-btn" data-emp-talk="' + esc(s.name) + '">💬 רישום שיחה חדשה</button></div>' },
+        { key: 'talks', label: 'שיחות', html: talks + (d.readOnly ? '' : '<div class="crm-actions"><button type="button" class="wk-btn" data-emp-talk="' + esc(s.name) + '">💬 רישום שיחה חדשה</button></div>') },
         { key: 'feedback', label: 'משוב', html: fb }
       ], active);
   }
