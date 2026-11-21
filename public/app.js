@@ -2653,6 +2653,7 @@ function applyRole_(u) {
   // manager get a personal highlight. Admins are nobody's target → no viewer name.
   if (window.MeetingsView && window.MeetingsView.setViewer) {
     window.MeetingsView.setViewer(u && u.role !== 'admin' ? u.name : '');
+    if (window.MeetingsView.setReadOnly) window.MeetingsView.setReadOnly(!!(u && u.readOnly));
   }
   if (!u || u.role === 'admin' || !HOUSE_KEYS.includes(u.house)) return;
   document.querySelectorAll('.tab').forEach(btn => {
