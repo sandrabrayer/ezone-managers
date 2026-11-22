@@ -1586,7 +1586,9 @@
         var matches = bst0 && bst0.staff && bst0.staff.available ? (bst0.staff.workers || []).filter(function (w) { return w.name === who; }) : [];
         var roster = cache[key] && cache[key].data && cache[key].data.team && cache[key].data.team.staff || [];
         var blocked = CV && CV.simulationAmbiguousNames && CV.simulationAmbiguousNames(bst0 && bst0.staff, roster);
-        var known = matches.length === 1 && !(blocked && blocked[who]);
+        var feed = cache[key] && cache[key].data;
+        var freshRoster = !!(feed && feed.team && feed.team.available === true && feed.team.stale !== true && !feed.__stale);
+        var known = freshRoster && matches.length === 1 && !(blocked && blocked[who]);
         if (!known) return;   // only one identified worker may have a personal simulation
         if (simKind) {
           if (simKind.value === 'end') sm[who] = { kind: 'end' };
@@ -1789,12 +1791,17 @@
     var st = budgetState[key];
     var hb = host(panel, 'budget');
     if (hb && CV) {
-      var roster = cache[key] && cache[key].data && cache[key].data.team && cache[key].data.team.staff || [];
+      var live = cache[key] && cache[key].data;
+      var roster = live && live.team && live.team.staff || [];
+      var rosterAvailable = !!(live && live.team && live.team.available === true && live.team.stale !== true && !live.__stale);
       if (st && st.staff && CV.simulationAmbiguousNames && simState[key]) {
         var blocked = CV.simulationAmbiguousNames(st.staff, roster);
+        if (!rosterAvailable) (st.staff.workers || []).forEach(function (w) {
+          if (w && w.name) blocked[String(w.name).trim()] = true;
+        });
         Object.keys(blocked).forEach(function (name) { delete simState[key][name]; });
       }
-      hb.innerHTML = CV.budgetHtml(st && !st.loading ? Object.assign({}, st, { sim: simState[key] || {}, roster: roster }) : { staff: { loading: true } });
+      hb.innerHTML = CV.budgetHtml(st && !st.loading ? Object.assign({}, st, { sim: simState[key] || {}, roster: roster, rosterAvailable: rosterAvailable }) : { staff: { loading: true } });
       applyCollapse(panel, key);
     }
     var bb = panel.querySelector('[data-budget-bonus]');
