@@ -251,9 +251,9 @@ test('next-month projected pay and salary scenarios follow stable worker ID thro
   assert.equal(result.workers[1].simCost, 3500);
   const old = { total: 1000, workers: [{ name: 'רות', cost: 1000 }] };
   const oldNext = { total: 1100, workers: [{ name: 'רות', cost: 1100 }] };
-  assert.deepEqual(C.nextMonthSimulation(old, oldNext, { 'רות': { kind: 'end' } }, {}), {
-    'רות': { kind: 'end' }
-  }, 'same-name legacy ID-less next month remains supported');
+  const legacyMapped = C.nextMonthSimulation(old, oldNext, { 'רות': { kind: 'end' } }, {});
+  assert.deepEqual(Object.keys(legacyMapped), ['רות']);
+  assert.deepEqual(legacyMapped['רות'], { kind: 'end' }, 'same-name legacy ID-less next month remains supported');
 });
 
 test('verified payroll ID must not inherit a same-name termination date from unrelated ending list', () => {
