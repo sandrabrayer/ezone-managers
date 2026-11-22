@@ -227,3 +227,45 @@ test('no fresh employee feed means no personal salary scenario, but aggregate bu
   assert.match(h, /סימולציה חסומה עד לזיהוי/);
   assert.doesNotMatch(h, /is-sim/, 'no previous per-person scenario is applied to an unauthenticated roster');
 });
+
+test('next-month projected pay and salary scenarios follow stable worker ID through rename, never reused name', () => {
+  const current = { total: 5000, workers: [
+    { workerId: 'H1', name: 'רונית', cost: 3000 },
+    { workerId: 'H2', name: 'הילה', cost: 2000 }
+  ] };
+  const next = { total: 7000, workers: [
+    { workerId: 'H1', name: 'רוני', cost: 3500 },
+    { workerId: 'H3', name: 'רונית', cost: 3500 }
+  ] };
+  assert.equal(C.matchingNextWorker(current.workers[0], next.workers).workerId, 'H1',
+    'the renamed same person matches by immutable ID');
+  assert.equal(C.matchingNextWorker({ workerId: 'H2', name: 'הילה' }, next.workers), null);
+  assert.equal(C.matchingNextWorker({ name: 'רונית' }, next.workers), null,
+    'the ID-bearing next-month person must not be inferred from an old name');
+  const sim = { 'רונית': { kind: 'cost', amount: 2200 } };
+  const mapped = C.nextMonthSimulation(current, next, sim, {});
+  assert.ok(mapped['רוני'], 'scenario reaches correct person after rename');
+  assert.equal(mapped['רונית'], undefined, 'reused display name never receives someone else’s scenario');
+  const result = C.simulateStaff(next, mapped);
+  assert.equal(result.workers[0].simCost, 2200);
+  assert.equal(result.workers[1].simCost, 3500);
+  const old = { total: 1000, workers: [{ name: 'רות', cost: 1000 }] };
+  const oldNext = { total: 1100, workers: [{ name: 'רות', cost: 1100 }] };
+  assert.deepEqual(C.nextMonthSimulation(old, oldNext, { 'רות': { kind: 'end' } }, {}), {
+    'רות': { kind: 'end' }
+  }, 'same-name legacy ID-less next month remains supported');
+});
+
+test('verified payroll ID must not inherit a same-name termination date from unrelated ending list', () => {
+  const d = legacy([{ workerId: 'HR-29', name: 'דנה', startDate: '2025-03-01' }]);
+  const costs = {
+    available: true, month: '2026-11', total: 22000,
+    workers: [{ workerId: 'HR-29', name: 'דנה', cost: 22000, endDate: '' }],
+    ending: { count: 1, people: [{ name: 'דנה', endDate: '2026-12-01', monthlySaving: 2000 }] }
+  };
+  const html = C.employeeCardHtml(d, 'wid:HR-29', costs);
+  assert.match(html, /22,000/, 'verified employee still sees own cost');
+  assert.doesNotMatch(html, /סיום עבודה בבית/, 'name-only ending record is unverified for the ID-bearing card');
+  const certain = { ...costs, workers: [{ workerId: 'HR-29', name: 'דנה', cost: 22000, endDate: '2026-11-30' }] };
+  assert.match(C.employeeCardHtml(d, 'wid:HR-29', certain), /סיום עבודה בבית/, 'explicitly ID-bound row date remains visible');
+});
