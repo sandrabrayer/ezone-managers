@@ -5,8 +5,9 @@ Sandra, 21 Nov 2026: «כשקובעים פגישה למנהל צריך שחוץ 
 
 Two parts:
 
-- The **calendar invitation by email** is the Dashboard's job (E-Zone-Dashboard,
-  `CHANGELOG-meeting-calendar-invite.md`). This app only shows its status.
+- The **calendar invitation to the manager's phone** is the Dashboard's job (E-Zone-Dashboard,
+  `CHANGELOG-meeting-calendar-invite.md`): the WhatsApp «זימון» carries a «להוספה ליומן בטלפון»
+  link. An invitation by email is an optional second channel there; this app shows its status.
 - The **weekly calendar** and the **«הוספה ליומן» buttons** are here (`public/calendar.js`).
 
 ## Where

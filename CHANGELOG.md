@@ -6,8 +6,8 @@
 ### Added — «📅 יומן»: the house's week in one tab, and «הוספה ליומן» for a meeting (November 21, 2026)
 
 - **Why**: Sandra, 21 Nov 2026 — «גם באפליקציה צריך להיות לו יומן של השבוע עם כל הפגישות או אירועים אחרים»,
-  together with a calendar invitation when a meeting is scheduled (the invitation itself is mailed by the Dashboard,
-  E-Zone-Dashboard `CHANGELOG-meeting-calendar-invite.md`).
+  together with a calendar invitation when a meeting is scheduled (the invitation itself goes to the manager's
+  phone from the Dashboard, as a link in the WhatsApp «זימון»: E-Zone-Dashboard `CHANGELOG-meeting-calendar-invite.md`).
 - **What** (`public/calendar.js`, new):
   - A sub-tab «📅 יומן» right after «הבית היום»: Sunday → Saturday, today marked, with intake meetings, committees,
     expected admissions, expected discharges, follow-up reminders and half-yearly feedback. The therapists' sessions
