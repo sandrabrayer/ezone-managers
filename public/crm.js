@@ -369,19 +369,22 @@
     var sameName = roster.filter(function (x) { return x && norm(x.name) === norm(s.name); }).length > 1;
     var costRow = function (rows) {
       var list = Array.isArray(rows) ? rows : [];
-      var id = FD && FD.workerId(s), phone = FD && FD.validPhone(s);
-      var matches = id ? list.filter(function (x) { return FD.workerId(x) === id; }) : [];
-      if (matches.length === 1) return matches[0];
-      if (matches.length > 1) return null;
-      // A recycled phone or a new-name row is not proof of the same employee.
-      // A payroll row with an explicit, conflicting worker ID is authoritative.
-      matches = phone ? list.filter(function (x) { return FD.validPhone(x) === phone && norm(x.name) === norm(s.name) && (!id || !FD.workerId(x) || FD.workerId(x) === id); }) : [];
-      if (matches.length === 1) return matches[0];
-      if (matches.length > 1) return null;
-      // Do not attribute a name-only cost to either of two same-name employees.
+      var id = FD && FD.workerId(s);
+      // When HR has identified the roster person, name and phone are NOT
+      // evidence of ownership of a payroll row. Require the same worker ID.
+      // This also prevents attributing a stale same-name row after a rename.
+      if (id) {
+        var exact = list.filter(function (x) { return FD.workerId(x) === id; });
+        return exact.length === 1 ? exact[0] : null;
+      }
+      // In an old, ID-less feed, keep the existing single-name display. A
+      // payroll row already carrying an ID cannot be joined to an ID-less
+      // roster person: this direction of the feed is not yet proven.
       if (sameName) return null;
-      matches = list.filter(function (x) { return norm(x.name) === norm(s.name) && (!id || !FD.workerId(x) || FD.workerId(x) === id); });
-      return matches.length === 1 ? matches[0] : null;
+      var legacy = list.filter(function (x) {
+        return norm(x.name) === norm(s.name) && (!FD || !FD.workerId(x));
+      });
+      return legacy.length === 1 ? legacy[0] : null;
     };
     var phone = FD ? FD.validPhone(s) : String(s.phone || '');
     var tel = /^0\d{8,9}$/.test(phone) ? 'tel:' + phone : '';
@@ -398,7 +401,7 @@
     else if (staffCost && staffCost.available) {
       var bw = costRow(staffCost.workers);
       var bd = bw && ISO_RE.test(String(bw.birthDate || '')) && (!d.today || bw.birthDate <= d.today) ? bw.birthDate : '';
-      born = ['תאריך לידה', bd ? fmtDateFull(bd) : 'לא הוזן באפליקציית כוח האדם'];
+      born = ['תאריך לידה', bd ? fmtDateFull(bd) : (sameName || (FD && FD.workerId(s)) ? 'ממתין להתאמת מזהה עובד בנתוני כוח האדם' : 'לא הוזן באפליקציית כוח האדם')];
     }
     var details = fieldsHtml([
       ['תפקיד', s.role || (s.kind === 'therapist' ? 'מטפל/ת' : 'מדריך/ה')],
@@ -418,7 +421,7 @@
         ['מקור', w.estimated ? 'הערכה (עוד אין דוח שכר)' : 'לפי דוח השכר'],
         ['חלק מעלות הבית', staffCost.total ? Math.round((w.cost / staffCost.total) * 100) + '%' : '—'],
         (sameName ? endOf(w) : endOfRow(staffCost, w)) ? ['סיום עבודה בבית', fmtDate(sameName ? endOf(w) : endOfRow(staffCost, w))] : null
-      ]) : '<div class="wk-empty">אין לעובד/ת עלות רשומה בבית בחודש הזה</div>';
+      ]) : '<div class="wk-empty">' + (sameName || (FD && FD.workerId(s)) ? 'העלות האישית ממתינה להתאמת מזהה עובד במקור השכר' : 'אין לעובד/ת עלות רשומה בבית בחודש הזה') + '</div>';
     }
     // Historical name-only talks cannot be guessed when two workers share a
     // name, or when the roster now has a stable ID after a rename. A future
