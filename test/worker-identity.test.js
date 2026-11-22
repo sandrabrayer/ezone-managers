@@ -214,3 +214,16 @@ test('a stale cross-app team digest preserves reminders but disables identity-de
   assert.equal(W.feedbackModel(legacy([{ name: 'עמית', startDate: '2025-01-01' }])).items[0].writeBlocked, false,
     'fresh unique-name legacy workflows are unchanged');
 });
+
+test('no fresh employee feed means no personal salary scenario, but aggregate budget still appears', () => {
+  const staff = { available: true, month: '2026-11', total: 22000, budget: 25000, workers: [
+    { name: 'שני', cost: 12000, roles: ['מדריכה'] },
+    { name: 'תום', cost: 10000, roles: ['מטפל'] }
+  ] };
+  const h = C.budgetHtml({ staff, rosterAvailable: false, roster: [],
+    sim: { 'שני': { kind: 'end' }, 'תום': { kind: 'cost', amount: 20000 } } });
+  assert.match(h, /22,000/, 'base house cost remains visible and unmodified');
+  assert.doesNotMatch(h, /data-sim-kind="שני"|data-sim-kind="תום"/);
+  assert.match(h, /סימולציה חסומה עד לזיהוי/);
+  assert.doesNotMatch(h, /is-sim/, 'no previous per-person scenario is applied to an unauthenticated roster');
+});
