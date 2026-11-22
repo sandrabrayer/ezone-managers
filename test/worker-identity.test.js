@@ -194,3 +194,23 @@ test('ID-bearing payroll row is not attached to an unrelated legacy name-only ro
   const legacyPay = { ...cost, workers: [{ name: 'ליה', cost: 11000, birthDate: '1980-07-03' }] };
   assert.match(C.employeeCardHtml(d, 'ליה', legacyPay), /11,000/, 'ordinary old unique-name workflow stays');
 });
+
+test('a stale cross-app team digest preserves reminders but disables identity-dependent feedback writes', () => {
+  const d = legacy([{ name: 'עמית', startDate: '2025-01-01', role: 'מדריך' }]);
+  const live = W.feedbackModel(d);
+  assert.equal(live.items[0].writeBlocked, false);
+  assert.match(W.feedbackListHtml(d), /data-fb-form=/);
+  d.team.stale = true;
+  const stale = W.feedbackModel(d);
+  assert.equal(stale.items[0].writeBlocked, true);
+  assert.equal(stale.items[0].rosterStale, true);
+  const screen = W.feedbackListHtml(d);
+  assert.match(screen, /נתוני הצוות אינם מעודכנים/);
+  assert.doesNotMatch(screen, /data-fb-form=/);
+  assert.match(W.feedbackCardHtml(d), /עמית/, 'the stale reminder remains readable');
+  const newCopy = legacy([{ name: 'עמית', startDate: '2025-01-01' }]);
+  newCopy.__stale = true;
+  assert.equal(W.feedbackModel(newCopy).items[0].writeBlocked, true, 'stale-while-revalidate response is not an identity authority');
+  assert.equal(W.feedbackModel(legacy([{ name: 'עמית', startDate: '2025-01-01' }])).items[0].writeBlocked, false,
+    'fresh unique-name legacy workflows are unchanged');
+});
