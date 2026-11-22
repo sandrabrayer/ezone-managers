@@ -666,6 +666,12 @@
     } else {
       var next = st.nextStaff && st.nextStaff.available ? st.nextStaff : null;
       var blockedNames = simulationAmbiguousNames(s, st.roster || []);
+      // A missing or explicitly stale roster cannot prove the people behind
+      // aggregated cost rows. Keep house totals visible, but not per-person
+      // "what if" controls until a fresh cross-app roster arrives.
+      if (st.rosterAvailable === false) (s.workers || []).forEach(function (w) {
+        if (norm(w && w.name)) blockedNames[norm(w.name)] = true;
+      });
       Object.keys(st.ambiguousNames || {}).forEach(function (name) { if (st.ambiguousNames[name]) blockedNames[name] = true; });
       simNow = simulateStaff(s, st.sim, blockedNames);
       simNext = next ? simulateStaff(next, st.sim, blockedNames) : null;
