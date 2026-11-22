@@ -251,7 +251,14 @@
     d = d || {};
     if (!FD || !d.team || !d.team.available || !d.feedback || d.feedback.supported !== true) return null;
     var today = isRealIso(d.today) ? d.today : '';
-    return FD.houseFeedback(d.team.staff || [], d.feedback.rows || [], today);
+    var m = FD.houseFeedback(d.team.staff || [], d.feedback.rows || [], today);
+    // The Dashboard and the Managers proxy can both return an explicitly
+    // stale snapshot. It remains useful for display, but is not a current
+    // source of identity for name-only employee writes.
+    if (d.__stale || d.team.stale === true) m.items.forEach(function (x) {
+      x.writeBlocked = true; x.rosterStale = true;
+    });
+    return m;
   }
   function feedbackUnavailableText(d) {
     if (!d || !d.feedback) return 'תזכורות המשוב יופיעו אחרי עדכון השרת.';
@@ -286,7 +293,9 @@
         esc(FEEDBACK_STATUS[x.status]) + (x.due ? ' · עד ' + esc(fmtDate(x.due)) : '') +
         (x.lastFeedback ? ' · משוב אחרון ' + esc(fmtDate(x.lastFeedback)) : (x.startDate ? ' · התחיל/ה ' + esc(fmtDate(x.startDate)) : '')) +
         (x.identityAmbiguous && x.phoneSuffix ? ' · טלפון מסתיים ב-' + esc(x.phoneSuffix) : '') + '</span>' +
-        (x.writeBlocked ? '<span class="wk-note">נדרש זיהוי עובד/ת מאומת לפני רישום משוב; ההיסטוריה אינה משויכת לפי שם בלבד</span>' :
+        (x.writeBlocked ? '<span class="wk-note">' + (x.rosterStale
+          ? 'נתוני הצוות אינם מעודכנים — רעננו לפני סימון המשוב'
+          : 'נדרש זיהוי עובד/ת מאומת לפני רישום משוב; ההיסטוריה אינה משויכת לפי שם בלבד') + '</span>' :
         '<form class="wk-fb-form" data-fb-form="' + i + '" novalidate><input type="hidden" name="employee" value="' + esc(x.name) + '">' +
         '<label class="wk-dis-label"><span>תאריך המשוב</span><input name="doneAt" type="date" required value="' + esc(m.today) + '" max="' + esc(m.today) + '"></label>' +
         '<button type="submit" class="wk-dis-btn">בוצע</button><span class="wk-msg" data-fb-msg role="status" aria-live="polite"></span></form>') + '</li>';
