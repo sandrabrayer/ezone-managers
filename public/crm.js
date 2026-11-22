@@ -420,7 +420,8 @@
         ['עלות ' + monthHe(staffCost.month), ils(w.cost)],
         ['מקור', w.estimated ? 'הערכה (עוד אין דוח שכר)' : 'לפי דוח השכר'],
         ['חלק מעלות הבית', staffCost.total ? Math.round((w.cost / staffCost.total) * 100) + '%' : '—'],
-        (sameName ? endOf(w) : endOfRow(staffCost, w)) ? ['סיום עבודה בבית', fmtDate(sameName ? endOf(w) : endOfRow(staffCost, w))] : null
+        (sameName || (FD && FD.workerId(s)) ? endOf(w) : endOfRow(staffCost, w))
+          ? ['סיום עבודה בבית', fmtDate(sameName || (FD && FD.workerId(s)) ? endOf(w) : endOfRow(staffCost, w))] : null
       ]) : '<div class="wk-empty">' + (sameName || (FD && FD.workerId(s)) ? 'העלות האישית ממתינה להתאמת מזהה עובד במקור השכר' : 'אין לעובד/ת עלות רשומה בבית בחודש הזה') + '</div>';
     }
     // Historical name-only talks cannot be guessed when two workers share a
@@ -652,6 +653,42 @@
       '<button type="button" class="wk-btn ghost sim-clear-all" data-sim-reset>🧹 ניקוי כל השדות</button></div>';
   }
 
+  /* Match month-to-month costs by the HR person ID when available. A
+   * name-only row must never inherit the estimate or a simulation belonging
+   * to an ID-bearing, potentially renamed employee. Legacy ID-less feeds
+   * keep their existing same-name match only when it is unique in both
+   * months. These helpers never read or write HR data. */
+  function matchingNextWorker(current, nextRows) {
+    var arr = Array.isArray(nextRows) ? nextRows : [];
+    if (!current || !norm(current.name)) return null;
+    var id = FD && FD.workerId(current);
+    var hits = arr.filter(function (w) {
+      var nextId = FD && FD.workerId(w);
+      return id ? nextId === id : !nextId && norm(w.name) === norm(current.name);
+    });
+    return hits.length === 1 ? hits[0] : null;
+  }
+  function nextMonthSimulation(current, next, sim, blockedNames) {
+    var out = Object.create(null);
+    var currentRows = current && Array.isArray(current.workers) ? current.workers : [];
+    var nextRows = next && Array.isArray(next.workers) ? next.workers : [];
+    var seen = Object.create(null);
+    currentRows.forEach(function (w) {
+      if (norm(w && w.name)) seen[norm(w.name)] = (seen[norm(w.name)] || 0) + 1;
+    });
+    currentRows.forEach(function (w) {
+      var name = norm(w && w.name);
+      if (!name || seen[name] !== 1 || (blockedNames && blockedNames[name])) return;
+      var scenario = simOf(sim, w.name);
+      if (!scenario) return;
+      var matched = matchingNextWorker(w, nextRows);
+      if (!matched || (blockedNames && blockedNames[norm(matched.name)])) return;
+      if (nextRows.filter(function (x) { return norm(x.name) === norm(matched.name); }).length !== 1) return;
+      out[matched.name] = scenario;
+    });
+    return out;
+  }
+
   /* st = { staff: houseStaffCost.staff | {loading}, nextStaff: next month's houseStaffCost.staff | null,
    *        quarter: budgetBonusQuarter() | null, octoberTarget, octoberCost, monthBonuses, sim, nowYM } */
   function budgetHtml(st) {
@@ -674,7 +711,7 @@
       });
       Object.keys(st.ambiguousNames || {}).forEach(function (name) { if (st.ambiguousNames[name]) blockedNames[name] = true; });
       simNow = simulateStaff(s, st.sim, blockedNames);
-      simNext = next ? simulateStaff(next, st.sim, blockedNames) : null;
+      simNext = next ? simulateStaff(next, nextMonthSimulation(s, next, st.sim, blockedNames), blockedNames) : null;
       // A worker «ended» in the simulation who is not in next month's list changes nothing there —
       // simulateStaff(next) already handles it (the delta is taken from next month's own list).
       var total = Math.max(0, Number(s.total) || 0), budget = s.budget ? Math.max(0, Number(s.budget) || 0) : 0;
@@ -722,8 +759,7 @@
           workers.map(function (w) {
             var pct = simTotal ? Math.round((w.simCost / simTotal) * 100) : 0;
             var end = endOfRow(s, w, blockedNames);
-            var nextMatches = next && w.name ? simNext.workers.filter(function (x) { return norm(x.name) === norm(w.name); }) : [];
-            var nw = !w.simBlocked && nextMatches.length === 1 ? nextMatches[0] : null;
+            var nw = !w.simBlocked && next ? matchingNextWorker(w, simNext.workers) : null;
             // «הפחתת סכום אחר»: the worker's figure stays, and the amount that comes off the total is beside it.
             var costCell = w.simKind === 'deduct' ? esc(ils(w.cost)) + (w.simDeduct ? ' <b class="sim-new sim-deduct">' + esc(signedIls(-w.simDeduct)) + '</b>' : '')
               : w.simKind && w.simCost !== w.cost
@@ -858,7 +894,7 @@
     contactOf: contactOf, familyCallsOf: familyCallsOf, familyContactsHtml: familyContactsHtml,
     familyCallsListHtml: familyCallsListHtml, familyFilterHtml: familyFilterHtml,
     employeeCardHtml: employeeCardHtml, budgetStatus: budgetStatus, budgetHtml: budgetHtml, octoberTargetHtml: octoberTargetHtml, quarterHtml: quarterHtml,
-    endingHtml: endingHtml, endingPeople: endingPeople, simulateStaff: simulateStaff, simulationAmbiguousNames: simulationAmbiguousNames, SIM_MAX: SIM_MAX,
+    endingHtml: endingHtml, endingPeople: endingPeople, simulateStaff: simulateStaff, simulationAmbiguousNames: simulationAmbiguousNames, matchingNextWorker: matchingNextWorker, nextMonthSimulation: nextMonthSimulation, SIM_MAX: SIM_MAX,
     budgetBonusHtml: budgetBonusHtml, monthBonusCardHtml: monthBonusCardHtml
   };
   root.CrmView = CrmView;
