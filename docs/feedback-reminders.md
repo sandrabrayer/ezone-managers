@@ -27,6 +27,7 @@ records when it was done.
   the «בוצע» action when a worker has an ID or shares a display name with
   another worker, because sending only the name would lose the proven identity.
   A unique legacy employee without an ID retains the same workflow.
+- **Stale read protection:** an explicitly stale Coordinators/Dashboard team roster or stale cached house response remains visible for reminders, but disables new feedback actions until refreshed. Fresh unique-name legacy workflows remain unchanged.
 - **No payroll/HR permissions or roles are changed** by this fix.
 
 ## Where
