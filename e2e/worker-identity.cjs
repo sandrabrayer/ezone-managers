@@ -67,6 +67,17 @@ const fs = require('node:fs');
       'unique worker retains the established personal simulation');
     assert.match(await page.locator('#card').innerText(), /29,000/,
       'only unique worker adjustment is reflected in the scenario aggregate');
+    await page.evaluate(() => {
+      const stale = {
+        today: '2026-11-21',
+        team: { available: true, stale: true, staff: [{ name: 'עמית', startDate: '2025-01-01' }] },
+        feedback: { supported: true, rows: [] }
+      };
+      document.getElementById('feedback').innerHTML = window.WorkView.feedbackListHtml(stale);
+    });
+    assert.equal(await page.locator('#feedback [data-fb-form]').count(), 0,
+      'stale source may show feedback due, but cannot authorize a name-only save');
+    assert.match(await page.locator('#feedback').innerText(), /נתוני הצוות אינם מעודכנים/);
     fs.mkdirSync(path.join(__dirname, '../artifacts'), { recursive: true });
     await page.screenshot({ path: path.join(__dirname, '../artifacts/identity-synthetic-390.png'), fullPage: true });
     assert.deepEqual(errors, [], 'no uncaught browser errors');
