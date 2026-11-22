@@ -3,6 +3,29 @@
 
 ## Unreleased
 
+### Added — «📅 יומן»: the house's week in one tab, and «הוספה ליומן» for a meeting (November 21, 2026)
+
+- **Why**: Sandra, 21 Nov 2026 — «גם באפליקציה צריך להיות לו יומן של השבוע עם כל הפגישות או אירועים אחרים»,
+  together with a calendar invitation when a meeting is scheduled (the invitation itself goes to the manager's
+  phone from the Dashboard, as a link in the WhatsApp «זימון»: E-Zone-Dashboard `CHANGELOG-meeting-calendar-invite.md`).
+- **What** (`public/calendar.js`, new):
+  - A sub-tab «📅 יומן» right after «הבית היום»: Sunday → Saturday, today marked, with intake meetings, committees,
+    expected admissions, expected discharges, follow-up reminders and half-yearly feedback. The therapists' sessions
+    sit behind a chip.
+  - A chip per kind with the week's count; «שבוע קודם / השבוע / שבוע הבא» (4 weeks back, 8 ahead). A list by day on
+    a phone, 7 columns on a wide screen. Tapping an item opens its tab.
+  - A source that is not available is named in an amber line; an empty day says «אין אירועים».
+  - «הבית היום»: one line «📅 השבוע: X אירועים — ליומן ←». The «🤝 פגישות קליטה» card now lists TODAY's meetings and
+    links to the calendar for the rest of the week, so the week is listed once.
+  - «הוספה ליומן» under every coming meeting with an hour (in «יומן» and in «פגישות קליטה»): a Google Calendar link
+    and an .ics file. «📅 נשלח זימון ליומן במייל» shows when the Dashboard reports `invite: 'sent'`.
+- **Privacy**: the calendar entry holds the lead's first name only — no surname, phone or office note.
+- **No backend change**: no new request, route, op, env var or secret; `server.js` is untouched. The calendar reads
+  the `houseData` and the meetings the page already loaded. Nothing is stored on the device.
+- **Docs**: `docs/week-calendar.md`, guide §16, README, the Managers section of `EZONE-ECOSYSTEM-STATUS.md`.
+- **Tests**: 540 → 562 (`week-calendar` +22). Updated on purpose: the tab order, the collapse rule, the guide
+  sections and the home card (`home-bonus-tabs`, `crm-view`, `guide`, `meetings`). SW v52 → v53.
+
 ### Added — «זימון»: a personal highlight when a meeting is scheduled with you (November 20, 2026)
 
 - **Why**: Sandra, 20 Nov 2026 (Part B of the meeting-notify work) — when Vered schedules an intake meeting «נפגש/ת

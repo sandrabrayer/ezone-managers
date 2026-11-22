@@ -14,6 +14,22 @@
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 
+## Managers: «📅 יומן» — the house's week, and «הוספה ליומן» (November 21, 2026)
+
+Sandra, 21 Nov 2026. Details: `docs/week-calendar.md` in ezone-managers.
+
+- A house sub-tab «📅 יומן» right after «הבית היום»: Sunday → Saturday with intake meetings, committees, expected
+  admissions and discharges, follow-up reminders and half-yearly feedback; the therapists' sessions behind a chip.
+  Chips filter by kind; arrows move 4 weeks back and 8 ahead.
+- «הוספה ליומן» under every coming meeting with an hour: a Google Calendar link and an .ics file (the lead's first
+  name only). «📅 נשלח זימון ליומן במייל» shows when the Dashboard's `meetings` item says `invite: 'sent'`
+  (E-Zone-Dashboard `CHANGELOG-meeting-calendar-invite.md`); the field is optional.
+- «הבית היום»: one line «השבוע: X אירועים — ליומן»; the meetings card lists today only.
+- No backend, route, op, env var or secret; `server.js` untouched. `public/calendar.js` reads what the page already
+  loaded. SW `ezone-managers-v53`.
+- Not shown: «ישיבת צוות» (the team-meeting day lives in ezone-coordinators `Houses.MEETING_DAY` and is in no feed
+  this app reads).
+
 ## Managers: «זימון» — a personal highlight when a meeting is scheduled with you (November 20, 2026)
 
 Sandra, 20 Nov 2026 (Part B of the meeting-notify work; Part A is the Dashboard WhatsApp «זימון»).

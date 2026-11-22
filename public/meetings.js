@@ -140,6 +140,9 @@
         (m.report.reporter ? '<span class="wk-meta">דווח ע"י ' + esc(m.report.reporter) + '</span>' : '') + '</div>';
       if (m.report.note) h += '<div class="wk-text mt-note">' + esc(m.report.note) + '</div>';
     }
+    // «הוספה ליומן» (calendar.js, 21 Nov 2026): a coming meeting with an hour gets the Google
+    // link + the .ics file, and «נשלח זימון ליומן» when the Dashboard mailed the invitation.
+    if (kind === 'upcoming' && !m.report && root.CalendarView) h += root.CalendarView.addHtml(m);
     if (open && st.done) h += doneHtml(st.done);
     else if (open) h += formHtml(m, st.draft || {}, st);
     else h += '<div class="mt-actions"><button type="button" class="wk-btn' + (m.report ? ' ghost' : '') + '" data-mt-report="' + esc(m.id) + '">' + (m.report ? 'עריכת דיווח' : 'דיווח על הפגישה') + '</button></div>';
@@ -328,9 +331,13 @@
     if (mm.pending.length) {
       h += '<button type="button" class="mt-alert" data-go-sub="meetings">⏳ ' + esc(mm.pending.length === 1 ? 'פגישה אחת ממתינה לדיווח' : mm.pending.length + ' פגישות ממתינות לדיווח') + ' ←</button>';
     }
-    h += week.length ? '<ul class="wk-list">' + week.slice(0, 8).map(function (m) {
-      return '<li><span class="wk-name">' + esc(m.name) + '</span><span class="wk-meta">' + esc(m.visitDate === t ? 'היום' + (m.visitTime ? ' · ' + m.visitTime : '') : whenText(m)) + '</span></li>';
-    }).join('') + '</ul>' : '<div class="wk-empty">אין פגישות קליטה השבוע</div>';
+    // 21 Nov 2026: this card is «היום». The rest of the week is listed once, in «יומן».
+    var todays = week.filter(function (m) { return m.visitDate === t; });
+    var later = week.length - todays.length;
+    h += todays.length ? '<ul class="wk-list">' + todays.slice(0, 8).map(function (m) {
+      return '<li><span class="wk-name">' + esc(m.name) + '</span><span class="wk-meta">' + esc('היום' + (m.visitTime ? ' · ' + m.visitTime : '')) + '</span></li>';
+    }).join('') + '</ul>' : '<div class="wk-empty">' + (week.length ? 'אין פגישות קליטה היום' : 'אין פגישות קליטה השבוע') + '</div>';
+    if (later) h += '<button type="button" class="wk-link mt-week" data-go-sub="calendar">' + esc(later === 1 ? 'עוד פגישה אחת השבוע' : 'עוד ' + later + ' פגישות השבוע') + ' — ביומן ←</button> ';
     return h + '<button type="button" class="wk-link" data-go-sub="meetings">לכל הפגישות ←</button></div>';
   }
 
@@ -390,6 +397,8 @@
       badge.textContent = n ? String(n) : '';
       badge.hidden = !n;
     }
+    // «יומן» shows these meetings too: redraw it with the fresh list.
+    if (root.Calendar && root.Calendar.repaint) root.Calendar.repaint(panel, key, false);
   }
 
   function load(panel, key, force) {
