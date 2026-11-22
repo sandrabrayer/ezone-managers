@@ -768,7 +768,7 @@
             var nextCell = !next ? '' : td('צפי ' + monthHe(next.month), !w.name ? '—' : nw
               ? (nw.simKind === 'deduct' ? esc(ils(nw.cost)) + (nw.simDeduct ? ' <b class="sim-new sim-deduct">' + esc(signedIls(-nw.simDeduct)) + '</b>' : '')
                 : nw.simKind && nw.simCost !== nw.cost ? '<s class="sim-old">' + esc(ils(nw.cost)) + '</s> <b class="sim-new">' + esc(ils(nw.simCost)) + '</b>' : esc(ils(nw.cost)))
-              : esc(ils(0)));
+              : (FD && FD.workerId(w) ? '—' : esc(ils(0))));
             return '<tr class="' + (w.name ? '' : 'muted') + (w.simKind ? ' is-sim' : '') + '">' + td('עובד/ת',
               (w.name ? (w.simBlocked ? '<span class="wk-name">' + esc(w.name) + '</span> ' + chip('warn', 'זיהוי עובד לא חד־משמעי') : '<button type="button" class="link-cell" data-emp-open="' + esc(w.name) + '">' + esc(w.name) + '</button>') : 'אחר (ללא שם)') +
               (end ? ' ' + chip('warn', 'מסיים/ת ' + fmtDate(end)) : '') + (w.simKind === 'end' ? ' ' + chip('bad', 'סימולציה: סיום') : w.simKind === 'cost' ? ' ' + chip('open', 'סימולציה: שכר') : w.simKind === 'deduct' ? ' ' + chip('open', 'סימולציה: הפחתה') : '')) +
