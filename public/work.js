@@ -1651,7 +1651,12 @@
       // The Dashboard's staff-talk writer is name-only. A collision or an
       // ID-bearing worker needs an identity-aware backend, not a guessed log.
       if (logKey === 'staffTalks' && FD) {
-        var roster = (cache[key] && cache[key].data && cache[key].data.team && cache[key].data.team.staff) || [];
+        var source = cache[key] && cache[key].data;
+        if (source && (source.__stale || (source.team && source.team.stale === true))) {
+          msg.textContent = 'נתוני הצוות אינם מעודכנים — רעננו לפני שיוך השיחה לעובד/ת.';
+          return;
+        }
+        var roster = (source && source.team && source.team.staff) || [];
         var matches = FD.activeRoster(roster).filter(function (e) { return FD.normName(e.name) === FD.normName(res.entry.employeeName); });
         if (matches.length > 1 || (matches.length === 1 && FD.workerId(matches[0]))) {
           msg.textContent = 'לא ניתן לשמור שיחה לפי שם שאינו מזהה את העובד/ת בוודאות. נדרש חיבור מזהה עובד למקור.';
