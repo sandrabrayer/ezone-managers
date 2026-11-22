@@ -172,3 +172,25 @@ test('a stable worker reference survives a verified rename and phone change; ass
   assert.equal(F.workerId({ id: 'assignment-123' }), '', 'a generic ID is not a worker ID');
   assert.equal(F.workerId({ id: 'worker-17', idKind: 'worker' }), 'worker-17');
 });
+
+test('verified roster ID never inherits ID-less payroll salary or date of birth after rename', () => {
+  const d = legacy([{ workerId: 'hr-42', name: 'רונית', phone: '0501234567', role: 'מדריכה', startDate: '2026-01-01' }]);
+  const old = { available: true, total: 27000, month: '2026-11',
+    workers: [{ name: 'רונית', phone: '0501234567', cost: 17500, birthDate: '1975-04-02' }] };
+  const html = C.employeeCardHtml(d, 'wid:hr-42', old);
+  assert.doesNotMatch(html, /17,500|2\/4\/1975/, 'matching name and phone must not override missing HR ID');
+  assert.match(html, /ממתינ[הא] להתאמת מזהה עובד/, 'show unresolved match instead of pretending no payroll');
+  const newer = { ...old, workers: [{ workerId: 'hr-42', name: 'שם קודם', cost: 17500, birthDate: '1975-04-02' }] };
+  const identified = C.employeeCardHtml(d, 'wid:hr-42', newer);
+  assert.match(identified, /17,500/);
+  assert.match(identified, /2\/4\/1975/);
+});
+test('ID-bearing payroll row is not attached to an unrelated legacy name-only roster member', () => {
+  const d = legacy([{ name: 'ליה', phone: '0509999888', role: 'מדריכה', startDate: '2026-01-01' }]);
+  const cost = { available: true, total: 11000, month: '2026-11',
+    workers: [{ workerId: 'other-hr-id', name: 'ליה', cost: 11000, birthDate: '1980-07-03' }] };
+  const html = C.employeeCardHtml(d, 'ליה', cost);
+  assert.doesNotMatch(html, /11,000|3\/7\/1980/);
+  const legacy = { ...cost, workers: [{ name: 'ליה', cost: 11000, birthDate: '1980-07-03' }] };
+  assert.match(C.employeeCardHtml(d, 'ליה', legacy), /11,000/, 'ordinary old unique-name workflow stays');
+});
