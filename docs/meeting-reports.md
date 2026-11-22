@@ -23,6 +23,15 @@ past meetings nobody has reported yet.
 - The window is 30 days back and 14 days ahead. A meeting belongs to the house when the lead's house
   is this house, or when this house's manager holds it (the intake-bonus rule).
 
+## View-only accounts (Managers MGR-SEC-02 draft)
+
+A user explicitly configured with `readOnly: true` may view authorized
+meetings, this week's agenda and existing reports; report/edit controls are
+hidden and a forged `meetingReport` HTTP request is refused by the
+Managers server before the Dashboard is called. Existing writable managers
+retain the reporting contract and `submissionId` idempotency. This changes
+no leads or report storage.
+
 ## The report
 
 «דיווח על הפגישה» → **«האם הפגישה התקיימה?»**

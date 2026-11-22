@@ -161,7 +161,7 @@
       e && e.editedBy ? ['עודכן ע״י', e.editedBy + (e.editedAt ? ' · ' + fmtDate(String(e.editedAt).slice(0, 10)) : '')] : null,
       ['מטפל/ת', th === null ? 'הנתונים מאפליקציית הרכזים לא מחוברים' : th.length ? th.join(', ') : 'אין מטפל/ת משובץ/ת'],
       ['הוועדה הבאה', nc ? fmtDate(nc.date) + (nc.time ? ' ' + nc.time : '') + (nc.type ? ' · ' + nc.type : '') : 'אין ועדה קרובה']
-    ]) + '<div class="crm-actions"><button type="button" class="wk-btn" data-pt-discharge="' + esc(i) + '">עדכון שחרור משוער</button></div>';
+    ]) + (d.readOnly ? '' : '<div class="crm-actions"><button type="button" class="wk-btn" data-pt-discharge="' + esc(i) + '">עדכון שחרור משוער</button></div>');
     var ses = sessionsOf(d, p.name);
     var treat = th === null ? '<div class="wk-empty">הנתונים מאפליקציית הרכזים עוד לא מחוברים.</div>'
       : ses.length ? '<ul class="wk-list">' + ses.map(function (r) {
@@ -191,7 +191,7 @@
     ]) : '<div class="wk-empty">' + esc(d.contactsSupported === true ? 'אין איש קשר רשום בדשבורד למטופל/ת' : 'פרטי איש הקשר מהדשבורד עוד לא מחוברים') + '</div>') +
       '<div class="card-subtitle">שיחות עם המשפחה (' + calls.length + ')</div>' +
       (calls.length ? familyCallsListHtml(calls, { readOnly: true, flat: true }) : '<div class="wk-empty">עוד לא תועדה שיחה</div>') +
-      '<div class="crm-actions"><button type="button" class="wk-btn" data-pt-family="' + esc(i) + '">📞 רישום שיחה עם המשפחה</button></div>';
+      (d.readOnly ? '' : '<div class="crm-actions"><button type="button" class="wk-btn" data-pt-family="' + esc(i) + '">📞 רישום שיחה עם המשפחה</button></div>');
     return '<div class="crm-card-sub">' + esc('בבית מ-' + fmtDate(p.entryDate) + ' · יום ' + p.days) + '</div>' +
       cardTabsHtml('patient', [
         { key: 'details', label: 'פרטים', html: details },
@@ -234,7 +234,7 @@
           td('טלפון', ct && (ct.phone || ct.updatesPhone) ? telLink(ct.phone || ct.updatesPhone, 'התקשרות לאיש הקשר של ' + p.name) : '<span class="wk-meta">—</span>') +
           td('שיחה אחרונה', last ? esc(fmtDate(last.callDate)) : '<span class="wk-meta">עוד לא</span>') +
           td('שיחות', String(calls.length)) +
-          td('', '<button type="button" class="wk-link fam-add" data-fam-add="' + i + '">+ רישום שיחה</button>') + '</tr>';
+          td('', d.readOnly ? '' : '<button type="button" class="wk-link fam-add" data-fam-add="' + i + '">+ רישום שיחה</button>') + '</tr>';
       }).join('') + '</tbody></table></div>';
     return h + '</div>';
   }
@@ -392,6 +392,7 @@
     ]);
     var cost;
     if (!staffCost || !staffCost.available) cost = '<div class="wk-empty">' + esc(staffCost && staffCost.loading ? 'טוען…' : 'נתוני העלות לא זמינים כרגע') + '</div>';
+    else if (staffCost.individualCostsRedacted) cost = '<div class="wk-empty">פירוט עלות אישית חסום לפי הרשאת החשבון</div>';
     else {
       var w = (staffCost.workers || []).filter(function (x) { return norm(x.name) === norm(name); })[0];
       cost = w ? fieldsHtml([
@@ -412,7 +413,7 @@
       cardTabsHtml('employee', [
         { key: 'details', label: 'פרטים', html: details },
         { key: 'cost', label: 'עלות', html: cost },
-        { key: 'talks', label: 'שיחות', html: talks + '<div class="crm-actions"><button type="button" class="wk-btn" data-emp-talk="' + esc(s.name) + '">💬 רישום שיחה חדשה</button></div>' },
+        { key: 'talks', label: 'שיחות', html: talks + (d.readOnly ? '' : '<div class="crm-actions"><button type="button" class="wk-btn" data-emp-talk="' + esc(s.name) + '">💬 רישום שיחה חדשה</button></div>') },
         { key: 'feedback', label: 'משוב', html: fb }
       ], active);
   }
@@ -646,8 +647,8 @@
 
       var workers = simNow.workers;
       var simTotal = simNow.total;
-      h += '<div class="card work-card wk-budget-workers" data-default-open><div class="card-title">העובדים ועלות השכר (' + workers.filter(function (w) { return w.name; }).length + ')</div>' +
-        '<div class="wk-note">רשימה מעודכנת מאפליקציית כוח האדם. נראית רק לך, לסנדרה ולרון. <b>סימולציה:</b> בחרו ליד עובד/ת «סיום העסקה», «שינוי שכר» ואז עלות חודשית חדשה, או «הפחתת סכום אחר» ואז הסכום שיורד ישירות מהסה״כ. הסה״כ למטה מתעדכן. לא נשמר. «✕ ניקוי» ליד עובד/ת מחזיר את הנתון שלו/ה, ו«ניקוי כל השדות» מנקה את כל הסימולציה.</div>' +
+      h += '<div class="card work-card wk-budget-workers" data-default-open><div class="card-title">' + (s.individualCostsRedacted ? 'עלויות עובדים — נתונים אישיים מוגבלים' : 'העובדים ועלות השכר (' + workers.filter(function (w) { return w.name; }).length + ')') + '</div>' +
+        (s.individualCostsRedacted ? '<div class="wk-note">הסכומים הכוללים מגיעים ממערכת כוח האדם. אין הרשאה לפירוט עלות אישית או לסימולציה לפי עובד/ת.</div>' : '<div class="wk-note">רשימה מעודכנת מאפליקציית כוח האדם. נראית רק לך, לסנדרה ולרון. <b>סימולציה:</b> בחרו ליד עובד/ת «סיום העסקה», «שינוי שכר» ואז עלות חודשית חדשה, או «הפחתת סכום אחר» ואז הסכום שיורד ישירות מהסה״כ. הסה״כ למטה מתעדכן. לא נשמר. «✕ ניקוי» ליד עובד/ת מחזיר את הנתון שלו/ה, ו«ניקוי כל השדות» מנקה את כל הסימולציה.</div>') +
         // While a simulation is on: «ניקוי כל השדות» above the table and under it — one tap, from wherever you are.
         (workers.length && simNow.active ? simClearAllHtml(simNow.count) : '') +
         (workers.length ? '<div class="tbl-wrap"><table class="crm-tbl sim-tbl stack-tbl"><thead><tr><th>עובד/ת</th><th>תפקיד</th><th>עלות החודש</th>' +
@@ -676,7 +677,7 @@
           (next ? td('צפי ' + monthHe(next.month), simNow.active && simNext.delta ? '<s class="sim-old">' + esc(ils(nextTotal)) + '</s> <b class="sim-new">' + esc(ils(simNext.total)) + '</b>' : esc(ils(nextTotal))) : '') +
           td('% מהבית', '100%') + '<td></td>' + (simNow.active ? td('שינוי', esc(signedIls(simNow.delta))) : '<td></td>') + '</tr></tfoot></table></div>' +
           (simNow.active ? simClearAllHtml(simNow.count) : '')
-          : '<div class="wk-empty">אין עובדים עם עלות בחודש הזה</div>') + '</div>';
+          : '<div class="wk-empty">' + (s.individualCostsRedacted ? 'פירוט העלויות האישיות אינו זמין לחשבון זה. הסיכומים והתקציב מוצגים למעלה.' : 'אין עובדים עם עלות בחודש הזה') + '</div>') + '</div>';
 
       var lines = (s.budgetLines || []).filter(function (l) { return l && (l.budget || l.cost); });
       if (lines.length) {

@@ -11,6 +11,40 @@ their own code.
 | Admin (Sandra, Ron) | Every house and the network overview. |
 | Staff talks («שיחות עם עובדים») | Only the manager who wrote them, and the admins. |
 
+## Optional view-only capability (MGR-SEC-02, branch draft 21 Nov 2026)
+
+A configured account may have `"readOnly": true` in its existing `MANAGER_ACCESS`
+entry. This is an **optional, strict boolean**; omitted or false preserves
+current write permissions. No production account or Railway variable is changed
+by this patch.
+
+- House visibility remains role-scoped: an ordinary manager sees their assigned
+  house only; an admin can see the authorized network.
+- The server checks the current access entry on **every** request. It rejects
+  any `/api/work` operation not explicitly listed as a read with HTTP 403
+  `read_only`, before contacting the Dashboard. Explicit reads: `houseData`,
+  `houseCost`, `houseStaffCost`, `meetingSummaries`, `meetings`,
+  `shiftUpdates`. Business writes including `meetingReport`, `logAdd`,
+  `logUpdate`, `dischargeSet`, `feedbackDone` are always denied.
+- UI hides report buttons, expected-discharge editing, employee/family talk
+  forms and follow-up completion for view-only users. The server guard is the
+  security boundary; hiding controls is only a usability convenience.
+- **Individual employee cost privacy:** a `readOnly: true` account sees
+  aggregated house cost/budget but, by default, `houseStaffCost.staff.workers`
+  and named `ending.people` are redacted **in the server JSON**, not merely
+  hidden in the HTML. Such an account cannot run worker-level salary
+  simulations. If independently authorized, a strictly boolean
+  `"staffCostDetails": true` may be specified in that same existing
+  account's configuration by an administrator only after explicit approval.
+  Current writable managers keep their pre-existing budget/simulation workflow.
+  This does not by itself audit which currently configured managers should
+  have individual payroll visibility; that decision remains a release gate.
+
+Synthetic automated tests are in `test/read-only-workflows.test.js`.
+Browser/production UAT, live house assignments, and sensitive salary access
+remain separate release gates. No merge, deploy, real account change, or data
+migration is included.
+
 ## How it works
 
 - **Login = username + personal code (14 Oct 2026).** Both must belong to the same person.
