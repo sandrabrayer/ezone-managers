@@ -25,6 +25,8 @@ a table, and print / PDF.
 14. The simulation and next month's forecast per worker (16 Nov 2026).
 15. «פגישות קליטה» — reporting an intake meeting: held → result; not held → why (+ a proposed date for נדחתה);
     «שלח לקבוצה» (19 Nov 2026, `docs/meeting-reports.md`).
+16. «יומן שבועי וזימון ליומן» — the «📅 יומן» tab (the week, the chips, the arrows), the invitation by email and
+    «הוספה ליומן» (21 Nov 2026, `docs/week-calendar.md`).
 
 Section 6 is «שיחות עם עובדים, סוגיות תפעוליות ותזכורות» since 16 Nov 2026 («אירועים חריגים» was renamed).
 Section 7 says committees are information only: nothing is recorded here.

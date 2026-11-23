@@ -904,7 +904,8 @@
    * collapseKeyOf: the card's own class (wk-patients, dash-today …), else its
    * title without the numbers — stable across redraws. */
   // «פגישות קליטה» (meetings.js) draws and keeps its own sections — never collapsed here.
-  var NO_COLLAPSE_SUBS = { bonus: 1, summaries: 1, shiftUpdates: 1, meetings: 1 };
+  // «יומן» (calendar.js) is one card that must stay open.
+  var NO_COLLAPSE_SUBS = { bonus: 1, summaries: 1, shiftUpdates: 1, meetings: 1, calendar: 1 };
   var GENERIC_CARD_CLASSES = { card: 1, 'work-card': 1, 'dash-card': 1, 'is-collapsible': 1, 'is-collapsed': 1 };
   function collapseKeyOf(className, titleText) {
     var own = String(className || '').split(/\s+/).filter(function (c) { return c && !GENERIC_CARD_CLASSES[c] && /^[a-zA-Z][\w-]{1,40}$/.test(c); })[0];
@@ -1074,6 +1075,8 @@
     var cmt = host(panel, 'committees');
     // «ועדות»: information only (16 Nov 2026) — when there is a committee. Nothing is entered here.
     if (cmt) cmt.innerHTML = committeesHtml(d);
+    // «יומן»: the same houseData already loaded for this house.
+    if (root.Calendar) root.Calendar.onHouse(panel, key, d);
     if (pendingEdit[key] != null) {
       var pi = pendingEdit[key]; delete pendingEdit[key];
       if (pi === 'list') showSub(panel, 'patients'); else openDischargeEdit(panel, pi);
@@ -1209,7 +1212,7 @@
   }
 
   async function refresh(panel, key, force) {
-    var subs = ['patients', 'team', 'therapists', 'committees'].concat(Object.keys(LOGS));
+    var subs = ['patients', 'team', 'therapists', 'committees'].concat(Object.keys(LOGS)).concat(['calendar']);
     try {
       var d = await load(key, force);
       renderAll(panel, key, d);
@@ -1409,6 +1412,8 @@
     if (sub === 'shiftUpdates') loadShiftUpdates(panel, panel.getAttribute('data-house-key'));
     // «פגישות קליטה» (19 Nov 2026, docs/meeting-reports.md): fresh when opened.
     if (sub === 'meetings' && root.Meetings) root.Meetings.onHouse(panel, panel.getAttribute('data-house-key'), true);
+    // «יומן»: repaint on opening, scrolling to today.
+    if (sub === 'calendar' && root.Calendar) root.Calendar.repaint(panel, panel.getAttribute('data-house-key'), true);
   }
 
   /* «עדכון משמרת»: per house + week, kept 2 minutes in memory only. */
