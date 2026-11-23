@@ -491,6 +491,9 @@ app.post('/api/work', requireUser, async (req, res) => {
     if (mode !== 'set') body.mode = mode;
   }
   if (op === 'feedbackDone') {
+    // The Dashboard currently accepts a name only. Reject explicit worker IDs
+    // rather than silently strip them and misrepresent the stored identity.
+    if (b.workerId != null || b.employeeId != null || b.assignmentId != null) return res.status(409).json({ error: 'identity_contract_required' });
     // Half-yearly feedback «משוב» (20 Oct 2026, docs/feedback-reminders.md). Shape check
     // only; the Dashboard re-validates (employee on THIS house's staff, not a future date)
     // and appends to the append-only ManagersFeedbackLog with the server-decided author.
@@ -521,7 +524,15 @@ app.post('/api/work', requireUser, async (req, res) => {
     if (!WORK_LOGS.has(String(b.log || ''))) return res.status(400).json({ error: 'unknown_log' });
     body.log = String(b.log);
   }
-  if (op === 'logAdd') body.entry = JSON.stringify(b.entry && typeof b.entry === 'object' ? b.entry : {});
+  if (op === 'logAdd') {
+    // Staff talks are still name-only in Dashboard. Reject a claimed stable
+    // identity until the backend stores and verifies it; other logs unchanged.
+    if (body.log === 'staffTalks' && b.entry && typeof b.entry === 'object' &&
+        (b.entry.workerId != null || b.entry.employeeId != null || b.entry.assignmentId != null)) {
+      return res.status(409).json({ error: 'identity_contract_required' });
+    }
+    body.entry = JSON.stringify(b.entry && typeof b.entry === 'object' ? b.entry : {});
+  }
   if (op === 'logUpdate') {
     body.id = String(b.id || '').slice(0, 64);
     const p = b.patch && typeof b.patch === 'object' ? b.patch : {};

@@ -44,7 +44,7 @@ test('lastFeedbackBy: the latest real, non-future date per (trimmed) name', () =
   assert.deepEqual(m, { 'נועה': '2026-06-01' });
 });
 
-test('houseFeedback: inactive left out, duplicates merged, sorted overdue → soon → ok → unknown, with counts', () => {
+test('houseFeedback: inactive left out, distinct same-name workers retained and kept safe, sorted by due date', () => {
   const roster = [
     { name: 'בתאריך', startDate: '2026-01-01' },                    // due 2026-07-01 → overdue
     { name: 'קרוב', startDate: '2026-05-05' },                      // due 2026-11-05 → soon
@@ -52,12 +52,14 @@ test('houseFeedback: inactive left out, duplicates merged, sorted overdue → so
     { name: 'בלי תאריך' },                                          // unknown
     { name: 'עזב', startDate: '2025-01-01', active: false },
     { name: 'עזב2', startDate: '2025-01-01', active: 'false' },
-    { name: 'קרוב', startDate: '2020-01-01' },                      // duplicate name → ignored
+    { name: 'קרוב', startDate: '2020-01-01' },                      // same-name person stays visible but cannot use name-only write
     { name: 'משוב', startDate: '2025-01-01' }                       // feedback 2026-08-01 → due 2027-02-01 → ok
   ];
   const r = F.houseFeedback(roster, [{ employee: 'משוב', doneAt: '2026-08-01' }], TODAY);
-  assert.deepEqual(r.items.map((x) => [x.name, x.status]), [['בתאריך', 'overdue'], ['קרוב', 'soon'], ['משוב', 'ok'], ['רחוק', 'ok'], ['בלי תאריך', 'unknown']]);
-  assert.deepEqual([r.overdue, r.soon, r.unknown, r.today], [1, 1, 1, TODAY]);
+  assert.deepEqual(r.items.map((x) => [x.name, x.status]), [['קרוב', 'overdue'], ['בתאריך', 'overdue'], ['קרוב', 'soon'], ['משוב', 'ok'], ['רחוק', 'ok'], ['בלי תאריך', 'unknown']]);
+  assert.deepEqual([r.overdue, r.soon, r.unknown, r.today], [2, 1, 1, TODAY]);
+  assert.equal(r.items.filter(x => x.name === 'קרוב').length, 2);
+  assert.ok(r.items.filter(x => x.name === 'קרוב').every(x => x.identityAmbiguous && x.writeBlocked));
 });
 
 test('validDoneAt: a real date, not in the future, not before 2000', () => {
