@@ -277,3 +277,25 @@ test('E: template, scripts, service worker, work.js hooks, no device storage', (
   const css = pub('styles.css');
   assert.match(css, /\.subtab\[data-sub="meetings"\]\s*\{ --tab: var\(--c-cyan\); \}/);
 });
+
+/* F. «מתלבט/ת» + a call-back request → the Dashboard's call task (E-Zone-Dashboard
+ *    CHANGELOG-meeting-report-undecided-task.md): the confirmation says so. */
+test('F: followupLine — created / already open / failed / none', () => {
+  assert.equal(M.followupLine(null), '');
+  assert.equal(M.followupLine({}), '');
+  assert.equal(M.followupLine({ id: 'task-x', dueDate: '2026-12-01', created: true }), '📌 נוצרה משימה למשרד לחזור אליהם · 01/12/2026');
+  assert.equal(M.followupLine({ id: 'task-x', dueDate: '2026-12-01', created: false }), '📌 כבר יש משימה פתוחה במשרד לחזור אליהם · 01/12/2026');
+  assert.equal(M.followupLine({ id: 'task-x', dueDate: '<b>', created: true }), '📌 נוצרה משימה למשרד לחזור אליהם', 'a malformed date is dropped');
+  assert.equal(M.followupLine({ error: 'task_failed' }), 'לא נוצרה משימה אוטומטית למשרד — כדאי לעדכן את ורד');
+});
+
+test('F: the confirmation shows the task line escaped, and nothing when there is no task', () => {
+  const base = { name: 'דני', houseLabel: 'רמות', outcome: 'undecided', companion: 'mother', note: 'ביקשה שנחזור אליה', reporter: 'אורן' };
+  const withTask = M.doneHtml(Object.assign({ followupTask: { id: 'task-x', dueDate: '2026-12-01', created: true } }, base));
+  assert.match(withTask, /<div class="mt-followup">📌 נוצרה משימה למשרד לחזור אליהם · 01\/12\/2026<\/div>/);
+  assert.doesNotMatch(M.doneHtml(Object.assign({ followupTask: null }, base)), /mt-followup/);
+  const src = pub('meetings.js');
+  assert.match(src, /followupTask: r\.saved\.followupTask \|\| null/);
+  assert.match(src, /esc\(fu\)/);
+  assert.match(pub('styles.css'), /\.mt-followup \{/);
+});

@@ -39,6 +39,11 @@ past meetings nobody has reported yet.
   WhatsApp text is the link's message byte for byte, with the `סיבה: …` line for a meeting that
   did not happen (`test/meetings.test.js` pins the Dashboard's output). The link opens through
   `window.open`, falling back to navigation, so it also works in the installed PWA.
+- **«מתלבט» + «ביקש/ה שיחזרו»** (24 Nov 2026): when the result is מתלבט and the פירוט says the person
+  asked to be called back («ביקשה שנחזור אליה בעוד שבוע», «שיתקשרו מחר»…), the Dashboard opens a call
+  task for ורד, due on the day the text asks for, else the next working day. The confirmation shows
+  «📌 נוצרה משימה למשרד לחזור אליהם · <date>». One open task per lead: editing the report does not add
+  a second. The rule is in the Dashboard (`CHANGELOG-meeting-report-undecided-task.md` there).
 
 ## Data path
 

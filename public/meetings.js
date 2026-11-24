@@ -277,9 +277,22 @@
   }
   function waShareUrl(saved) { return waLink(waShareMessage(saved)); }
 
+  /* «מתלבט/ת» + a call-back request in the text → the Dashboard opened a call task for the
+   * office (E-Zone-Dashboard CHANGELOG-meeting-report-undecided-task.md). The line for the
+   * confirmation, or ''. Pure; the caller escapes it. */
+  function followupLine(ft) {
+    if (!ft || typeof ft !== 'object') return '';
+    if (ft.error) return 'לא נוצרה משימה אוטומטית למשרד — כדאי לעדכן את ורד';
+    if (!ft.id) return '';
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ft.dueDate || ''));
+    return (ft.created ? '📌 נוצרה משימה למשרד לחזור אליהם' : '📌 כבר יש משימה פתוחה במשרד לחזור אליהם') + (m ? ' · ' + m[3] + '/' + m[2] + '/' + m[1] : '');
+  }
+
   function doneHtml(done) {
+    var fu = followupLine(done.followupTask);
     return '<div class="mt-done" role="status"><div class="mt-done-title">✓ הדיווח נשמר ונשלח לדשבורד</div>' +
       '<div class="wk-meta">' + esc(reportSummary(done)) + '</div>' +
+      (fu ? '<div class="mt-followup">' + esc(fu) + '</div>' : '') +
       '<div class="mt-actions"><a class="wk-btn mt-wa" href="' + esc(waShareUrl(done)) + '" target="_blank" rel="noopener" data-mt-wa>📤 שלח לקבוצה (וואטסאפ)</a>' +
       '<button type="button" class="wk-btn ghost" data-mt-close>סגירה</button></div></div>';
   }
@@ -347,7 +360,7 @@
     model: model, badgeCount: badgeCount, stateOf: stateOf, tabHtml: tabHtml, homeCardHtml: homeCardHtml,
     setViewer: setViewer, scheduledWithViewer: scheduledWithViewer,
     formHtml: formHtml, rowHtml: rowHtml, draftError: draftError, payloadOf: payloadOf, freeValue: freeValue,
-    errorText: errorText, ERRORS: ERRORS, reportSummary: reportSummary,
+    errorText: errorText, ERRORS: ERRORS, reportSummary: reportSummary, followupLine: followupLine, doneHtml: doneHtml,
     waMessage: waMessage, waShareMessage: waShareMessage, waShareUrl: waShareUrl, WA_URL_MAX: WA_URL_MAX, esc: esc
   };
 
@@ -458,7 +471,8 @@
       if (!r || !r.saved || String(r.saved.leadId) !== String(m.id)) throw Object.assign(new Error('not_proven'), { code: 'not_proven' });
       st.done = {
         name: m.name, houseLabel: m.houseLabel, outcome: body.outcome, notHeldReason: body.notHeldReason,
-        proposedDate: body.proposedDate, companion: body.companion, note: body.note, reporter: r.saved.reporter || ''
+        proposedDate: body.proposedDate, companion: body.companion, note: body.note, reporter: r.saved.reporter || '',
+        followupTask: r.saved.followupTask || null
       };
       st.draft = null;
       st.saving = false;

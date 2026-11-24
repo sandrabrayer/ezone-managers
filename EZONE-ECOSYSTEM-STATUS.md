@@ -14,6 +14,12 @@
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 
+## Managers: «מתלבט» + a call-back request → a call task for the office (November 24, 2026)
+
+The Dashboard opens an open call task for ורד when a meeting report (app or link) is «מתלבט» and the
+פירוט asks to be called back; due on the day the text asks for, else the next working day. The managers
+app's confirmation shows «📌 נוצרה משימה למשרד…». Dashboard: `CHANGELOG-meeting-report-undecided-task.md`. SW v58.
+
 ## Managers: «📅 יומן» — the house's week, and «הוספה ליומן» (November 21, 2026)
 
 Sandra, 21 Nov 2026. Details: `docs/week-calendar.md` in ezone-managers.
