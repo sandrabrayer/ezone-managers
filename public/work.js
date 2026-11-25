@@ -88,6 +88,10 @@
   var LOG_LABEL = { familyCalls: 'שיחה עם משפחה', staffTalks: 'שיחה עם עובד/ת', events: 'סוגיה תפעולית' };
   var STAGE_LABELS = { new: 'ליד', visit: 'נקבע ביקור', paid: 'שילם מקדמה', entry: 'נכנס לבית', waitlist: 'רשימת המתנה' };
   var OUTCOME_LABELS = { not_relevant: 'לא רלוונטי', thinking: 'חושבים על זה', entered: 'נכנסים לטיפול', postponed: 'נדחה', cancelled: 'התבטל' };
+  /* A visit the office cancelled (Dashboard CRM «הפגישה בוטלה», meetingOutcome 'cancelled') is not a
+   * coming visit: it leaves «ביקורים קרובים», the week / month counts and the «יומן» fallback (25 Nov 2026).
+   * The month list on «מטופלים» still shows it, labelled «התבטל». Pure. */
+  function isCancelledVisit(v) { return !!v && String(v.outcome || '').trim() === 'cancelled'; }
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -716,7 +720,7 @@
     d = d || {};
     var today = d.today || '';
     var wd = weekdayOf(today);
-    var visits = d.visits || [], monthVisits = visitsInSelectedMonth(visits), adm = d.admissions || [];
+    var visits = (d.visits || []).filter(function (v) { return !isCancelledVisit(v); }), monthVisits = visitsInSelectedMonth(visits), adm = d.admissions || [];
     var weekStart = wd >= 0 ? addDaysIso(today, -wd) : '';
     var weekEnd = weekStart ? addDaysIso(weekStart, 6) : '';
     var weekVisits = visits.filter(function (v) { return weekStart && v.date >= weekStart && v.date <= weekEnd; });
@@ -971,7 +975,7 @@
     COMMITTEE_REASON: COMMITTEE_REASON,
     WORK_ERRORS: WORK_ERRORS, dischargeErrorText: dischargeErrorText, setDischargeBusy: setDischargeBusy,
     teamHtml: teamHtml, therapistsHtml: therapistsHtml, telHref: telHref, dashboardHtml: dashboardHtml, costHtml: costHtml,
-    visitsInSelectedMonth: visitsInSelectedMonth,
+    visitsInSelectedMonth: visitsInSelectedMonth, isCancelledVisit: isCancelledVisit,
     familyPanelHtml: familyPanelHtml, familyHintText: familyHintText, collapseKeyOf: collapseKeyOf, collapseDefaultOpen: collapseDefaultOpen,
     todayModel: todayModel, todayCardHtml: todayCardHtml, todayAllHtml: todayAllHtml, SHIFT_ORDER: SHIFT_ORDER,
     logListHtml: logListHtml, logPanelHtml: logPanelHtml, followUpsHtml: followUpsHtml, entryFromForm: entryFromForm };

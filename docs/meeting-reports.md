@@ -39,6 +39,9 @@ past meetings nobody has reported yet.
   WhatsApp text is the link's message byte for byte, with the `סיבה: …` line for a meeting that
   did not happen (`test/meetings.test.js` pins the Dashboard's output). The link opens through
   `window.open`, falling back to navigation, so it also works in the installed PWA.
+- **Cancelled by the office** (25 Nov 2026): a meeting the Dashboard marks «בוטלה» (`meetingOutcome: 'cancelled'`)
+  is not served by op `meetings` (unless the manager already reported on it), and the house's visits list hides it from
+  «ביקורים קרובים», the visit tiles and the «יומן» fallback. A saved (STALE) meetings answer is followed by one fresh read.
 - **«מתלבט» + «ביקש/ה שיחזרו»** (24 Nov 2026): when the result is מתלבט and the פירוט says the person
   asked to be called back («ביקשה שנחזור אליה בעוד שבוע», «שיתקשרו מחר»…), the Dashboard opens a call
   task for ורד, due on the day the text asks for, else the next working day. The confirmation shows

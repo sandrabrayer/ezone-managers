@@ -378,7 +378,29 @@
       err.code = (data && data.error) || (r.status === 504 ? 'timeout' : '');
       throw err;
     }
+    // X-Cache: STALE = the server answered with a saved copy (up to 24 h old) and refreshes it in the
+    // background. 25 Nov 2026: a meeting the office had cancelled kept showing because nothing
+    // followed that refresh here — the caller now does (followStale).
+    var xc = r.headers && typeof r.headers.get === 'function' ? r.headers.get('X-Cache') : null;
+    if (xc === 'STALE' && typeof data === 'object') {
+      try { Object.defineProperty(data, '__stale', { value: true }); } catch (e) { /* frozen — ignore */ }
+    }
     return data;
+  }
+  /* The meetings list came from a saved copy: ONE follow-up per house joins the server's refresh
+   * (swr:'wait') and repaints with the fresh list. A failure keeps what is on screen. */
+  var following = {};
+  function followStale(panel, key) {
+    if (following[key]) return;
+    following[key] = true;
+    post({ op: 'meetings', house: key, swr: 'wait' }).then(function (r) {
+      if (r && r.__stale) return;
+      var st = stFor(key);
+      st.res = { meetings: Array.isArray(r.meetings) ? r.meetings : [], today: r.today };
+      st.today = r.today || st.today;
+      st.at = Date.now();
+      paint(panel, key);
+    }).catch(function () { /* keep what is on screen */ }).then(function () { delete following[key]; });
   }
   function newSubmissionId() {
     var bytes = new Uint8Array(16), c = root.crypto;
@@ -419,15 +441,18 @@
     if (!force && st.res && !st.res.error && Date.now() - st.at < CACHE_MS) { paint(panel, key); return Promise.resolve(); }
     if (st.loading) return st.loading;
     if (!st.res) paint(panel, key);
+    var stale = false;
     st.loading = post({ op: 'meetings', house: key }).then(function (r) {
       st.res = { meetings: Array.isArray(r.meetings) ? r.meetings : [], today: r.today };
       st.today = r.today || st.today;
+      stale = !!r.__stale;
     }).catch(function (e) {
       st.res = { error: (e && e.code) || 'error' };
     }).then(function () {
       st.at = Date.now();
       delete st.loading;
       paint(panel, key);
+      if (stale) followStale(panel, key);
     });
     return st.loading;
   }
