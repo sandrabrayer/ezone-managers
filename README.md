@@ -271,6 +271,8 @@ npm ci
 npm test   # node --test, no env vars or network needed
 ```
 
+CI workflows and the `DASHBOARD_READ_TOKEN` secret the Dashboard contract check needs: `docs/ci.md`.
+
 The suite covers open access — every route works with no key and no cookie,
 patient names come through, nothing sets a cookie, `?key=` is an ordinary
 ignored param, the rate limit, security headers, `robots.txt`, and no Apps
