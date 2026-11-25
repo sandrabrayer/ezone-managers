@@ -367,6 +367,7 @@
     var s = FD ? FD.resolveEmployee(roster, name) : roster.filter(function (x) { return norm(x.name) === norm(name); })[0];
     if (!s) return '<div class="wk-empty">' + (roster.some(function (x) { return norm(x.name) === norm(name); }) ? 'לא ניתן לזהות את העובד/ת באופן חד-משמעי לפי המידע הקיים. יש לבדוק מזהה עובד או טלפון במקור.' : 'העובד/ת לא נמצא/ה ברשימת הבית — רעננו את הדף') + '</div>';
     var sameName = roster.filter(function (x) { return x && norm(x.name) === norm(s.name); }).length > 1;
+    var certified = FD && FD.uniqueIdentity ? FD.uniqueIdentity(s, roster) : null;
     var costRow = function (rows) {
       var list = Array.isArray(rows) ? rows : [];
       var id = FD && FD.workerId(s);
@@ -447,7 +448,10 @@
       cardTabsHtml('employee', [
         { key: 'details', label: 'פרטים', html: details },
         { key: 'cost', label: 'עלות', html: cost },
-        { key: 'talks', label: 'שיחות', html: talks + (sameName || (FD && FD.workerId(s)) ? '' : '<div class="crm-actions"><button type="button" class="wk-btn" data-emp-talk="' + esc(s.name) + '">💬 רישום שיחה חדשה</button></div>') },
+        { key: 'talks', label: 'שיחות', html: talks + (certified
+          // Dashboard #415 v2: the card's person is known by a certified pair — even with a shared name.
+          ? '<div class="crm-actions"><button type="button" class="wk-btn" data-emp-talk="' + esc(s.name) + '" data-emp-wid="' + esc(certified.workerId) + '" data-emp-aid="' + esc(certified.assignmentId) + '">💬 רישום שיחה חדשה</button></div>'
+          : (sameName || (FD && FD.workerId(s)) ? '' : '<div class="crm-actions"><button type="button" class="wk-btn" data-emp-talk="' + esc(s.name) + '">💬 רישום שיחה חדשה</button></div>')) },
         { key: 'feedback', label: 'משוב', html: fb }
       ], active);
   }

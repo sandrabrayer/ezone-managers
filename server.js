@@ -433,6 +433,60 @@ const DISCHARGE_MODES = new Set(['set', 'clear', 'none']);
 const WORK_READ_TIMEOUT_MS = 15000;
 const WORK_WRITE_TIMEOUT_MS = 30000;
 
+/* Worker identity v2 (Dashboard #415, docs/worker-identity-v2.md) — the Managers-side gate before a
+ * personal write (feedbackDone, a staffTalks logAdd) may carry workerId + assignmentId:
+ *   - both ids (half a pair → 409 identity_contract_required), each /^[A-Za-z0-9_-]{1,120}$/
+ *     (the Dashboard's own pattern, no trimming), else 400 bad_request;
+ *   - THIS session's house roster (houseData, cached per person + house like every read; a
+ *     stale copy is refreshed first, a failed refresh refuses) must be available, not stale, and carry the pair on
+ *     EXACTLY one active row with this name, with the assignment and the worker unique in the house.
+ * The Dashboard projects the pair only from a certified `managers-house-v2` publication, so
+ * a roster without it (v1, today's production) → 409 identity_contract_required: the ids are
+ * never forwarded to a writer that would drop them. The house is the session's (never the
+ * body's), so another house's pair can never match. Nothing here grants or widens access. */
+const V2_ID_RE = /^[A-Za-z0-9_-]{1,120}$/;
+const normPersonName = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+async function loadRosterForIdentity(u, house) {
+  // Its own key (the page's houseData copy also merges committees); the same person + house scope,
+  // and the same house tag, so every write to this house drops it too.
+  const key = JSON.stringify(['work', 'identityRoster', house, '', u.role, u.id]);
+  const loader = async () => {
+    const upstream = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST', redirect: 'follow', signal: AbortSignal.timeout(WORK_READ_TIMEOUT_MS),
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ action: 'managersWork', secret: WORK_SECRET, op: 'houseData', house, role: u.role, actor: u.name, actorId: u.id })
+    });
+    const data = JSON.parse(await upstream.text());
+    if (!upstream.ok || !data || data.ok === false) throw new Error('roster_read_failed');
+    return { status: 200, json: data, cacheable: true };
+  };
+  const r = await readCache.read(key, loader, { wait: true, tag: { house } });
+  if (r.refreshFailed) throw new Error('roster_stale');
+  return r.value && r.value.json;
+}
+async function verifyWorkerIdentity(u, house, employee, workerId, assignmentId) {
+  // Half a pair is not the v2 contract (409, as before #415); a malformed pair is a bad request.
+  if (workerId == null || assignmentId == null || workerId === '' || assignmentId === '') return { ok: false, status: 409, error: 'identity_contract_required' };
+  const w = typeof workerId === 'string' ? workerId : '';
+  const a = typeof assignmentId === 'string' ? assignmentId : '';
+  if (!V2_ID_RE.test(w) || !V2_ID_RE.test(a)) return { ok: false, status: 400, error: 'bad_request' };
+  let data;
+  try { data = await loadRosterForIdentity(u, house); } catch { return { ok: false, status: 409, error: 'identity_review_required' }; }
+  const team = data && data.team;
+  if (!team || team.available !== true || team.stale === true || !Array.isArray(team.staff)) {
+    return { ok: false, status: 409, error: 'identity_review_required' };
+  }
+  const active = team.staff.filter((x) => x && x.active !== false && normPersonName(x.name));
+  const certified = active.filter((x) => typeof x.workerId === 'string' && typeof x.assignmentId === 'string' &&
+    V2_ID_RE.test(x.workerId) && V2_ID_RE.test(x.assignmentId));
+  if (!certified.length) return { ok: false, status: 409, error: 'identity_contract_required' };
+  const exact = certified.filter((x) => x.workerId === w && x.assignmentId === a && normPersonName(x.name) === normPersonName(employee));
+  const sameAssignment = certified.filter((x) => x.assignmentId === a).length;
+  const sameWorker = certified.filter((x) => x.workerId === w).length;
+  if (exact.length !== 1 || sameAssignment !== 1 || sameWorker !== 1) return { ok: false, status: 409, error: 'identity_review_required' };
+  return { ok: true, workerId: w, assignmentId: a };
+}
+
 app.post('/api/work', requireUser, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   // JSON only: a cross-site form cannot send application/json (CSRF).
@@ -491,9 +545,9 @@ app.post('/api/work', requireUser, async (req, res) => {
     if (mode !== 'set') body.mode = mode;
   }
   if (op === 'feedbackDone') {
-    // The Dashboard currently accepts a name only. Reject explicit worker IDs
-    // rather than silently strip them and misrepresent the stored identity.
-    if (b.workerId != null || b.employeeId != null || b.assignmentId != null) return res.status(409).json({ error: 'identity_contract_required' });
+    // Worker identity v2 (Dashboard #415, docs/worker-identity-v2.md): a claimed
+    // workerId + assignmentId is forwarded ONLY after verifyWorkerIdentity below.
+    if (b.employeeId != null) return res.status(409).json({ error: 'identity_contract_required' });
     // Half-yearly feedback «משוב» (20 Oct 2026, docs/feedback-reminders.md). Shape check
     // only; the Dashboard re-validates (employee on THIS house's staff, not a future date)
     // and appends to the append-only ManagersFeedbackLog with the server-decided author.
@@ -501,6 +555,11 @@ app.post('/api/work', requireUser, async (req, res) => {
     if (!employee || employee.length > 80) return res.status(400).json({ error: 'bad_request' });
     if (!ISO_DATE_RE.test(String(b.doneAt || ''))) return res.status(400).json({ error: 'bad_date' });
     Object.assign(body, { employee, doneAt: String(b.doneAt) });
+    if (b.workerId != null || b.assignmentId != null) {
+      const v = await verifyWorkerIdentity(u, house, employee, b.workerId, b.assignmentId);
+      if (!v.ok) return res.status(v.status).json({ error: v.error });
+      Object.assign(body, { workerId: v.workerId, assignmentId: v.assignmentId });
+    }
   }
   if (op === 'meetingReport') {
     // Shape check only, never forwarded when wrong. The Dashboard decides the rest: the lead is in
@@ -525,13 +584,19 @@ app.post('/api/work', requireUser, async (req, res) => {
     body.log = String(b.log);
   }
   if (op === 'logAdd') {
-    // Staff talks are still name-only in Dashboard. Reject a claimed stable
-    // identity until the backend stores and verifies it; other logs unchanged.
-    if (body.log === 'staffTalks' && b.entry && typeof b.entry === 'object' &&
-        (b.entry.workerId != null || b.entry.employeeId != null || b.entry.assignmentId != null)) {
+    const entry = b.entry && typeof b.entry === 'object' && !Array.isArray(b.entry) ? Object.assign({}, b.entry) : {};
+    // No other log carries a worker identity; employeeId is never a write identity.
+    if (entry.employeeId != null || (body.log !== 'staffTalks' && (entry.workerId != null || entry.assignmentId != null))) {
       return res.status(409).json({ error: 'identity_contract_required' });
     }
-    body.entry = JSON.stringify(b.entry && typeof b.entry === 'object' ? b.entry : {});
+    // Staff talks, worker identity v2 (Dashboard #415): a claimed pair is verified against THIS
+    // house's certified roster first; the Dashboard re-verifies it under its lock before writing.
+    if (body.log === 'staffTalks' && (entry.workerId != null || entry.assignmentId != null)) {
+      const v = await verifyWorkerIdentity(u, house, entry.employeeName, entry.workerId, entry.assignmentId);
+      if (!v.ok) return res.status(v.status).json({ error: v.error });
+      entry.workerId = v.workerId; entry.assignmentId = v.assignmentId;
+    }
+    body.entry = JSON.stringify(entry);
   }
   if (op === 'logUpdate') {
     body.id = String(b.id || '').slice(0, 64);

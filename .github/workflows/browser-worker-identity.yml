@@ -20,11 +20,15 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Synthetic duplicate-name browser acceptance
         run: node e2e/worker-identity.cjs
+      - name: Synthetic worker identity v2 browser acceptance (Dashboard #415)
+        run: node e2e/worker-identity-v2.cjs
       - name: Save synthetic 390px screenshot
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: managers-worker-identity-synthetic
-          path: artifacts/identity-synthetic-390.png
+          path: |
+            artifacts/identity-synthetic-390.png
+            artifacts/identity-v2-synthetic-390.png
           if-no-files-found: ignore
           retention-days: 7

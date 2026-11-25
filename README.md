@@ -88,6 +88,15 @@ Light look like the newer E-ZONE apps, one colour per tab, «בונוס» last. 
 
 Details and the kept-features checklist: `docs/crm-redesign.md`.
 
+## Worker identity v2 — client compatibility with Dashboard #415 (25 Nov 2026, draft)
+
+`docs/worker-identity-v2.md`. Half-yearly feedback and staff talks send `workerId` + `assignmentId` **only** when
+the house roster (`houseData.team.staff[]`) carries a certified pair for that person. Dashboard #415 projects such a pair only from a
+certified `managers-house-v2` publication. `server.js` checks the pair against the session's own house roster
+before forwarding, and otherwise refuses it (409). The house stays the session's. Two people with one name stay two
+people. While the roster is v1 (production today), every request is exactly what #82 sent. Salary, cost, roles and
+history are unchanged.
+
 ## «📅 יומן», 21 Nov 2026
 
 `docs/week-calendar.md`. A sub-tab right after «הבית היום» shows the house's week, Sunday to Saturday: intake

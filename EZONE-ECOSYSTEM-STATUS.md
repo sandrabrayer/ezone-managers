@@ -14,6 +14,20 @@
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 
+## Managers: worker identity v2 client compatibility with Dashboard #415 (November 25, 2026 — draft, not active)
+
+Sandra, 25 Nov 2026 (ezone-managers #63). Details: `docs/worker-identity-v2.md` in ezone-managers.
+
+- Half-yearly feedback (`feedbackDone`) and staff talks (`logAdd staffTalks`, including follow-ups / outcomes) send
+  `workerId` + `assignmentId` only when the house's roster carries a certified pair: both ids, the Dashboard's pattern,
+  the assignment and the worker each unique in the house, and a fresh roster.
+- The Managers server re-checks the pair against the **session's** house roster before forwarding. A v1 roster →
+  `409 identity_contract_required`; stale / unreadable / no exact match → `409 identity_review_required`;
+  malformed → `400`. The house is never taken from the browser. The Dashboard re-verifies before writing.
+- Inert until Coordinators v2 (`ezone-coordinators#360`) and Dashboard #415 (`MANAGERS_DIGEST_REQUIRE_MANIFEST=true`)
+  are live. It must be live **before** that flag is turned on. No endpoint, env var, secret, role or salary change.
+  Tests 579 → 590 (one opt-in against the real #415 `Code.gs`). SW v58.
+
 ## Managers: «📅 יומן» — the house's week, and «הוספה ליומן» (November 21, 2026)
 
 Sandra, 21 Nov 2026. Details: `docs/week-calendar.md` in ezone-managers.

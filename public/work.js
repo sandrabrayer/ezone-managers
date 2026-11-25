@@ -296,7 +296,7 @@
         (x.writeBlocked ? '<span class="wk-note">' + (x.rosterStale
           ? 'נתוני הצוות אינם מעודכנים — רעננו לפני סימון המשוב'
           : 'נדרש זיהוי עובד/ת מאומת לפני רישום משוב; ההיסטוריה אינה משויכת לפי שם בלבד') + '</span>' :
-        '<form class="wk-fb-form" data-fb-form="' + i + '" novalidate><input type="hidden" name="employee" value="' + esc(x.name) + '">' +
+        '<form class="wk-fb-form" data-fb-form="' + i + '"' + (x.workerId ? ' data-fb-wid="' + esc(x.workerId) + '" data-fb-aid="' + esc(x.assignmentId) + '"' : '') + ' novalidate><input type="hidden" name="employee" value="' + esc(x.name) + '">' +
         '<label class="wk-dis-label"><span>תאריך המשוב</span><input name="doneAt" type="date" required value="' + esc(m.today) + '" max="' + esc(m.today) + '"></label>' +
         '<button type="submit" class="wk-dis-btn">בוצע</button><span class="wk-msg" data-fb-msg role="status" aria-live="polite"></span></form>') + '</li>';
     }).join('') + '</ul>';
@@ -306,7 +306,11 @@
     not_found: 'העובד/ת לא ברשימת העובדים של הבית — רעננו את הדף',
     bad_date: 'תאריך לא תקין (לא בעתיד)',
     roster_unavailable: 'רשימת העובדים לא זמינה כרגע — נסו שוב מאוחר יותר',
-    lock_busy: 'השרת עסוק — נסו שוב בעוד רגע'
+    lock_busy: 'השרת עסוק — נסו שוב בעוד רגע',
+    // Worker identity v2 (Dashboard #415, docs/worker-identity-v2.md): never a guess — refresh and retry.
+    identity_review_required: 'לא ניתן לאמת את זהות העובד/ת מול רשימת הבית — רעננו את הדף. אם זה חוזר, פנו לסנדרה.',
+    identity_source_contract_required: 'הרשימה מזהה את העובד/ת לפי מזהה — רעננו את הדף ונסו שוב.',
+    identity_contract_required: 'מזהה העובד/ת לא אומת במקור — הרישום לא נשמר. רעננו את הדף.'
   };
   function feedbackErrorText(err) {
     var code = err && err.data && typeof err.data.error === 'string' ? err.data.error : '';
@@ -826,7 +830,9 @@
       } else if (f.type === 'employee') {
         var staff = (d && d.team && d.team.available && d.team.staff) || [];
         input = '<input id="' + id + '" name="' + f.k + '" maxlength="80" list="' + id + '-list" autocomplete="off"' + req + '>' +
-          '<datalist id="' + id + '-list">' + staff.map(function (s) { return '<option value="' + esc(s.name) + '">'; }).join('') + '</datalist>';
+          '<datalist id="' + id + '-list">' + staff.map(function (s) { return '<option value="' + esc(s.name) + '">'; }).join('') + '</datalist>' +
+          // Filled only by the employee card with its certified pair (Dashboard #415 v2).
+          '<input type="hidden" name="workerId" value=""><input type="hidden" name="assignmentId" value="">';
       } else input = '<input id="' + id + '" name="' + f.k + '" maxlength="' + (f.max || 80) + '"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + req + '>';
       return '<div class="wk-field wk-f-' + f.type + '">' + lab + input + '</div>';
     }).join('') +
@@ -1639,6 +1645,11 @@
     panel.addEventListener('input', function (ev) {
       var f = ev.target.closest && ev.target.closest('[data-wk-form]');
       if (f) f.setAttribute('data-wk-dirty', '1');
+      // A typed name is no longer the card's person: drop the card's pair.
+      if (f && ev.target.name === 'employeeName') {
+        if (f.elements.workerId) f.elements.workerId.value = '';
+        if (f.elements.assignmentId) f.elements.assignmentId.value = '';
+      }
     });
     panel.addEventListener('submit', async function (ev) {
       var fbForm = ev.target.closest && ev.target.closest('[data-fb-form]');
@@ -1664,11 +1675,23 @@
           return;
         }
         var roster = (source && source.team && source.team.staff) || [];
-        var matches = FD.activeRoster(roster).filter(function (e) { return FD.normName(e.name) === FD.normName(res.entry.employeeName); });
-        if (matches.length > 1 || (matches.length === 1 && FD.workerId(matches[0]))) {
-          msg.textContent = 'לא ניתן לשמור שיחה לפי שם שאינו מזהה את העובד/ת בוודאות. נדרש חיבור מזהה עובד למקור.';
+        // Dashboard #415 v2: a certified workerId + assignmentId pair (from the roster row, the
+        // employee card, or the thread's first talk) or the unchanged unique-name legacy path.
+        var parent = null;
+        if (res.entry.parentId) {
+          var talks = (source && source.logs && source.logs.staffTalks) || [];
+          parent = talks.filter(function (r) { return r && r.id === res.entry.parentId; })[0] || { id: res.entry.parentId };
+        }
+        var picked = form.elements.workerId && form.elements.assignmentId
+          ? { workerId: form.elements.workerId.value, assignmentId: form.elements.assignmentId.value } : null;
+        var who = FD.talkIdentity(roster, res.entry.employeeName, parent, picked);
+        if (!who.ok) {
+          msg.textContent = 'לא ניתן לשמור שיחה לפי שם שאינו מזהה את העובד/ת בוודאות. ' +
+            (who.reason === 'ambiguous' ? 'פתחו את כרטיס העובד/ת ורשמו את השיחה משם.' : 'רעננו את הדף; אם זה חוזר, פנו לסנדרה.');
           return;
         }
+        delete res.entry.workerId; delete res.entry.assignmentId;
+        if (who.workerId) { res.entry.employeeName = who.name; res.entry.workerId = who.workerId; res.entry.assignmentId = who.assignmentId; }
       }
       var btn = form.querySelector('button[type="submit"]');
       if (btn.disabled) return;   // a second tap while saving
@@ -1769,7 +1792,12 @@
         closeDrawer();
         showSub(panel, 'staffTalks');
         var f = panel.querySelector('[data-sub-panel="staffTalks"] form[data-wk-form="staffTalks"]:not([data-thread-form])');
-        if (f && f.elements.employeeName) { f.elements.employeeName.value = talk.getAttribute('data-emp-talk'); f.setAttribute('data-wk-dirty', '1'); expandCardOf(panel, drawer.key, f); if (f.elements.summary) f.elements.summary.focus(); }
+        if (f && f.elements.employeeName) {
+          f.elements.employeeName.value = talk.getAttribute('data-emp-talk');
+          // The card's certified pair (Dashboard #415 v2); typing another name clears it.
+          if (f.elements.workerId) f.elements.workerId.value = talk.getAttribute('data-emp-wid') || '';
+          if (f.elements.assignmentId) f.elements.assignmentId.value = talk.getAttribute('data-emp-aid') || '';
+          f.setAttribute('data-wk-dirty', '1'); expandCardOf(panel, drawer.key, f); if (f.elements.summary) f.elements.summary.focus(); }
       }
     });
   }
@@ -1873,7 +1901,11 @@
     not_found: 'הרישום המקורי לא נמצא — רעננו את הדף ונסו שוב.',
     forbidden: 'אין הרשאה להוסיף לרישום הזה.',
     missing_fields: 'חסרים פרטים — מלאו את השדות המסומנים ב-*.',
-    bad_request: 'הפרטים לא תואמים לשיחה המקורית — רעננו את הדף ונסו שוב.'
+    bad_request: 'הפרטים לא תואמים לשיחה המקורית — רעננו את הדף ונסו שוב.',
+    // Worker identity v2 (Dashboard #415, docs/worker-identity-v2.md): never a guess — refresh and retry.
+    identity_review_required: 'לא ניתן לאמת את זהות העובד/ת מול רשימת הבית — רעננו את הדף. אם זה חוזר, פנו לסנדרה.',
+    identity_source_contract_required: 'הרשימה מזהה את העובד/ת לפי מזהה — רעננו את הדף ונסו שוב.',
+    identity_contract_required: 'מזהה העובד/ת לא אומת במקור — הרישום לא נשמר. רעננו את הדף.'
   };
   function logErrorText(e) {
     var code = e && e.data && e.data.error;
@@ -1980,20 +2012,29 @@
     if (!FD || !FD.validDoneAt(doneAt, today)) { if (msg) msg.textContent = FEEDBACK_ERRORS.bad_date; return; }
     // The feed might have changed after the form was rendered: fail closed.
     var data = cache[key] && cache[key].data;
+    var fbIdentity = null;
     if (data && FD) {
       var model = feedbackModel(data);
       var itemIndex = Number(form.getAttribute('data-fb-form'));
       var item = model && model.items[itemIndex];
-      if (!item || item.name !== employee || item.writeBlocked) {
+      // The row's pair must still be the one the form was drawn for.
+      var drawnWid = form.getAttribute('data-fb-wid') || '', drawnAid = form.getAttribute('data-fb-aid') || '';
+      if (!item || item.name !== employee || item.writeBlocked ||
+          (item.workerId || '') !== drawnWid || (item.assignmentId || '') !== drawnAid) {
         if (msg) msg.textContent = 'נדרש זיהוי עובד/ת מאומת. לא ניתן לרשום משוב לפי שם בלבד.';
         return;
       }
+      fbIdentity = item.workerId ? { workerId: item.workerId, assignmentId: item.assignmentId } : null;
     }
     form.setAttribute('data-fb-busy', '1');
     Array.prototype.forEach.call(form.querySelectorAll('input, button'), function (el) { el.disabled = true; });
     if (msg) msg.textContent = 'שומר...';
     try {
-      await d.post({ op: 'feedbackDone', house: key, employee: employee, doneAt: doneAt });
+      // Dashboard #415 v2: the certified pair of THIS row goes with the name; a
+      // legacy (v1) roster sends the name only, exactly as before.
+      var req = { op: 'feedbackDone', house: key, employee: employee, doneAt: doneAt };
+      if (fbIdentity && fbIdentity.workerId && fbIdentity.assignmentId) { req.workerId = fbIdentity.workerId; req.assignmentId = fbIdentity.assignmentId; }
+      await d.post(req);
     } catch (e) {
       form.removeAttribute('data-fb-busy');
       Array.prototype.forEach.call(form.querySelectorAll('input, button'), function (el) { el.disabled = false; });
