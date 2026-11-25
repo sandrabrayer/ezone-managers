@@ -14,6 +14,11 @@
 > **October 20, 2026 addendum**: `docs/ecosystem-addendum-2026-10-20.md`. It covers the five managers / coordinators /
 > Dashboard changes, the Script Properties to set and the deploy order.
 
+## Managers: a meeting the office cancelled leaves the app (November 25, 2026)
+
+Office-cancelled meetings (`meetingOutcome: 'cancelled'`) leave «פגישות קליטה», its badge, «יומן», «ביקורים קרובים» and the
+visit tiles. The meetings feed now follows a STALE saved copy with one `swr:'wait'` read, like `houseData`. SW v59.
+
 ## Managers: «מתלבט» + a call-back request → a call task for the office (November 24, 2026)
 
 The Dashboard opens an open call task for ורד when a meeting report (app or link) is «מתלבט» and the

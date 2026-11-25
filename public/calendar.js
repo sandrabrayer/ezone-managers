@@ -109,7 +109,8 @@
       });
     } else if (Array.isArray(d.visits)) {
       d.visits.forEach(function (v) {
-        if (!v) return;
+        // An office-cancelled visit is not on the calendar (25 Nov 2026).
+        if (!v || String(v.outcome || '').trim() === 'cancelled') return;
         push({ type: 'meeting', id: '', date: v.date, time: cleanTime(v.time), title: String(v.name || ''), sub: v.meetingWith ? 'עם ' + v.meetingWith : '', link: { sub: 'patients', card: 'wk-visits' }, flags: {} });
       });
       if (ms.state !== 'loading') missing.meeting = 'הדיווח על פגישות עוד לא מחובר — מוצגים הביקורים מרשימת הבית.';

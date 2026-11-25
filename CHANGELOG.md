@@ -3,6 +3,22 @@
 
 ## Unreleased
 
+### Fixed — a meeting the office cancelled kept showing in the managers app (November 25, 2026)
+
+- **Why**: Sandra, 25 Nov 2026 — «למה פגישה שבוטלה עדיין מופיעה אצל המנהלים?». The Dashboard already stopped serving
+  office-cancelled meetings in op `meetings` (E-Zone-Dashboard `CHANGELOG-managers-meetings-cancelled.md`), but two
+  paths still showed them:
+  1. **Saved copies.** `/api/work` answers reads from a saved copy up to 24 h old (`X-Cache: STALE`) and refreshes it in
+     the background. `houseData` followed that refresh; the **meetings feed did not**, so the «פגישות קליטה» card, the
+     tab, its badge and «יומן» kept the old list until the next load.
+  2. **The house's visits list** (`houseData.visits`) carries every visit with its office status; «ביקורים קרובים», the
+     week / month visit tiles and the «יומן» fallback ignored `outcome: 'cancelled'`.
+- **What**: `public/meetings.js` marks a STALE answer and follows it ONCE per house with `swr: 'wait'`, then repaints
+  (a failure keeps what is on screen). `public/work.js` `isCancelledVisit`: cancelled visits leave «ביקורים קרובים» and
+  the tiles; the «מטופלים» month list still lists them, labelled «התבטל». `public/calendar.js`: the fallback skips them.
+  SW v58 → v59. No new route, op, env var or secret.
+- **Tests**: new `test/cancelled-visits.test.js` (5).
+
 ### Added — the report confirmation says when the office got a call task (November 24, 2026)
 
 - **Why**: Sandra, 24 Nov 2026 — «כשכתוב שמישהו מתלבט וגם כתוב שביקש שיצרו איתו קשר זה צריך להקים
