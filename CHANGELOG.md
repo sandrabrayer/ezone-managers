@@ -25,8 +25,11 @@
   matching (still unresolved without an HR id feed), history. No endpoint, op, env var or secret. Under today's v1
   roster every request is identical to #82.
 - **Docs**: `docs/worker-identity-v2.md` (contract, refusal table, order, rollback), README, status doc, handoff §6.
-- **Tests**: 579 → 589 (`worker-identity-v2` +10). New Chromium check `e2e/worker-identity-v2.cjs` in the
-  `browser-worker-identity` workflow. SW v57 → v58.
+- **Tests**: 579 → 590 (`worker-identity-v2` +10; opt-in `worker-identity-v2-dashboard` +1, which runs against the real
+  #415 `Code.gs` in `managers-dashboard-source-contract` and is skipped locally). New Chromium check
+  `e2e/worker-identity-v2.cjs` in the `browser-worker-identity` workflow. SW v57 → v58.
+- **Finding for #415**: a staff talk under #415 always needs the house roster (`roster_unavailable` without the digest),
+  also on v1. See `docs/worker-identity-v2.md` §6.
 
 ### Added — «📅 יומן»: the house's week in one tab, and «הוספה ליומן» for a meeting (November 21, 2026)
 

@@ -22,6 +22,13 @@ jobs:
           ref: 2ee1aa33168642612b96860f982c2f7ff9d05103
           path: dashboard-source
           persist-credentials: false
+      - name: Checkout Dashboard #415 draft head (read-only, worker identity v2)
+        uses: actions/checkout@v4
+        with:
+          repository: sandrabrayer/E-Zone-Dashboard
+          ref: f4aad02a258e2b0bb3fe902877f0a84956279e26
+          path: dashboard-415
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
@@ -35,3 +42,9 @@ jobs:
         env:
           DASHBOARD_CHECKOUT: ${{ github.workspace }}/dashboard-source
         run: node --test test/managers-backend-integration.test.js
+      - name: Managers v2 client to real Dashboard #415 Code.gs — synthetic in-memory only
+        working-directory: managers
+        env:
+          DASHBOARD_V2_CHECKOUT: ${{ github.workspace }}/dashboard-415
+          TZ: UTC
+        run: node --test test/worker-identity-v2-dashboard.test.js

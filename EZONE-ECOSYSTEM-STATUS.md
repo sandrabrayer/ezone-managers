@@ -26,7 +26,7 @@ Sandra, 25 Nov 2026 (ezone-managers #63). Details: `docs/worker-identity-v2.md` 
   malformed → `400`. The house is never taken from the browser. The Dashboard re-verifies before writing.
 - Inert until Coordinators v2 (`ezone-coordinators#360`) and Dashboard #415 (`MANAGERS_DIGEST_REQUIRE_MANIFEST=true`)
   are live. It must be live **before** that flag is turned on. No endpoint, env var, secret, role or salary change.
-  Tests 579 → 589. SW v58.
+  Tests 579 → 590 (one opt-in against the real #415 `Code.gs`). SW v58.
 
 ## Managers: «📅 יומן» — the house's week, and «הוספה ליומן» (November 21, 2026)
 

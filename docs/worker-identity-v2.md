@@ -83,6 +83,18 @@ name-only writes, and the button ignores a double tap.
 and `logs.staffTalks[]` pairs, and the handling of every #415 refusal code. Without #415 live it does nothing:
 the inert default.
 
+**Checked against the real #415 code:** `test/worker-identity-v2-dashboard.test.js` runs the Managers HTTP routes against
+#415's `Code.gs` (`f4aad02`), with synthetic sheets and a v2 roster injected at `mwTeam_` (the publication reader is
+#415's own tested part). It covers: feedback stored with B's pair only; name-only on v2 refused
+(`identity_source_contract_required`); a swapped pair stopped by Managers; read-back of the pair for the right person
+only; a staff talk, then a follow-up after a rename; B's pair refused on A's thread; and rollback to v1. CI runs it in
+`managers-dashboard-source-contract`.
+
+**Finding for #415 (not changed here):** under #415 a staff talk ALWAYS needs the house roster, even on v1
+(`mwLogAdd_` → `mwAuthorizedEmployee_`). With the ManagersHouse digest unreadable, a talk that saves today would get
+`roster_unavailable`. The existing pinned contract test (`managers-backend-integration`, no digest fixture) fails
+against #415 for this reason. The Dashboard owner should decide whether that is intended before merging #415.
+
 **Blocked outside this repo (in order):**
 1. Coordinators publisher v2 (`ezone-coordinators#360`) writes `workerId,assignmentId` after `startDate`.
 2. Dashboard #415 merged and deployed (Apps Script auto-deploys on merge), then
