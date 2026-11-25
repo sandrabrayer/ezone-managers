@@ -2452,6 +2452,7 @@ body.drawer-on { overflow: hidden; }
 .mt-notice { padding: 10px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-weight: 600; }
 .mt-done { margin-top: 8px; padding: 10px; border-radius: 10px; background: var(--ok-bg); }
 .mt-done-title { font-weight: 700; color: var(--ok); margin-bottom: 4px; }
+.mt-followup { font-weight: 700; color: var(--warn, #b45309); margin: 6px 0; }
 .wk-btn.mt-wa { background: #0F7A41; color: #FFFFFF; text-decoration: none; display: inline-flex; align-items: center; }
 .mt-fold > summary { list-style: none; cursor: pointer; }
 .mt-fold > summary::-webkit-details-marker { display: none; }

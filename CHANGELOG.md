@@ -3,6 +3,18 @@
 
 ## Unreleased
 
+### Added — the report confirmation says when the office got a call task (November 24, 2026)
+
+- **Why**: Sandra, 24 Nov 2026 — «כשכתוב שמישהו מתלבט וגם כתוב שביקש שיצרו איתו קשר זה צריך להקים
+  משימה שמתאימה למה שהמנהל כתב». The task itself is opened by the Dashboard for both report paths
+  (E-Zone-Dashboard `CHANGELOG-meeting-report-undecided-task.md`): result «מתלבט» + a call-back request in
+  the פירוט → an open call task for ורד, due on the day the text asks for (else the next working day).
+- **What** (`public/meetings.js`, `public/styles.css`): after «✓ הדיווח נשמר ונשלח לדשבורד» the manager sees
+  «📌 נוצרה משימה למשרד לחזור אליהם · <date>» (or «כבר יש משימה פתוחה…», or «לא נוצרה משימה אוטומטית…» if
+  the Dashboard could not open it). Pure `followupLine`, escaped. The WhatsApp text is unchanged.
+- No new route, op, env var or secret; the proxy already passes the Dashboard's answer through. SW v57 → v58.
+- **Tests**: 578 → 580 pass (1 skipped, unchanged) (`test/meetings.test.js` F: the line's states, escaping, nothing without a task).
+
 ### Added — «📅 יומן»: the house's week in one tab, and «הוספה ליומן» for a meeting (November 21, 2026)
 
 - **Why**: Sandra, 21 Nov 2026 — «גם באפליקציה צריך להיות לו יומן של השבוע עם כל הפגישות או אירועים אחרים»,
