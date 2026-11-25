@@ -8,11 +8,12 @@
 - **Why**: PR #84's `synthetic-contract` check was red with *repository 'sandrabrayer/E-Zone-Dashboard' not found*.
   E-Zone-Dashboard is private and this repo's `GITHUB_TOKEN` cannot read it. The code was fine: the test passes
   locally against the pinned Dashboard with `TZ=UTC`.
-- **What** (`.github/workflows/managers-dashboard-source-contract.yml`): the Dashboard checkout uses the read-only
-  `DASHBOARD_READ_TOKEN` secret (fine-grained PAT, E-Zone-Dashboard only, Contents read-only),
-  `persist-credentials: false` on both checkouts, `TZ: UTC`. Still strict: without the secret the check fails; it is
-  never skipped. Setup steps with links: `docs/ci.md` (new).
-- **Tests**: new `test/ci-workflows.test.js` (4) pins the token, no skip / no continue-on-error, UTC and the doc links.
+- **What** (`.github/workflows/managers-dashboard-source-contract.yml`): the Dashboard checkout uses a READ-ONLY deploy
+  key of E-Zone-Dashboard (`ssh-key:`, private half in the `DASHBOARD_DEPLOY_KEY` secret; GitHub's token pages kept
+  failing with 500), `persist-credentials: false` on both checkouts, `TZ: UTC`. Still strict: without the secret the
+  check fails; it is never skipped. Setup steps with links: `docs/ci.md` (new).
+- **Tests**: new `test/ci-workflows.test.js` (4) pins the deploy key (no PAT), no skip / no continue-on-error, UTC and
+  the doc links.
 
 ### Added — «📅 יומן»: the house's week in one tab, and «הוספה ליומן» for a meeting (November 21, 2026)
 
