@@ -1,5 +1,11 @@
 name: managers-dashboard-source-contract
 
+# Real Managers HTTP routes against the real Dashboard Code.gs, synthetic data only.
+# E-Zone-Dashboard is PRIVATE: this repo's GITHUB_TOKEN cannot read it, so the checkout
+# uses a READ-ONLY deploy key of E-Zone-Dashboard, its private half in the
+# DASHBOARD_DEPLOY_KEY secret. Without the secret the checkout fails and the check stays
+# red on purpose — it is never skipped. Setup: docs/ci.md.
+
 on:
   pull_request:
 
@@ -10,17 +16,21 @@ jobs:
   synthetic-contract:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      TZ: UTC
     steps:
       - name: Checkout Managers draft
         uses: actions/checkout@v4
         with:
           path: managers
+          persist-credentials: false
       - name: Checkout pinned Dashboard source (read-only)
         uses: actions/checkout@v4
         with:
           repository: sandrabrayer/E-Zone-Dashboard
           ref: 2ee1aa33168642612b96860f982c2f7ff9d05103
           path: dashboard-source
+          ssh-key: ${{ secrets.DASHBOARD_DEPLOY_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
