@@ -3,6 +3,31 @@
 
 ## Unreleased
 
+### Added — worker identity v2: client compatibility with Dashboard #415 (November 25, 2026, draft)
+
+- **Why**: Sandra, 25 Nov 2026 (#63). Dashboard #415 validates `workerId` + `assignmentId` on personal writes once
+  the `managers-house-v2` roster is certified. Under v2 it refuses name-only personal writes, so the Managers client
+  must be able to send the pair first. Two workers with one name must stay two people.
+- **What**:
+  - `lib/feedback-due.js`: `certifiedIdentity` / `uniqueIdentity` / `talkIdentity`, the pure rules. A pair is
+    certified only with both ids on the roster row, the Dashboard's pattern, and the worker and the assignment each
+    unique in the house. A certified same-name worker gets their own writable feedback row.
+  - `public/work.js`: `feedbackDone` sends the row's pair, and refuses if the live pair changed since the form was
+    drawn. A staff talk sends the pair of a unique name, of the employee card, or of the thread's first talk (after a
+    rename, the current name is sent). A shared name typed in the form is refused. New Hebrew messages for the
+    identity codes.
+  - `public/crm.js`: the employee card of a certified worker offers «💬 רישום שיחה חדשה» with that person's pair only.
+  - `server.js` `verifyWorkerIdentity`: before forwarding a pair, it re-reads THIS session's house roster (own
+    cache key, a stale copy refreshed, writes drop it). It needs exactly one active row with this name and pair.
+    The #82 409 (`identity_contract_required`) is kept for v1 rosters, half pairs, `employeeId`, and ids on
+    non-personal logs. Malformed → 400. Stale / failed / no match → `409 identity_review_required`.
+- **Unchanged**: roles, house scope, staff-talk privacy, rate limits, salary / cost / birth date / termination
+  matching (still unresolved without an HR id feed), history. No endpoint, op, env var or secret. Under today's v1
+  roster every request is identical to #82.
+- **Docs**: `docs/worker-identity-v2.md` (contract, refusal table, order, rollback), README, status doc, handoff §6.
+- **Tests**: 579 → 589 (`worker-identity-v2` +10). New Chromium check `e2e/worker-identity-v2.cjs` in the
+  `browser-worker-identity` workflow. SW v57 → v58.
+
 ### Added — «📅 יומן»: the house's week in one tab, and «הוספה ליומן» for a meeting (November 21, 2026)
 
 - **Why**: Sandra, 21 Nov 2026 — «גם באפליקציה צריך להיות לו יומן של השבוע עם כל הפגישות או אירועים אחרים»,

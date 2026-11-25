@@ -63,3 +63,10 @@ The prior PR #82 exact-head Node+Chromium runs were already green and must **not
 - Simulated changes carry to the same stable-ID worker after a rename, and cannot move to a different person who now has the previous display name. A missing ID-linked next-month match is shown as unresolved (`—`), not as an invented zero. Historical per-worker ending date on an ID-bearing card must come from that verified row, not `ending.people` matched by name.
 - A fresh roster is a precondition for employee-specific simulation and new feedback/staff-talk association. When roster timestamps/availability are stale, house cost totals, forecasts and existing read-only reminders remain visible, but the individual writing/simulation controls do not guess an identity.
 - **Release dependency:** even with these local guards, the Dashboard's name-keyed worker-cost aggregation must migrate to `workerId` before personal costs and terminations for same-name employees can be considered accurate. Server-side enforcement of an ambiguous legacy name-only write also belongs in Dashboard, not a second employee ledger or permissions layer in Managers.
+
+## 6. 25 Nov 2026 — Managers client compatibility with Dashboard #415 (draft)
+
+The "separately approved patch" from §4 is now a draft: `docs/worker-identity-v2.md`. Personal writes carry the
+certified `workerId` + `assignmentId` only when the house roster carries the pair. The Managers server re-checks it
+against the session's house roster first. A v1 roster keeps the §2 `409 identity_contract_required`. It stays
+inert until Coordinators v2 and Dashboard #415 are live. Cost / birth date / termination remain blocked (§3 P0).
